@@ -95,3 +95,23 @@ def test_a_refusal_on_the_mat_still_disarms_as_his_did():
     command(p, 'TAKEOFF')
     assert p.phase == P.LANDED_DISARMED
     assert [m.data for m in p.drone_command_publisher.messages] == ['DISARM']
+
+
+@pytest.mark.parametrize('cancel', ['DISARM', 'LAND', 'take-back'])
+def test_a_held_takeoff_is_cancelled_by_disarm_land_or_a_take_back(cancel):
+    """Te-Jen's review 11 Nov: TAKEOFF held, then DISARM, then the release must not start the takeoff."""
+    from std_msgs.msg import Bool
+    p = _gated()
+    place(p, MAT + np.array([0.0, 0.0, 1.30]))
+    command(p, 'TAKEOFF')
+    assert p.takeoff_held
+    if cancel == 'DISARM':
+        command(p, 'DISARM')
+    elif cancel == 'LAND':
+        p.enable_external_landing_trigger = True
+        OnlineJoinPlanner.external_landing_callback(p, Bool(data=True))
+    else:
+        OnlineJoinPlanner.enter_taken_back(p, 'take-back from the fleet planner')
+    assert not p.takeoff_held
+    OnlineJoinPlanner.takeoff_gate_callback(p, RELEASE)
+    assert p.phase != P.TAKEOFF

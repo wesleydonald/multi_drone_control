@@ -147,3 +147,20 @@ def test_recheck_exception_detail_is_preserved_in_replan_csv():
     assert "result.recheck_error = exc.what();" in core_cpp
     assert "recheck_error" in backend
     assert "safeCsvField(result.recheck_error)" in backend
+
+
+def test_adaptive_history_survives_both_authority_paths_and_fallback_reconstruction():
+    backend = text(BACKEND)
+    authority = backend.split(
+        "void authorityCallback(const std_msgs::msg::Bool::SharedPtr msg)", 1
+    )[1].split("void disableBackend", 1)[0]
+    assert "fixed_splice_lookahead_s_ == 0.0 && planner_" in authority
+    # Fixed profiles retain their existing seed. Adaptive profiles carry the
+    # completed-iteration history through either prepared reuse or fresh solve.
+    assert "authority_timing_seed_s, fixed_splice_lookahead_s_" in authority
+    assert "authority_timing_seed_s, authority_handoff_splice_s" in authority
+    fallback = backend.split("auto fallback_planner =", 1)[1].split(
+        "fallback_planner->initializeCommittedTrajectory", 1
+    )[0]
+    assert "fallback_timing_seed_s, fixed_splice_lookahead_s_" in fallback
+    assert "const double fallback_timing_seed_s = fixed_splice_lookahead_s_ == 0.0 && planner_" in backend

@@ -1,0 +1,7868 @@
+{
+ "card": "docs/experiments/2026-10-23_catch_offset.md",
+ "runs": [
+  {
+   "run": "R4034",
+   "config": "x11_u_meas_d00",
+   "arm": "measured",
+   "direction": "d0",
+   "d_cm": 0,
+   "dt": 0.0,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.3777276490407724e-17,
+    0.225
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.252,
+   "t_weld": 68.349,
+   "t_land": 136.485,
+   "t_fold": 68.498,
+   "t_path": 100.986,
+   "separation_min_m": 0.6474801323479044,
+   "rho_true": [
+    -0.00075941074328955,
+    0.21389263221006,
+    0.04052282357024446
+   ],
+   "d_true_m": 0.01113329797939588,
+   "d_tan_m": -0.0007988428950405186,
+   "d_rad_m": -0.011106019676978718,
+   "dz_m": 0.0005228235702444614,
+   "aim_err_m": 0.01113329797939588,
+   "rho_model": [
+    -0.0001,
+    0.2238,
+    0.0405
+   ],
+   "e_model_xy_m": 0.009929287942924525,
+   "e_model_m": 0.009929314174144407,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.016578699745198,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.020607591005058046,
+   "pre_tilt_mean_deg": 0.07066166048870846,
+   "thr_peak": 0.7314999997615814,
+   "steady_s": 17.137,
+   "steady_tilt_mean_deg": 2.0938209151917184,
+   "steady_tilt_max_deg": 2.285174897703961,
+   "steady_err_m": 0.002774325999246797,
+   "steady_err_xy_m": 0.0010573219172581242,
+   "steady_err_z_m": 0.0025058739371409647,
+   "steady_tension_n": null,
+   "path_err_m": 0.013335795230783428,
+   "path_tilt_peak_deg": 3.1802103943697304,
+   "lag_s": 0.10322384752948531
+  },
+  {
+   "run": "R4035",
+   "config": "x11_u_meas_d00",
+   "arm": "measured",
+   "direction": "d0",
+   "d_cm": 0,
+   "dt": 0.0,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.3777276490407724e-17,
+    0.225
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.285,
+   "t_weld": 69.56,
+   "t_land": 136.427,
+   "t_fold": 69.682,
+   "t_path": 100.926,
+   "separation_min_m": 0.6485887309046614,
+   "rho_true": [
+    5.142292756533735e-05,
+    0.230999323042245,
+    0.04016149631186904
+   ],
+   "d_true_m": 0.005999543422852361,
+   "d_tan_m": 5.00874129620926e-05,
+   "d_rad_m": 0.0059993287658925976,
+   "dz_m": 0.00016149631186904156,
+   "aim_err_m": 0.005999543422852361,
+   "rho_model": [
+    -0.0001,
+    0.2256,
+    0.0402
+   ],
+   "e_model_xy_m": 0.005401445937664305,
+   "e_model_m": 0.005401583170840741,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.5642050538562478,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.015320513911976086,
+   "pre_tilt_mean_deg": 0.06990809683103867,
+   "thr_peak": 0.5344999991357327,
+   "steady_s": 15.866,
+   "steady_tilt_mean_deg": 0.7734163833899714,
+   "steady_tilt_max_deg": 0.8772191994746947,
+   "steady_err_m": 0.0022329869957562524,
+   "steady_err_xy_m": 0.000633958253006977,
+   "steady_err_z_m": -0.002090843527433537,
+   "steady_tension_n": null,
+   "path_err_m": 0.01076452722980845,
+   "path_tilt_peak_deg": 1.9687083050751448,
+   "lag_s": 0.09585213187366744
+  },
+  {
+   "run": "R4036",
+   "config": "x11_u_slot_d00",
+   "arm": "slot",
+   "direction": "d0",
+   "d_cm": 0,
+   "dt": 0.0,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.3777276490407724e-17,
+    0.225
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.304,
+   "t_weld": 64.249,
+   "t_land": 136.518,
+   "t_fold": 64.416,
+   "t_path": 101.019,
+   "separation_min_m": 0.6486093674804333,
+   "rho_true": [
+    0.0006076757672154147,
+    0.20211543426085832,
+    0.04027900982865041
+   ],
+   "d_true_m": 0.022892632415411698,
+   "d_tan_m": 0.0006764777002143914,
+   "d_rad_m": -0.022883652228986195,
+   "dz_m": 0.0002790098286504089,
+   "aim_err_m": 0.022892632415411698,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.04
+   ],
+   "e_model_xy_m": 0.022892632415411698,
+   "e_model_m": 0.022894332604197962,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.268586256086309,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.031470399643418245,
+   "pre_tilt_mean_deg": 0.05630842065225772,
+   "thr_peak": 0.7804999947547913,
+   "steady_s": 21.27000000000001,
+   "steady_tilt_mean_deg": 4.196642573478736,
+   "steady_tilt_max_deg": 5.228847981944928,
+   "steady_err_m": 0.010632528283500378,
+   "steady_err_xy_m": 0.004040211304084642,
+   "steady_err_z_m": 0.009520376384078186,
+   "steady_tension_n": null,
+   "path_err_m": 0.021265161442072952,
+   "path_tilt_peak_deg": 6.403531552339763,
+   "lag_s": 0.09453980615198392
+  },
+  {
+   "run": "R4037",
+   "config": "x11_u_slot_d00",
+   "arm": "slot",
+   "direction": "d0",
+   "d_cm": 0,
+   "dt": 0.0,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.3777276490407724e-17,
+    0.225
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.272,
+   "t_weld": 64.514,
+   "t_land": 136.412,
+   "t_fold": 64.656,
+   "t_path": 100.911,
+   "separation_min_m": 0.6474884561736082,
+   "rho_true": [
+    0.0030572006730117405,
+    0.21346720919618323,
+    0.039974721412926816
+   ],
+   "d_true_m": 0.01193112482876884,
+   "d_tan_m": 0.003222121340271745,
+   "d_rad_m": -0.011510899861463392,
+   "dz_m": -2.527858707318531e-05,
+   "aim_err_m": 0.011931124828768836,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0399
+   ],
+   "e_model_xy_m": 0.01193112482876884,
+   "e_model_m": 0.011931358806490317,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 2.0875466280508173,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.02152783841109951,
+   "pre_tilt_mean_deg": 0.05626687810351454,
+   "thr_peak": 0.7540000081062317,
+   "steady_s": 20.897000000000006,
+   "steady_tilt_mean_deg": 2.2929565679909185,
+   "steady_tilt_max_deg": 2.470923474531713,
+   "steady_err_m": 0.003386362910912134,
+   "steady_err_xy_m": 0.0012631422157043499,
+   "steady_err_z_m": 0.0030760211931916298,
+   "steady_tension_n": null,
+   "path_err_m": 0.013432706233665478,
+   "path_tilt_peak_deg": 3.612782632517951,
+   "lag_s": 0.09611652523807619
+  },
+  {
+   "run": "R4038",
+   "config": "x11_u_meas_ri02",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 2,
+   "dt": 0.0,
+   "dr": -0.02,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.2552629691260372e-17,
+    0.20500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.246,
+   "t_weld": 62.757,
+   "t_land": 136.394,
+   "t_fold": 62.885,
+   "t_path": 100.892,
+   "separation_min_m": 0.6467865255029086,
+   "rho_true": [
+    -0.0009788333949744318,
+    0.21369607778589866,
+    0.04160453872785853
+   ],
+   "d_true_m": 0.011346222818082279,
+   "d_tan_m": -0.001030602823319297,
+   "d_rad_m": -0.011301680456087898,
+   "dz_m": 0.001604538727858526,
+   "aim_err_m": 0.008750993296393108,
+   "rho_model": [
+    -0.0004,
+    0.2038,
+    0.0415
+   ],
+   "e_model_xy_m": 0.009912991659619938,
+   "e_model_m": 0.00991354285759217,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.9694929206100895,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.013573956639646445,
+   "pre_tilt_mean_deg": 0.07035763147386635,
+   "thr_peak": 0.5299999993294477,
+   "steady_s": 22.63499999999999,
+   "steady_tilt_mean_deg": 0.4251853717478974,
+   "steady_tilt_max_deg": 0.7975895390934428,
+   "steady_err_m": 0.003288338435849226,
+   "steady_err_xy_m": 0.0010218799272982782,
+   "steady_err_z_m": -0.0030248171318635053,
+   "steady_tension_n": null,
+   "path_err_m": 0.010145479942277888,
+   "path_tilt_peak_deg": 2.100509987085603,
+   "lag_s": 0.09924388578799721
+  },
+  {
+   "run": "R4039",
+   "config": "x11_u_meas_ri02",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 2,
+   "dt": 0.0,
+   "dr": -0.02,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.2552629691260372e-17,
+    0.20500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.263,
+   "t_weld": 63.469,
+   "t_land": 136.401,
+   "t_fold": 63.6,
+   "t_path": 100.906,
+   "separation_min_m": 0.6475713069976886,
+   "rho_true": [
+    -0.0012823918910661305,
+    0.22068408368928868,
+    0.040179294999856965
+   ],
+   "d_true_m": 0.00450240630811305,
+   "d_tan_m": -0.0013074550599036124,
+   "d_rad_m": -0.004312190362169649,
+   "dz_m": 0.00017929499985696457,
+   "aim_err_m": 0.015736423041303987,
+   "rho_model": [
+    0.0,
+    0.2064,
+    0.0402
+   ],
+   "e_model_xy_m": 0.014341533244561937,
+   "e_model_m": 0.01434154819055133,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.8789529299672336,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01371094118761329,
+   "pre_tilt_mean_deg": 0.07621792010756474,
+   "thr_peak": 0.5205000005662441,
+   "steady_s": 21.937000000000012,
+   "steady_tilt_mean_deg": 0.5795958197090965,
+   "steady_tilt_max_deg": 1.032984248659981,
+   "steady_err_m": 0.0033299569364139176,
+   "steady_err_xy_m": 0.0015552911919829184,
+   "steady_err_z_m": -0.0028172720885421294,
+   "steady_tension_n": null,
+   "path_err_m": 0.010514378826198255,
+   "path_tilt_peak_deg": 2.08700135237973,
+   "lag_s": 0.09946602370459998
+  },
+  {
+   "run": "R4040",
+   "config": "x11_u_slot_ri02",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 2,
+   "dt": 0.0,
+   "dr": -0.02,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.2552629691260372e-17,
+    0.20500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.269,
+   "t_weld": 66.599,
+   "t_land": 136.4,
+   "t_fold": 66.786,
+   "t_path": 100.896,
+   "separation_min_m": 0.6483763570665699,
+   "rho_true": [
+    0.0014135809233319398,
+    0.19907661937556548,
+    0.03985914455280733
+   ],
+   "d_true_m": 0.025961892728114326,
+   "d_tan_m": 0.0015976245494451935,
+   "d_rad_m": -0.025918361989281963,
+   "dz_m": -0.000140855447192674,
+   "aim_err_m": 0.006089716664076781,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0399
+   ],
+   "e_model_xy_m": 0.025961892728114326,
+   "e_model_m": 0.025961924874586643,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.525078515382148,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.03533586358708907,
+   "pre_tilt_mean_deg": 0.05624685416519895,
+   "thr_peak": 0.7849999964237213,
+   "steady_s": 18.796999999999997,
+   "steady_tilt_mean_deg": 4.830335514620736,
+   "steady_tilt_max_deg": 6.033930583910819,
+   "steady_err_m": 0.013955915686430653,
+   "steady_err_xy_m": 0.005159217116255305,
+   "steady_err_z_m": 0.012469560515379183,
+   "steady_tension_n": null,
+   "path_err_m": 0.02398820926292725,
+   "path_tilt_peak_deg": 7.240893179907958,
+   "lag_s": 0.09598962998469734
+  },
+  {
+   "run": "R4041",
+   "config": "x11_u_slot_ri02",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 2,
+   "dt": 0.0,
+   "dr": -0.02,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.2552629691260372e-17,
+    0.20500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.273,
+   "t_weld": 63.937,
+   "t_land": 136.406,
+   "t_fold": 64.056,
+   "t_path": 100.904,
+   "separation_min_m": 0.6490300898097886,
+   "rho_true": [
+    2.60343993854841e-05,
+    0.18735174240834288,
+    0.04018232319977074
+   ],
+   "d_true_m": 0.03764826659326721,
+   "d_tan_m": 3.126600128727401e-05,
+   "d_rad_m": -0.037648255782786993,
+   "dz_m": 0.00018232319977073974,
+   "aim_err_m": 0.01764827679439087,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0401
+   ],
+   "e_model_xy_m": 0.03764826659326721,
+   "e_model_m": 0.03764835659875396,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 1.9233575481669216,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.017268852437679838,
+   "pre_tilt_mean_deg": 0.07688413540143015,
+   "thr_peak": 0.7745000123977661,
+   "steady_s": 21.467,
+   "steady_tilt_mean_deg": 0.6261434898819307,
+   "steady_tilt_max_deg": 1.006455671489686,
+   "steady_err_m": 0.09496794601605145,
+   "steady_err_xy_m": 0.0930129804217324,
+   "steady_err_z_m": 0.018678163943608415,
+   "steady_tension_n": null,
+   "path_err_m": 0.07339177049959374,
+   "path_tilt_peak_deg": 1.661110155329575,
+   "lag_s": 0.09232654174790382
+  },
+  {
+   "run": "R4042",
+   "config": "x11_u_meas_ri04",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 4,
+   "dt": 0.0,
+   "dr": -0.04,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.1327982892113017e-17,
+    0.185
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.229,
+   "t_weld": 66.427,
+   "t_land": 136.46,
+   "t_fold": 66.57,
+   "t_path": 100.96,
+   "separation_min_m": 0.6472465170902886,
+   "rho_true": [
+    -0.002446139325312411,
+    0.17206003047468837,
+    0.04015008772661819
+   ],
+   "d_true_m": 0.0529964524373072,
+   "d_tan_m": -0.0031985327250614536,
+   "d_rad_m": -0.052922582293464415,
+   "dz_m": 0.00015008772661818937,
+   "aim_err_m": 0.01316914609664702,
+   "rho_model": [
+    -0.0,
+    0.185,
+    0.0401
+   ],
+   "e_model_xy_m": 0.013169146096647018,
+   "e_model_m": 0.01316924134850566,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.9919545917999284,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.020416878404763583,
+   "pre_tilt_mean_deg": 0.04293954248459506,
+   "thr_peak": 0.7800000011920929,
+   "steady_s": 19.032999999999987,
+   "steady_tilt_mean_deg": 2.0954250661431923,
+   "steady_tilt_max_deg": 2.408568005721456,
+   "steady_err_m": 0.0036847218126933316,
+   "steady_err_xy_m": 0.0014162555459623456,
+   "steady_err_z_m": 0.003358757015926427,
+   "steady_tension_n": null,
+   "path_err_m": 0.01491973431643386,
+   "path_tilt_peak_deg": 3.3884864270582464,
+   "lag_s": 0.09481657396763364
+  },
+  {
+   "run": "R4043",
+   "config": "x11_u_meas_ri04",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 4,
+   "dt": 0.0,
+   "dr": -0.04,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.1327982892113017e-17,
+    0.185
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.207,
+   "t_weld": 61.883,
+   "t_land": 136.348,
+   "t_fold": 62.034,
+   "t_path": 100.853,
+   "separation_min_m": 0.6470180891074024,
+   "rho_true": [
+    0.0009150287189691552,
+    0.16848727038586542,
+    0.0400662219413442
+   ],
+   "d_true_m": 0.05652013699555958,
+   "d_tan_m": 0.0012219272365869992,
+   "d_rad_m": -0.05651024494161,
+   "dz_m": 6.622194134420223e-05,
+   "aim_err_m": 0.016538062669673722,
+   "rho_model": [
+    0.0001,
+    0.1856,
+    0.0399
+   ],
+   "e_model_xy_m": 0.01713212732439328,
+   "e_model_m": 0.017132933677365562,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.287366212651527,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.022188752197206396,
+   "pre_tilt_mean_deg": 0.07358135383365869,
+   "thr_peak": 0.7879999876022339,
+   "steady_s": 23.469999999999985,
+   "steady_tilt_mean_deg": 2.715505026971068,
+   "steady_tilt_max_deg": 3.087136679048031,
+   "steady_err_m": 0.005405036148377786,
+   "steady_err_xy_m": 0.002164983426097524,
+   "steady_err_z_m": 0.004894524491751292,
+   "steady_tension_n": null,
+   "path_err_m": 0.0179390954033777,
+   "path_tilt_peak_deg": 4.4195425511412605,
+   "lag_s": 0.1018471997008327
+  },
+  {
+   "run": "R4044",
+   "config": "x11_u_slot_ri04",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 4,
+   "dt": 0.0,
+   "dr": -0.04,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.1327982892113017e-17,
+    0.185
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.3,
+   "t_weld": 67.022,
+   "t_land": 136.423,
+   "t_fold": 67.195,
+   "t_path": 100.928,
+   "separation_min_m": 0.6483275997999994,
+   "rho_true": [
+    -0.00027187481747329714,
+    0.19554290895186918,
+    0.040278381555864204
+   ],
+   "d_true_m": 0.02945834565847589,
+   "d_tan_m": -0.00031283051845376456,
+   "d_rad_m": -0.02945690204644047,
+   "dz_m": 0.00027838155586420305,
+   "aim_err_m": 0.010546413849445675,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0402
+   ],
+   "e_model_xy_m": 0.02945834565847589,
+   "e_model_m": 0.029458449935503138,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.920846617492854,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.04029379550190004,
+   "pre_tilt_mean_deg": 0.06197182655980705,
+   "thr_peak": 0.7894999980926514,
+   "steady_s": 18.40599999999999,
+   "steady_tilt_mean_deg": 5.468334385768155,
+   "steady_tilt_max_deg": 6.5144525828127335,
+   "steady_err_m": 0.018092077456728785,
+   "steady_err_xy_m": 0.0058863346277141905,
+   "steady_err_z_m": 0.01628919378642451,
+   "steady_tension_n": null,
+   "path_err_m": 0.026825591900906158,
+   "path_tilt_peak_deg": 7.576088163790755,
+   "lag_s": 0.09298169351593345
+  },
+  {
+   "run": "R4045",
+   "config": "x11_u_slot_ri04",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 4,
+   "dt": 0.0,
+   "dr": -0.04,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.1327982892113017e-17,
+    0.185
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.206,
+   "t_weld": 65.312,
+   "t_land": 136.344,
+   "t_fold": 65.426,
+   "t_path": 100.846,
+   "separation_min_m": 0.6476948007896728,
+   "rho_true": [
+    -0.001259000341643371,
+    0.2017254513098999,
+    0.03931677638081933
+   ],
+   "d_true_m": 0.02330857564477285,
+   "d_tan_m": -0.001404239957477952,
+   "d_rad_m": -0.023270619918557583,
+   "dz_m": -0.0006832236191806687,
+   "aim_err_m": 0.016772769699131114,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0392
+   ],
+   "e_model_xy_m": 0.02330857564477285,
+   "e_model_m": 0.023308868168815392,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.304839216478093,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.031632566037826715,
+   "pre_tilt_mean_deg": 0.04127026647546559,
+   "thr_peak": 0.7800000011920929,
+   "steady_s": 20.034000000000006,
+   "steady_tilt_mean_deg": 4.211652726212165,
+   "steady_tilt_max_deg": 5.261307100294657,
+   "steady_err_m": 0.010969679372152076,
+   "steady_err_xy_m": 0.0041658399629619655,
+   "steady_err_z_m": 0.009817930426346584,
+   "steady_tension_n": null,
+   "path_err_m": 0.021752557320984616,
+   "path_tilt_peak_deg": 6.532157410916528,
+   "lag_s": 0.09718369597000125
+  },
+  {
+   "run": "R4046",
+   "config": "x11_u_meas_ri06",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 6,
+   "dt": 0.0,
+   "dr": -0.06,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.0103336092965665e-17,
+    0.165
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.254,
+   "t_weld": 64.686,
+   "t_land": 136.39,
+   "t_fold": 64.826,
+   "t_path": 100.89,
+   "separation_min_m": 0.6456877300057325,
+   "rho_true": [
+    0.0007856715701964619,
+    0.15681267745688582,
+    0.0398965066373951
+   ],
+   "d_true_m": 0.06819184874612877,
+   "d_tan_m": 0.001127296862132868,
+   "d_rad_m": -0.06818535434783676,
+   "dz_m": -0.00010349336260490061,
+   "aim_err_m": 0.008224933449043874,
+   "rho_model": [
+    0.0002,
+    0.1638,
+    0.0398
+   ],
+   "e_model_xy_m": 0.007011824834495514,
+   "e_model_m": 0.007012488933375178,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.9036444412742977,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.014278235583839116,
+   "pre_tilt_mean_deg": 0.04633243128149613,
+   "thr_peak": 0.7094999998807907,
+   "steady_s": 20.703999999999994,
+   "steady_tilt_mean_deg": 1.3453706186198167,
+   "steady_tilt_max_deg": 1.5121225943681385,
+   "steady_err_m": 0.0015755482440787424,
+   "steady_err_xy_m": 0.0006557430198401182,
+   "steady_err_z_m": 0.0013864541491228808,
+   "steady_tension_n": null,
+   "path_err_m": 0.012343318027066268,
+   "path_tilt_peak_deg": 2.541926856057759,
+   "lag_s": 0.10043930446523337
+  },
+  {
+   "run": "R4047",
+   "config": "x11_u_meas_ri06",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 6,
+   "dt": 0.0,
+   "dr": -0.06,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.0103336092965665e-17,
+    0.165
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.257,
+   "t_weld": 60.325,
+   "t_land": 136.392,
+   "t_fold": 60.463,
+   "t_path": 100.892,
+   "separation_min_m": 0.6465289951598264,
+   "rho_true": [
+    0.0024666713878112685,
+    0.14089196989490022,
+    0.040039262101720374
+   ],
+   "d_true_m": 0.08414419288278793,
+   "d_tan_m": 0.003938743151783475,
+   "d_rad_m": -0.084086439089061,
+   "dz_m": 3.926210172037342e-05,
+   "aim_err_m": 0.024233893275407578,
+   "rho_model": [
+    -0.0001,
+    0.1639,
+    0.0398
+   ],
+   "e_model_xy_m": 0.02315075055651947,
+   "e_model_m": 0.023151986905738914,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.5297303272276443,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.02790385282805352,
+   "pre_tilt_mean_deg": 0.06302932763169014,
+   "thr_peak": 0.800000011920929,
+   "steady_s": 25.066999999999993,
+   "steady_tilt_mean_deg": 3.4938370856505068,
+   "steady_tilt_max_deg": 5.017180646914587,
+   "steady_err_m": 0.009037005319734417,
+   "steady_err_xy_m": 0.004245175404090051,
+   "steady_err_z_m": 0.007835953327554213,
+   "steady_tension_n": null,
+   "path_err_m": 0.015266431068230335,
+   "path_tilt_peak_deg": 6.038381500206652,
+   "lag_s": 0.10227247881452509
+  },
+  {
+   "run": "R4048",
+   "config": "x11_u_slot_ri06",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 6,
+   "dt": 0.0,
+   "dr": -0.06,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.0103336092965665e-17,
+    0.165
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.303,
+   "t_weld": 64.533,
+   "t_land": 136.433,
+   "t_fold": 64.717,
+   "t_path": 100.935,
+   "separation_min_m": 0.649323932856164,
+   "rho_true": [
+    0.0007204612223082975,
+    0.1486825392271176,
+    0.03991331311637424
+   ],
+   "d_true_m": 0.07632086138922499,
+   "d_tan_m": 0.001090258133533539,
+   "d_rad_m": -0.07631571523729816,
+   "dz_m": -8.668688362575838e-05,
+   "aim_err_m": 0.016333358210956064,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0398
+   ],
+   "e_model_xy_m": 0.07632086138922499,
+   "e_model_m": 0.07632094550682425,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 6.140880827511512,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.0050155924577561795,
+   "pre_tilt_mean_deg": 0.03823976506889879,
+   "thr_peak": 0.7870000004768372,
+   "steady_s": 20.902,
+   "steady_tilt_mean_deg": 5.779811180528078,
+   "steady_tilt_max_deg": 5.991956784376246,
+   "steady_err_m": 0.23506390567065066,
+   "steady_err_xy_m": 0.23149355797883756,
+   "steady_err_z_m": 0.04080426175175813,
+   "steady_tension_n": null,
+   "path_err_m": 0.16688858523409217,
+   "path_tilt_peak_deg": 6.749078309650792,
+   "lag_s": 0.0887250051440018
+  },
+  {
+   "run": "R4049",
+   "config": "x11_u_slot_ri06",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 6,
+   "dt": 0.0,
+   "dr": -0.06,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.0103336092965665e-17,
+    0.165
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.302,
+   "t_weld": 62.559,
+   "t_land": 136.425,
+   "t_fold": 62.695,
+   "t_path": 100.927,
+   "separation_min_m": 0.6495065968817101,
+   "rho_true": [
+    -0.00025944306048826835,
+    0.1509310537440749,
+    0.04110104156048901
+   ],
+   "d_true_m": 0.07406940063322207,
+   "d_tan_m": -0.0003867635087678358,
+   "d_rad_m": -0.0740687232711574,
+   "dz_m": 0.0011010415604890064,
+   "aim_err_m": 0.01407133822540503,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.041
+   ],
+   "e_model_xy_m": 0.07406940063322208,
+   "e_model_m": 0.07406946955096752,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 5.684142941120107,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.006363340851720967,
+   "pre_tilt_mean_deg": 0.0695760942129289,
+   "thr_peak": 0.7879999876022339,
+   "steady_s": 22.86800000000001,
+   "steady_tilt_mean_deg": 5.467124705189912,
+   "steady_tilt_max_deg": 5.672670646457255,
+   "steady_err_m": 0.22741186182654105,
+   "steady_err_xy_m": 0.22391784774314857,
+   "steady_err_z_m": 0.03970232902827247,
+   "steady_tension_n": null,
+   "path_err_m": 0.16206087510207828,
+   "path_tilt_peak_deg": 6.357624278351538,
+   "lag_s": 0.10501716691389391
+  },
+  {
+   "run": "R4050",
+   "config": "x11_u_meas_ri08",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 8,
+   "dt": 0.0,
+   "dr": -0.08,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    8.878689293818311e-18,
+    0.14500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.347,
+   "t_weld": 60.815,
+   "t_land": 136.45,
+   "t_fold": 60.943,
+   "t_path": 100.946,
+   "separation_min_m": 0.6425528239210161,
+   "rho_true": [
+    0.0005964165081169338,
+    0.13487347114048817,
+    0.04026981439254205
+   ],
+   "d_true_m": 0.09012850224493678,
+   "d_tan_m": 0.0009949527447537198,
+   "d_rad_m": -0.09012521017575134,
+   "dz_m": 0.00026981439254204764,
+   "aim_err_m": 0.010144077059727055,
+   "rho_model": [
+    0.0005,
+    0.1441,
+    0.0402
+   ],
+   "e_model_xy_m": 0.009227032618260446,
+   "e_model_m": 0.009227296732404796,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.8466136542629503,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01429172927466471,
+   "pre_tilt_mean_deg": 0.06261119014512839,
+   "thr_peak": 0.7569999992847443,
+   "steady_s": 24.631,
+   "steady_tilt_mean_deg": 1.35324451183756,
+   "steady_tilt_max_deg": 1.521781871822331,
+   "steady_err_m": 0.0020857570424444973,
+   "steady_err_xy_m": 0.0008566468589646226,
+   "steady_err_z_m": 0.0018655062211478317,
+   "steady_tension_n": null,
+   "path_err_m": 0.013042561132584892,
+   "path_tilt_peak_deg": 2.65815731708824,
+   "lag_s": 0.10436320830265915
+  },
+  {
+   "run": "R4051",
+   "config": "x11_u_meas_ri08",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 8,
+   "dt": 0.0,
+   "dr": -0.08,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    8.878689293818311e-18,
+    0.14500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.228,
+   "t_weld": 63.285,
+   "t_land": 136.352,
+   "t_fold": 63.437,
+   "t_path": 100.854,
+   "separation_min_m": 0.644337031400816,
+   "rho_true": [
+    -0.0009322217430463474,
+    0.1613469089127096,
+    0.04046518595906042
+   ],
+   "d_true_m": 0.06365991707774285,
+   "d_tan_m": -0.0012999769746124001,
+   "d_rad_m": -0.06365039803871711,
+   "dz_m": 0.00046518595906042126,
+   "aim_err_m": 0.01637346842848615,
+   "rho_model": [
+    0.0003,
+    0.1453,
+    0.0403
+   ],
+   "e_model_xy_m": 0.016094149746937084,
+   "e_model_m": 0.01609499743640569,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.4294455490363405,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.009328861331755034,
+   "pre_tilt_mean_deg": 0.06732506889773109,
+   "thr_peak": 0.5264999996870756,
+   "steady_s": 22.069000000000003,
+   "steady_tilt_mean_deg": 0.3550434082383235,
+   "steady_tilt_max_deg": 0.6852156085169052,
+   "steady_err_m": 0.0035081144977440176,
+   "steady_err_xy_m": 0.0014487136464153155,
+   "steady_err_z_m": -0.0030880646338259233,
+   "steady_tension_n": null,
+   "path_err_m": 0.011041944863222406,
+   "path_tilt_peak_deg": 1.749493957662701,
+   "lag_s": 0.11086959818053747
+  },
+  {
+   "run": "R4052",
+   "config": "x11_u_slot_ri08",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 8,
+   "dt": 0.0,
+   "dr": -0.08,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    8.878689293818311e-18,
+    0.14500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.286,
+   "t_weld": 62.545,
+   "t_land": 136.413,
+   "t_fold": 62.685,
+   "t_path": 100.911,
+   "separation_min_m": 0.6503374469626728,
+   "rho_true": [
+    0.001628449790055866,
+    0.12912239969762845,
+    0.04103464750770848
+   ],
+   "d_true_m": 0.09589142864959334,
+   "d_tan_m": 0.002837457727899434,
+   "d_rad_m": -0.09586733197059369,
+   "dz_m": 0.001034647507708479,
+   "aim_err_m": 0.0159608909551003,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0409
+   ],
+   "e_model_xy_m": 0.09589142864959334,
+   "e_model_m": 0.09589152318328968,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 8.370221377705443,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.006760795165393407,
+   "pre_tilt_mean_deg": 0.06448777030221467,
+   "thr_peak": 0.7894999980926514,
+   "steady_s": 22.866,
+   "steady_tilt_mean_deg": 8.262728131033027,
+   "steady_tilt_max_deg": 8.481849252131779,
+   "steady_err_m": 0.2951962461272676,
+   "steady_err_xy_m": 0.29135594327867764,
+   "steady_err_z_m": 0.047447691494696555,
+   "steady_tension_n": null,
+   "path_err_m": 0.20296532993374053,
+   "path_tilt_peak_deg": 9.702929260438673,
+   "lag_s": 0.08562196714734106
+  },
+  {
+   "run": "R4053",
+   "config": "x11_u_slot_ri08",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 8,
+   "dt": 0.0,
+   "dr": -0.08,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    8.878689293818311e-18,
+    0.14500000000000002
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.283,
+   "t_weld": 59.357,
+   "t_land": 136.421,
+   "t_fold": 59.508,
+   "t_path": 100.922,
+   "separation_min_m": 0.6489686643043382,
+   "rho_true": [
+    -0.0015674726181900396,
+    0.16977009044448102,
+    0.04031694875518832
+   ],
+   "d_true_m": 0.05525214819280408,
+   "d_tan_m": -0.0020773392088396752,
+   "d_rad_m": -0.05522267353990981,
+   "dz_m": 0.00031694875518831905,
+   "aim_err_m": 0.024819636400168005,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.04
+   ],
+   "e_model_xy_m": 0.05525214819280408,
+   "e_model_m": 0.05525305725869835,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.065254131121942,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.00949471796031598,
+   "pre_tilt_mean_deg": 0.0470556651025741,
+   "thr_peak": 0.7800000011920929,
+   "steady_s": 26.064999999999998,
+   "steady_tilt_mean_deg": 2.956513415385605,
+   "steady_tilt_max_deg": 3.1956520788863094,
+   "steady_err_m": 0.16156202941625353,
+   "steady_err_xy_m": 0.1585976938422108,
+   "steady_err_z_m": 0.030569245542035828,
+   "steady_tension_n": null,
+   "path_err_m": 0.11754763492627039,
+   "path_tilt_peak_deg": 3.748453148298484,
+   "lag_s": 0.10298478185699698
+  },
+  {
+   "run": "R4054",
+   "config": "x11_u_meas_ri12",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 12,
+   "dt": 0.0,
+   "dr": -0.12,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    6.429395695523605e-18,
+    0.10500000000000001
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.264,
+   "t_weld": 56.796,
+   "t_land": 136.4,
+   "t_fold": 56.959,
+   "t_path": 100.9,
+   "separation_min_m": 0.6352609912709806,
+   "rho_true": [
+    -7.442188772392385e-06,
+    0.08708173612148482,
+    0.03998776760236917
+   ],
+   "d_true_m": 0.13791826407930866,
+   "d_tan_m": -1.9228974338158108e-05,
+   "d_rad_m": -0.13791826356050263,
+   "dz_m": -1.2232397630831948e-05,
+   "aim_err_m": 0.017918265424038012,
+   "rho_model": [
+    0.0002,
+    0.1038,
+    0.0399
+   ],
+   "e_model_xy_m": 0.01671955081254722,
+   "e_model_m": 0.016719781174566073,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.5280447693225758,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.015277805210708317,
+   "pre_tilt_mean_deg": 0.06401418684453154,
+   "thr_peak": 0.800000011920929,
+   "steady_s": 28.604000000000013,
+   "steady_tilt_mean_deg": 1.650725392895964,
+   "steady_tilt_max_deg": 2.1082205665924403,
+   "steady_err_m": 0.0037059874686097907,
+   "steady_err_xy_m": 0.001809626021195757,
+   "steady_err_z_m": 0.003188822660853608,
+   "steady_tension_n": null,
+   "path_err_m": 0.013779762435809082,
+   "path_tilt_peak_deg": 3.146908098305732,
+   "lag_s": 0.09757780491669535
+  },
+  {
+   "run": "R4055",
+   "config": "x11_u_meas_ri12",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 12,
+   "dt": 0.0,
+   "dr": -0.12,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    6.429395695523605e-18,
+    0.10500000000000001
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.27,
+   "t_weld": 55.758,
+   "t_land": 136.492,
+   "t_fold": 55.892,
+   "t_path": 100.992,
+   "separation_min_m": 0.6367820436902487,
+   "rho_true": [
+    0.003536885992266464,
+    0.12579447918922623,
+    0.03993175386604486
+   ],
+   "d_true_m": 0.09926854951020066,
+   "d_tan_m": 0.006324312161488679,
+   "d_rad_m": -0.09915580840972055,
+   "dz_m": -6.824613395513962e-05,
+   "aim_err_m": 0.021093125118707593,
+   "rho_model": [
+    0.0006,
+    0.1055,
+    0.0397
+   ],
+   "e_model_xy_m": 0.020505881714608317,
+   "e_model_m": 0.020507191293493474,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.0547084827795354,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.005506788345896574,
+   "pre_tilt_mean_deg": 0.061942810043484425,
+   "thr_peak": 0.5270000007003546,
+   "steady_s": 29.733999999999995,
+   "steady_tilt_mean_deg": 0.31372882490423154,
+   "steady_tilt_max_deg": 0.5938495970914075,
+   "steady_err_m": 0.003259445499635978,
+   "steady_err_xy_m": 0.0012430515915351746,
+   "steady_err_z_m": -0.0028992907672248146,
+   "steady_tension_n": null,
+   "path_err_m": 0.010797045196639621,
+   "path_tilt_peak_deg": 1.5478443610255797,
+   "lag_s": 0.1100770726577627
+  },
+  {
+   "run": "R4056",
+   "config": "x11_u_slot_ri12",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 12,
+   "dt": 0.0,
+   "dr": -0.12,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    6.429395695523605e-18,
+    0.10500000000000001
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.295,
+   "t_weld": 61.84,
+   "t_land": 136.406,
+   "t_fold": 61.991,
+   "t_path": 100.906,
+   "separation_min_m": 0.6499765578701696,
+   "rho_true": [
+    0.0027158740872547152,
+    0.11985344662201781,
+    0.03968130453088269
+   ],
+   "d_true_m": 0.10518162225087936,
+   "d_tan_m": 0.005097509186370398,
+   "d_rad_m": -0.105115786530358,
+   "dz_m": -0.0003186954691173083,
+   "aim_err_m": 0.015099696970832022,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0395
+   ],
+   "e_model_xy_m": 0.10518162225087936,
+   "e_model_m": 0.10518177851063176,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 9.558865151488948,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.0074761088409252,
+   "pre_tilt_mean_deg": 0.06141448256885532,
+   "thr_peak": 0.7899999916553497,
+   "steady_s": 23.566000000000003,
+   "steady_tilt_mean_deg": 9.572216424840356,
+   "steady_tilt_max_deg": 9.783721669985471,
+   "steady_err_m": 0.3199688805556095,
+   "steady_err_xy_m": 0.3163617286895315,
+   "steady_err_z_m": 0.04786570739074262,
+   "steady_tension_n": null,
+   "path_err_m": 0.21626108638995503,
+   "path_tilt_peak_deg": 11.267972857020215,
+   "lag_s": 0.08327308746350322
+  },
+  {
+   "run": "R4057",
+   "config": "x11_u_slot_ri12",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 12,
+   "dt": 0.0,
+   "dr": -0.12,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    6.429395695523605e-18,
+    0.10500000000000001
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.243,
+   "t_weld": 53.786,
+   "t_land": 136.384,
+   "t_fold": 53.935,
+   "t_path": 100.885,
+   "separation_min_m": 0.6506036378395664,
+   "rho_true": [
+    0.0008124101618246339,
+    0.1260281938047337,
+    0.0416212662954302
+   ],
+   "d_true_m": 0.09897514047388055,
+   "d_tan_m": 0.0014503852871820756,
+   "d_rad_m": -0.09896918772000812,
+   "dz_m": 0.0016212662954301973,
+   "aim_err_m": 0.02104388141385701,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0414
+   ],
+   "e_model_xy_m": 0.09897514047388055,
+   "e_model_m": 0.09897538780221012,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 8.604632157660928,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.007969559955230077,
+   "pre_tilt_mean_deg": 0.05813369527695027,
+   "thr_peak": 0.7915000021457672,
+   "steady_s": 31.599000000000004,
+   "steady_tilt_mean_deg": 8.431224750809985,
+   "steady_tilt_max_deg": 8.776981661752869,
+   "steady_err_m": 0.30190145232071847,
+   "steady_err_xy_m": 0.2980635057188653,
+   "steady_err_z_m": 0.04794821532254451,
+   "steady_tension_n": null,
+   "path_err_m": 0.2045584696169084,
+   "path_tilt_peak_deg": 10.015364064345317,
+   "lag_s": 0.09520801402611158
+  },
+  {
+   "run": "R4058",
+   "config": "x11_u_meas_ri16",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 16,
+   "dt": 0.0,
+   "dr": -0.16,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    3.980102097228898e-18,
+    0.065
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.24,
+   "t_weld": 59.926,
+   "t_land": 136.361,
+   "t_fold": 60.057,
+   "t_path": 100.861,
+   "separation_min_m": 0.6584234961189434,
+   "rho_true": [
+    -0.0006357039036887075,
+    0.08345925462406661,
+    0.04051150435593791
+   ],
+   "d_true_m": 0.14154217294159355,
+   "d_tan_m": -0.0017137735912416674,
+   "d_rad_m": -0.141538324352683,
+   "dz_m": 0.000511504355937907,
+   "aim_err_m": 0.01847019763644368,
+   "rho_model": [
+    -0.0004,
+    0.0642,
+    0.0403
+   ],
+   "e_model_xy_m": 0.019260696898213355,
+   "e_model_m": 0.019261858142386637,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 0.9374100685543676,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.005047284570885546,
+   "pre_tilt_mean_deg": 0.06140628206916403,
+   "thr_peak": 0.5405000001192093,
+   "steady_s": 25.435000000000002,
+   "steady_tilt_mean_deg": 0.21189601645082007,
+   "steady_tilt_max_deg": 0.5259402793432858,
+   "steady_err_m": 0.003571841229977737,
+   "steady_err_xy_m": 0.0013843568425257757,
+   "steady_err_z_m": -0.00326252036757027,
+   "steady_tension_n": null,
+   "path_err_m": 0.01069059169800979,
+   "path_tilt_peak_deg": 1.2512068642458556,
+   "lag_s": 0.10361715429561101
+  },
+  {
+   "run": "R4059",
+   "config": "x11_u_meas_ri16",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 16,
+   "dt": 0.0,
+   "dr": -0.16,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    3.980102097228898e-18,
+    0.065
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.235,
+   "t_weld": 59.304,
+   "t_land": 136.374,
+   "t_fold": 59.456,
+   "t_path": 100.869,
+   "separation_min_m": 0.6584989692353556,
+   "rho_true": [
+    -0.00047105520507781753,
+    0.04572902098687774,
+    0.04018656383573586
+   ],
+   "d_true_m": 0.17927159788803568,
+   "d_tan_m": -0.0023176355351240286,
+   "d_rad_m": -0.17926855290476218,
+   "dz_m": 0.00018656383573585622,
+   "aim_err_m": 0.019276735333827393,
+   "rho_model": [
+    -0.0002,
+    0.0649,
+    0.04
+   ],
+   "e_model_xy_m": 0.01917289511904172,
+   "e_model_m": 0.01917380278689072,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.5578228190078425,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.012270164486774204,
+   "pre_tilt_mean_deg": 0.04764951662757838,
+   "thr_peak": 0.7994999885559082,
+   "steady_s": 26.064999999999998,
+   "steady_tilt_mean_deg": 1.260098239238659,
+   "steady_tilt_max_deg": 1.5485734360383174,
+   "steady_err_m": 0.002956582133764328,
+   "steady_err_xy_m": 0.0017964140158281776,
+   "steady_err_z_m": 0.002295406145254636,
+   "steady_tension_n": null,
+   "path_err_m": 0.017453488340934173,
+   "path_tilt_peak_deg": 2.5718843889900667,
+   "lag_s": 0.11081512382853934
+  },
+  {
+   "run": "R4060",
+   "config": "x11_u_slot_ri16",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 16,
+   "dt": 0.0,
+   "dr": -0.16,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    3.980102097228898e-18,
+    0.065
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.257,
+   "t_weld": 59.354,
+   "t_land": 136.489,
+   "t_fold": 59.524,
+   "t_path": 100.988,
+   "separation_min_m": 0.6533858424959081,
+   "rho_true": [
+    4.956979596740027e-05,
+    0.048293460234494746,
+    0.040208103815447434
+   ],
+   "d_true_m": 0.17670654671817557,
+   "d_tan_m": 0.00023094637725409577,
+   "d_rad_m": -0.17670651432558013,
+   "dz_m": 0.00020810381544743295,
+   "aim_err_m": 0.016706613304349888,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.04
+   ],
+   "e_model_xy_m": 0.17670654671817557,
+   "e_model_m": 0.17670666925801293,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 19.869485826561323,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.010773779296762376,
+   "pre_tilt_mean_deg": 0.0390737843429334,
+   "thr_peak": 0.7860000133514404,
+   "steady_s": 26.134,
+   "steady_tilt_mean_deg": 19.13923066048293,
+   "steady_tilt_max_deg": 19.70108607406546,
+   "steady_err_m": 0.4478590406626695,
+   "steady_err_xy_m": 0.445133258576628,
+   "steady_err_z_m": 0.049315321517013816,
+   "steady_tension_n": null,
+   "path_err_m": 0.3055395907798724,
+   "path_tilt_peak_deg": 19.70559823243904,
+   "lag_s": 0.10073930397488386
+  },
+  {
+   "run": "R4061",
+   "config": "x11_u_slot_ri16",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 16,
+   "dt": 0.0,
+   "dr": -0.16,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    3.980102097228898e-18,
+    0.065
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.234,
+   "t_weld": 61.549,
+   "t_land": 136.481,
+   "t_fold": 61.71,
+   "t_path": 100.985,
+   "separation_min_m": 0.6524924165479211,
+   "rho_true": [
+    -0.00083880841529664,
+    0.05990032817590212,
+    0.039927730296454016
+   ],
+   "d_true_m": 0.16510180264304322,
+   "d_tan_m": -0.003150533935422619,
+   "d_rad_m": -0.16509379902599108,
+   "dz_m": -7.226970354598516e-05,
+   "aim_err_m": 0.005168196229930736,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0399
+   ],
+   "e_model_xy_m": 0.1651018026430432,
+   "e_model_m": 0.1651018049718165,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 18.92549672016855,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.009491737900109154,
+   "pre_tilt_mean_deg": 0.06738841086236728,
+   "thr_peak": 0.7879999876022339,
+   "steady_s": 23.935999999999993,
+   "steady_tilt_mean_deg": 18.454574861950427,
+   "steady_tilt_max_deg": 18.949476296403247,
+   "steady_err_m": 0.4299951561951853,
+   "steady_err_xy_m": 0.4281827104284069,
+   "steady_err_z_m": 0.03939244453422565,
+   "steady_tension_n": null,
+   "path_err_m": 0.2913491557147791,
+   "path_tilt_peak_deg": 18.882995762478615,
+   "lag_s": 0.11246874312495093
+  },
+  {
+   "run": "R4062",
+   "config": "x11_u_meas_ri20",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 20,
+   "dt": 0.0,
+   "dr": -0.2,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.5308084989341912e-18,
+    0.024999999999999994
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.292,
+   "t_weld": 62.228,
+   "t_land": 136.431,
+   "t_fold": 62.38,
+   "t_path": 100.933,
+   "separation_min_m": 0.7028482306847567,
+   "rho_true": [
+    -0.0002874621424227821,
+    0.04801561221382274,
+    0.03982542733655257
+   ],
+   "d_true_m": 0.17698462123735864,
+   "d_tan_m": -0.0013470225566407973,
+   "d_rad_m": -0.17698352729789985,
+   "dz_m": -0.00017457266344743372,
+   "aim_err_m": 0.023017407327072987,
+   "rho_model": [
+    0.0002,
+    0.0251,
+    0.0396
+   ],
+   "e_model_xy_m": 0.022920796287969523,
+   "e_model_m": 0.02292190480650905,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 0.9413517584996428,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.003973276316038055,
+   "pre_tilt_mean_deg": 0.06571223019379605,
+   "thr_peak": 0.5515000000596046,
+   "steady_s": 23.205,
+   "steady_tilt_mean_deg": 0.40587968519147105,
+   "steady_tilt_max_deg": 0.6574857258390598,
+   "steady_err_m": 0.0023511104292413747,
+   "steady_err_xy_m": 0.0006340257065604901,
+   "steady_err_z_m": -0.002238882977034146,
+   "steady_tension_n": null,
+   "path_err_m": 0.012814118440290283,
+   "path_tilt_peak_deg": 1.7259988799235404,
+   "lag_s": 0.10699387517380214
+  },
+  {
+   "run": "R4063",
+   "config": "x11_u_meas_ri20",
+   "arm": "measured",
+   "direction": "ri",
+   "d_cm": 20,
+   "dt": 0.0,
+   "dr": -0.2,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.5308084989341912e-18,
+    0.024999999999999994
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.262,
+   "t_weld": 65.398,
+   "t_land": 136.398,
+   "t_fold": 65.561,
+   "t_path": 100.898,
+   "separation_min_m": 0.701879097777861,
+   "rho_true": [
+    -0.002112326983991544,
+    0.004919542991782104,
+    0.03983673832288421
+   ],
+   "d_true_m": 0.22009059380680798,
+   "d_tan_m": -0.09062915451443465,
+   "d_rad_m": -0.21964613891333637,
+   "dz_m": -0.00016326167711579187,
+   "aim_err_m": 0.020191252535347724,
+   "rho_model": [
+    0.0004,
+    0.0237,
+    0.0395
+   ],
+   "e_model_xy_m": 0.018947753225963565,
+   "e_model_m": 0.018950745236272677,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 0.5928158947905118,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.008972515679565252,
+   "pre_tilt_mean_deg": 0.030934589778564305,
+   "thr_peak": 0.6755000054836273,
+   "steady_s": 20.0,
+   "steady_tilt_mean_deg": 0.6105351018320873,
+   "steady_tilt_max_deg": 0.863535663255108,
+   "steady_err_m": 0.0009567470881305441,
+   "steady_err_xy_m": 0.0008079075809872524,
+   "steady_err_z_m": 0.00023398811783438453,
+   "steady_tension_n": null,
+   "path_err_m": 0.012978693949288297,
+   "path_tilt_peak_deg": 1.654368206879992,
+   "lag_s": 0.10059867931547527
+  },
+  {
+   "run": "R4064",
+   "config": "x11_u_slot_ri20",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 20,
+   "dt": 0.0,
+   "dr": -0.2,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.5308084989341912e-18,
+    0.024999999999999994
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.254,
+   "t_weld": 65.183,
+   "t_land": 136.385,
+   "t_fold": 65.35,
+   "t_path": 100.883,
+   "separation_min_m": 0.6540607591482376,
+   "rho_true": [
+    0.0007145820523173045,
+    0.013228490125576068,
+    0.039251494667778455
+   ],
+   "d_true_m": 0.21177271548054233,
+   "d_tan_m": 0.01214086847154694,
+   "d_rad_m": -0.21175222363896654,
+   "dz_m": -0.0007485053322215454,
+   "aim_err_m": 0.01179317905541818,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0391
+   ],
+   "e_model_xy_m": 0.21177271548054233,
+   "e_model_m": 0.21177276966748368,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 15.420058617438102,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.015126568357149761,
+   "pre_tilt_mean_deg": 0.03711247678346351,
+   "thr_peak": 0.7870000004768372,
+   "steady_s": 20.19999999999999,
+   "steady_tilt_mean_deg": 13.809711731809845,
+   "steady_tilt_max_deg": 14.391291565679186,
+   "steady_err_m": 0.4183821113237466,
+   "steady_err_xy_m": 0.40832200818540376,
+   "steady_err_z_m": 0.09119230295756897,
+   "steady_tension_n": null,
+   "path_err_m": 0.2898269840547604,
+   "path_tilt_peak_deg": 14.137313963064534,
+   "lag_s": 0.1217382450587088
+  },
+  {
+   "run": "R4065",
+   "config": "x11_u_slot_ri20",
+   "arm": "slot",
+   "direction": "ri",
+   "d_cm": 20,
+   "dt": 0.0,
+   "dr": -0.2,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    1.5308084989341912e-18,
+    0.024999999999999994
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.252,
+   "t_weld": 61.005,
+   "t_land": 136.373,
+   "t_fold": 61.139,
+   "t_path": 100.874,
+   "separation_min_m": 0.6533891665520055,
+   "rho_true": [
+    -0.0014823623495998205,
+    0.009547241985922284,
+    0.04017284162264661
+   ],
+   "d_true_m": 0.21545785744318596,
+   "d_tan_m": -0.034623863465475115,
+   "d_rad_m": -0.21533836309555837,
+   "dz_m": 0.00017284162264660785,
+   "aim_err_m": 0.015523695706150453,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.04
+   ],
+   "e_model_xy_m": 0.215457857443186,
+   "e_model_m": 0.2154579267704829,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 17.54999088588475,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.012009311873996786,
+   "pre_tilt_mean_deg": 0.06988015361074844,
+   "thr_peak": 0.7840000092983246,
+   "steady_s": 24.369,
+   "steady_tilt_mean_deg": 16.689895001225516,
+   "steady_tilt_max_deg": 17.25396894644477,
+   "steady_err_m": 0.4551357777002517,
+   "steady_err_xy_m": 0.44542518993346336,
+   "steady_err_z_m": 0.09350923086111708,
+   "steady_tension_n": null,
+   "path_err_m": 0.3152567341489363,
+   "path_tilt_peak_deg": 16.921990458447077,
+   "lag_s": 0.11686269045601147
+  },
+  {
+   "run": "R4066",
+   "config": "x11_u_meas_t02",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 2,
+   "dt": 0.02,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.019980237149323603,
+    0.22411111111111112
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.23,
+   "t_weld": 67.428,
+   "t_land": 136.36,
+   "t_fold": 67.548,
+   "t_path": 100.86,
+   "separation_min_m": 0.6127579057998743,
+   "rho_true": [
+    0.01975405872182621,
+    0.2350937145636048,
+    0.03967272761209961
+   ],
+   "d_true_m": 0.022183460272844856,
+   "d_tan_m": 0.018856091699079574,
+   "d_rad_m": 0.010922185186766714,
+   "dz_m": -0.00032727238790038887,
+   "aim_err_m": 0.010984932192589607,
+   "rho_model": [
+    0.0196,
+    0.2254,
+    0.0396
+   ],
+   "e_model_xy_m": 0.009694938686263825,
+   "e_model_m": 0.009695211469378925,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.696210804082857,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.017332296853070694,
+   "pre_tilt_mean_deg": 0.06254259415380128,
+   "thr_peak": 0.5264999996870756,
+   "steady_s": 17.932000000000002,
+   "steady_tilt_mean_deg": 0.504192504479655,
+   "steady_tilt_max_deg": 0.6678470840033287,
+   "steady_err_m": 0.0031728345902426154,
+   "steady_err_xy_m": 0.0009322641350738602,
+   "steady_err_z_m": -0.0030074704044952463,
+   "steady_tension_n": null,
+   "path_err_m": 0.010676489421134555,
+   "path_tilt_peak_deg": 1.9437274341526096,
+   "lag_s": 0.09705037015129223
+  },
+  {
+   "run": "R4067",
+   "config": "x11_u_meas_t02",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 2,
+   "dt": 0.02,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.019980237149323603,
+    0.22411111111111112
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.279,
+   "t_weld": 65.032,
+   "t_land": 136.396,
+   "t_fold": 65.171,
+   "t_path": 100.9,
+   "separation_min_m": 0.6110877775197462,
+   "rho_true": [
+    0.019764903960522898,
+    0.24755524223428585,
+    0.03925394832602279
+   ],
+   "d_true_m": 0.029989837959148856,
+   "d_tan_m": 0.01792131892220003,
+   "d_rad_m": 0.02334300752436061,
+   "dz_m": -0.0007460516739772119,
+   "aim_err_m": 0.023445120014681284,
+   "rho_model": [
+    0.0201,
+    0.2244,
+    0.039
+   ],
+   "e_model_xy_m": 0.023157666814343128,
+   "e_model_m": 0.023159059178568087,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.646127007113129,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.015494307988541456,
+   "pre_tilt_mean_deg": 0.0493933266622859,
+   "thr_peak": 0.5070000002160668,
+   "steady_s": 20.36800000000001,
+   "steady_tilt_mean_deg": 0.8406761652923224,
+   "steady_tilt_max_deg": 1.22788948507393,
+   "steady_err_m": 0.0030370239845928975,
+   "steady_err_xy_m": 0.0019111835291685225,
+   "steady_err_z_m": -0.001921998981150514,
+   "steady_tension_n": null,
+   "path_err_m": 0.01045019433043118,
+   "path_tilt_peak_deg": 2.1063990029331943,
+   "lag_s": 0.09924387646486586
+  },
+  {
+   "run": "R4068",
+   "config": "x11_u_slot_t02",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 2,
+   "dt": 0.02,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.019980237149323603,
+    0.22411111111111112
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.244,
+   "t_weld": 67.073,
+   "t_land": 136.377,
+   "t_fold": 67.237,
+   "t_path": 100.874,
+   "separation_min_m": 0.6341850647984221,
+   "rho_true": [
+    0.02037936124821026,
+    0.24241415213685097,
+    0.040072001211953465
+   ],
+   "d_true_m": 0.026806175772206765,
+   "d_tan_m": 0.018865477970589666,
+   "d_rad_m": 0.018269273688876236,
+   "dz_m": 7.200121195346382e-05,
+   "aim_err_m": 0.018307392245653885,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0399
+   ],
+   "e_model_xy_m": 0.026806175772206765,
+   "e_model_m": 0.026806727587442646,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 1.6820904083244963,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01794316049094391,
+   "pre_tilt_mean_deg": 0.06214449686990677,
+   "thr_peak": 0.5130000002682209,
+   "steady_s": 18.301000000000002,
+   "steady_tilt_mean_deg": 0.780916447315188,
+   "steady_tilt_max_deg": 1.1570256346945291,
+   "steady_err_m": 0.0036641859731203273,
+   "steady_err_xy_m": 0.0023206288631312075,
+   "steady_err_z_m": -0.0025740740729539896,
+   "steady_tension_n": null,
+   "path_err_m": 0.010162236169872002,
+   "path_tilt_peak_deg": 2.2377345829521587,
+   "lag_s": 0.09928242741062142
+  },
+  {
+   "run": "R4069",
+   "config": "x11_u_slot_t02",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 2,
+   "dt": 0.02,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.019980237149323603,
+    0.22411111111111112
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.252,
+   "t_weld": 65.309,
+   "t_land": 136.375,
+   "t_fold": 65.443,
+   "t_path": 100.876,
+   "separation_min_m": 0.6333201863544132,
+   "rho_true": [
+    0.01954208308169549,
+    0.24348348513404977,
+    0.039230874593322
+   ],
+   "d_true_m": 0.026898554494108558,
+   "d_tan_m": 0.018015148460226837,
+   "d_rad_m": 0.019266453988661586,
+   "dz_m": -0.0007691254066779993,
+   "aim_err_m": 0.019377328357428617,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0391
+   ],
+   "e_model_xy_m": 0.026898554494108558,
+   "e_model_m": 0.026898872876604047,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 1.6687531643173723,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01616428885642396,
+   "pre_tilt_mean_deg": 0.027837647119087715,
+   "thr_peak": 0.5099999997764826,
+   "steady_s": 20.067000000000007,
+   "steady_tilt_mean_deg": 0.8264894684941785,
+   "steady_tilt_max_deg": 1.1993294715290328,
+   "steady_err_m": 0.0032317235799822893,
+   "steady_err_xy_m": 0.0021797378613289424,
+   "steady_err_z_m": -0.0022137927649264026,
+   "steady_tension_n": null,
+   "path_err_m": 0.011108585349142825,
+   "path_tilt_peak_deg": 2.1859711320387247,
+   "lag_s": 0.10846555475088446
+  },
+  {
+   "run": "R4070",
+   "config": "x11_u_meas_t04",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 4,
+   "dt": 0.04,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.039841661921804425,
+    0.22144444444444444
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.306,
+   "t_weld": 66.408,
+   "t_land": 136.538,
+   "t_fold": 66.539,
+   "t_path": 101.036,
+   "separation_min_m": 0.5713308380453858,
+   "rho_true": [
+    0.03777148052188063,
+    0.20491115634110627,
+    0.04016350216688102
+   ],
+   "d_true_m": 0.04278137889743952,
+   "d_tan_m": 0.04095732851676111,
+   "d_rad_m": -0.016636695327934242,
+   "dz_m": 0.00016350216688101882,
+   "aim_err_m": 0.016662390780934594,
+   "rho_model": [
+    0.0397,
+    0.2215,
+    0.04
+   ],
+   "e_model_xy_m": 0.01670056649687982,
+   "e_model_m": 0.01670136683853389,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.687586697980442,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.025643146508485648,
+   "pre_tilt_mean_deg": 0.05852915173488153,
+   "thr_peak": 0.7405000030994415,
+   "steady_s": 19.128,
+   "steady_tilt_mean_deg": 2.9892493449535276,
+   "steady_tilt_max_deg": 3.549308513364682,
+   "steady_err_m": 0.00537716632557583,
+   "steady_err_xy_m": 0.0022790278323637034,
+   "steady_err_z_m": 0.00481994676658382,
+   "steady_tension_n": null,
+   "path_err_m": 0.01778401152321594,
+   "path_tilt_peak_deg": 4.919131133241236,
+   "lag_s": 0.10454093831284178
+  },
+  {
+   "run": "R4071",
+   "config": "x11_u_meas_t04",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 4,
+   "dt": 0.04,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.039841661921804425,
+    0.22144444444444444
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.57",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.278,
+   "t_weld": 67.142,
+   "t_land": 136.408,
+   "t_fold": 67.275,
+   "t_path": 100.906,
+   "separation_min_m": 0.5701061696308649,
+   "rho_true": [
+    0.0402902617523146,
+    0.24055765901494308,
+    0.04015198885677243
+   ],
+   "d_true_m": 0.04318965091425565,
+   "d_tan_m": 0.03729516984858215,
+   "d_rad_m": 0.018908369070886222,
+   "dz_m": 0.00015198885677242951,
+   "aim_err_m": 0.019118478313554538,
+   "rho_model": [
+    0.0397,
+    0.2214,
+    0.04
+   ],
+   "e_model_xy_m": 0.019166750060171257,
+   "e_model_m": 0.019167352672752123,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.523003933869558,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.0176317472417864,
+   "pre_tilt_mean_deg": 0.05837131380870269,
+   "thr_peak": 0.5109999999403954,
+   "steady_s": 18.26400000000001,
+   "steady_tilt_mean_deg": 0.7887922841565601,
+   "steady_tilt_max_deg": 1.1731332875099996,
+   "steady_err_m": 0.003405008475526677,
+   "steady_err_xy_m": 0.002160571915278206,
+   "steady_err_z_m": -0.0023209613731194423,
+   "steady_tension_n": null,
+   "path_err_m": 0.011104973063358343,
+   "path_tilt_peak_deg": 2.303056815006037,
+   "lag_s": 0.10669412908953085
+  },
+  {
+   "run": "R4072",
+   "config": "x11_u_slot_t04",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 4,
+   "dt": 0.04,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.039841661921804425,
+    0.22144444444444444
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.232,
+   "t_weld": 65.333,
+   "t_land": 136.466,
+   "t_fold": 65.491,
+   "t_path": 100.964,
+   "separation_min_m": 0.6178518615325194,
+   "rho_true": [
+    0.03774919860136776,
+    0.24223008898855705,
+    0.03920833866870439
+   ],
+   "d_true_m": 0.041495517367531404,
+   "d_tan_m": 0.03474963642694169,
+   "d_rad_m": 0.02015386598307964,
+   "dz_m": -0.0007916613312956081,
+   "aim_err_m": 0.02089070180395027,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.039
+   ],
+   "e_model_xy_m": 0.041495517367531404,
+   "e_model_m": 0.041496040372546124,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 1.7937174136672769,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01634108592590766,
+   "pre_tilt_mean_deg": 0.03338245495380125,
+   "thr_peak": 0.5109999999403954,
+   "steady_s": 20.131,
+   "steady_tilt_mean_deg": 0.8527007359335851,
+   "steady_tilt_max_deg": 1.1901337435995647,
+   "steady_err_m": 0.003596160642926424,
+   "steady_err_xy_m": 0.0024977515374647705,
+   "steady_err_z_m": -0.0023615349614865087,
+   "steady_tension_n": null,
+   "path_err_m": 0.01075892303501129,
+   "path_tilt_peak_deg": 2.230279636404666,
+   "lag_s": 0.10195217277811855
+  },
+  {
+   "run": "R4073",
+   "config": "x11_u_slot_t04",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 4,
+   "dt": 0.04,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.039841661921804425,
+    0.22144444444444444
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.311,
+   "t_weld": 62.54,
+   "t_land": 136.441,
+   "t_fold": 62.701,
+   "t_path": 100.942,
+   "separation_min_m": 0.6182327613993587,
+   "rho_true": [
+    0.03891758938518834,
+    0.20933500398096816,
+    0.04088379403182681
+   ],
+   "d_true_m": 0.04195200667227264,
+   "d_tan_m": 0.041299514639686785,
+   "d_rad_m": -0.012078130162103656,
+   "dz_m": 0.0008837940318268123,
+   "aim_err_m": 0.01214464731440995,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0408
+   ],
+   "e_model_xy_m": 0.04195200667227263,
+   "e_model_m": 0.04195209035638365,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 2.4924591619831467,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.024566457983103973,
+   "pre_tilt_mean_deg": 0.06732499101052648,
+   "thr_peak": 0.7234999984502792,
+   "steady_s": 22.902,
+   "steady_tilt_mean_deg": 3.017389395388759,
+   "steady_tilt_max_deg": 3.4492392053825016,
+   "steady_err_m": 0.00741556457738715,
+   "steady_err_xy_m": 0.005313981318181208,
+   "steady_err_z_m": 0.005011353168833833,
+   "steady_tension_n": null,
+   "path_err_m": 0.015451542680364947,
+   "path_tilt_peak_deg": 4.547930842722224,
+   "lag_s": 0.0981240435748608
+  },
+  {
+   "run": "R4074",
+   "config": "x11_u_meas_t06",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 6,
+   "dt": 0.06,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.05946427498927405,
+    0.217
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.287,
+   "t_weld": 66.252,
+   "t_land": 136.416,
+   "t_fold": 66.382,
+   "t_path": 100.918,
+   "separation_min_m": 0.5241037445123842,
+   "rho_true": [
+    0.06009086704440189,
+    0.19895247815455303,
+    0.040016663616070404
+   ],
+   "d_true_m": 0.06549340193055346,
+   "d_tan_m": 0.06576153147033237,
+   "d_rad_m": -0.01717074107338523,
+   "dz_m": 1.666361607040312e-05,
+   "aim_err_m": 0.018058395896796454,
+   "rho_model": [
+    0.0592,
+    0.2178,
+    0.0399
+   ],
+   "e_model_xy_m": 0.018868564434142893,
+   "e_model_m": 0.018868925094045943,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.802225054328945,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.025965618902599408,
+   "pre_tilt_mean_deg": 0.04816047827656974,
+   "thr_peak": 0.7269999980926514,
+   "steady_s": 19.16600000000001,
+   "steady_tilt_mean_deg": 3.2973370018014534,
+   "steady_tilt_max_deg": 4.406570683620991,
+   "steady_err_m": 0.007023571448540804,
+   "steady_err_xy_m": 0.0033363895796648265,
+   "steady_err_z_m": 0.0061183026586761865,
+   "steady_tension_n": null,
+   "path_err_m": 0.016725715219959726,
+   "path_tilt_peak_deg": 5.407055349369798,
+   "lag_s": 0.09640968959830798
+  },
+  {
+   "run": "R4075",
+   "config": "x11_u_meas_t06",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 6,
+   "dt": 0.06,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.05946427498927405,
+    0.217
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.62",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.276,
+   "t_weld": 64.482,
+   "t_land": 136.514,
+   "t_fold": 64.625,
+   "t_path": 101.015,
+   "separation_min_m": 0.5206685956746349,
+   "rho_true": [
+    0.05947532487536365,
+    0.204395606448432,
+    0.0398559865174639
+   ],
+   "d_true_m": 0.06294327051129411,
+   "d_tan_m": 0.06349891766922239,
+   "d_rad_m": -0.012127084380252035,
+   "dz_m": -0.00014401348253609975,
+   "aim_err_m": 0.01260439839511556,
+   "rho_model": [
+    0.0598,
+    0.2156,
+    0.0398
+   ],
+   "e_model_xy_m": 0.011209096698439919,
+   "e_model_m": 0.011209236516601584,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.063633319911501,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.02056432487797144,
+   "pre_tilt_mean_deg": 0.05858453601877908,
+   "thr_peak": 0.715499997138977,
+   "steady_s": 21.033,
+   "steady_tilt_mean_deg": 2.211474299902946,
+   "steady_tilt_max_deg": 2.3823154655109686,
+   "steady_err_m": 0.003147468185573134,
+   "steady_err_xy_m": 0.0011605893593642964,
+   "steady_err_z_m": 0.0028801800659559377,
+   "steady_tension_n": null,
+   "path_err_m": 0.014999270365283332,
+   "path_tilt_peak_deg": 3.428238465448137,
+   "lag_s": 0.10476805030330559
+  },
+  {
+   "run": "R4076",
+   "config": "x11_u_slot_t06",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 6,
+   "dt": 0.06,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.05946427498927405,
+    0.217
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.318,
+   "t_weld": 68.807,
+   "t_land": 136.539,
+   "t_fold": 68.948,
+   "t_path": 101.04,
+   "separation_min_m": 0.6027855955351006,
+   "rho_true": [
+    0.057534671615452185,
+    0.22041502712958322,
+    0.03955799393820091
+   ],
+   "d_true_m": 0.057717072120130775,
+   "d_tan_m": 0.05729365281412078,
+   "d_rad_m": 0.0028004008390521418,
+   "dz_m": -0.0004420060617990884,
+   "aim_err_m": 0.003922471093080754,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0396
+   ],
+   "e_model_xy_m": 0.057717072120130775,
+   "e_model_m": 0.05771708740598061,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 2.08781434865056,
+   "fold_settle_s": 2.8970000000000056,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.018039990994983324,
+   "pre_tilt_mean_deg": 0.07132048845051414,
+   "thr_peak": 0.6289999932050705,
+   "steady_s": 16.733000000000004,
+   "steady_tilt_mean_deg": 1.87914163253627,
+   "steady_tilt_max_deg": 2.171789538933331,
+   "steady_err_m": 0.0038877239136659455,
+   "steady_err_xy_m": 0.0036200427933016084,
+   "steady_err_z_m": 0.0013420691028287598,
+   "steady_tension_n": null,
+   "path_err_m": 0.014274233931143169,
+   "path_tilt_peak_deg": 2.953022531380513,
+   "lag_s": 0.09395474675116426
+  },
+  {
+   "run": "R4077",
+   "config": "x11_u_slot_t06",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 6,
+   "dt": 0.06,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.05946427498927405,
+    0.217
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.298,
+   "t_weld": 66.31,
+   "t_land": 136.412,
+   "t_fold": 66.48,
+   "t_path": 100.911,
+   "separation_min_m": 0.6028814780511558,
+   "rho_true": [
+    0.05789311287896426,
+    0.19747089683426544,
+    0.03983636835312278
+   ],
+   "d_true_m": 0.06410510151248615,
+   "d_tan_m": 0.06394866036461011,
+   "d_rad_m": -0.01921766933153468,
+   "dz_m": -0.00016363164687722281,
+   "aim_err_m": 0.019592203062309674,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0396
+   ],
+   "e_model_xy_m": 0.06410510151248615,
+   "e_model_m": 0.06410553727974294,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.5137600231381017,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.03464840369000721,
+   "pre_tilt_mean_deg": 0.04406873594527198,
+   "thr_peak": 0.7195000052452087,
+   "steady_s": 19.101,
+   "steady_tilt_mean_deg": 4.596307039267353,
+   "steady_tilt_max_deg": 5.191012990580182,
+   "steady_err_m": 0.01738129990353849,
+   "steady_err_xy_m": 0.00871247318650169,
+   "steady_err_z_m": 0.013444016751305092,
+   "steady_tension_n": null,
+   "path_err_m": 0.021594179067814863,
+   "path_tilt_peak_deg": 6.313889299312938,
+   "lag_s": 0.1076208333674638
+  },
+  {
+   "run": "R4078",
+   "config": "x11_u_meas_t08",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 8,
+   "dt": 0.08,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.07872565271283392,
+    0.21077777777777776
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.246,
+   "t_weld": 65.018,
+   "t_land": 136.381,
+   "t_fold": 65.151,
+   "t_path": 100.882,
+   "separation_min_m": 0.47347972670340166,
+   "rho_true": [
+    0.07585711574152074,
+    0.22990645262780246,
+    0.03925817799403596
+   ],
+   "d_true_m": 0.07601562527540863,
+   "d_tan_m": 0.07140451093848593,
+   "d_rad_m": 0.01709766411207367,
+   "dz_m": -0.0007418220059640379,
+   "aim_err_m": 0.01934256202972497,
+   "rho_model": [
+    0.079,
+    0.2104,
+    0.0391
+   ],
+   "e_model_xy_m": 0.01975802155031971,
+   "e_model_m": 0.019758654707765288,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.6780473908107345,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01270407603424717,
+   "pre_tilt_mean_deg": 0.04254363573651176,
+   "thr_peak": 0.5130000002682209,
+   "steady_s": 20.364000000000004,
+   "steady_tilt_mean_deg": 0.7563938736348343,
+   "steady_tilt_max_deg": 1.1770707196742989,
+   "steady_err_m": 0.0034972092884185723,
+   "steady_err_xy_m": 0.0022916637943372277,
+   "steady_err_z_m": -0.0023998400193425743,
+   "steady_tension_n": null,
+   "path_err_m": 0.010138233772940108,
+   "path_tilt_peak_deg": 2.1981949295174323,
+   "lag_s": 0.09662261258606471
+  },
+  {
+   "run": "R4079",
+   "config": "x11_u_meas_t08",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 8,
+   "dt": 0.08,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.07872565271283392,
+    0.21077777777777776
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.51",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.286,
+   "t_weld": 64.363,
+   "t_land": 136.429,
+   "t_fold": 64.493,
+   "t_path": 100.926,
+   "separation_min_m": 0.4672094531064865,
+   "rho_true": [
+    0.08380997962679583,
+    0.1902317592806467,
+    0.04007138582405653
+   ],
+   "d_true_m": 0.09073556771058872,
+   "d_tan_m": 0.092702512630889,
+   "d_rad_m": -0.017124472522488,
+   "dz_m": 7.138582405653154e-05,
+   "aim_err_m": 0.02116575668981596,
+   "rho_model": [
+    0.0794,
+    0.2094,
+    0.0399
+   ],
+   "e_model_xy_m": 0.01966899521032603,
+   "e_model_m": 0.019669741881491884,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.6038836167597523,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.025325274709507406,
+   "pre_tilt_mean_deg": 0.046788685923880455,
+   "thr_peak": 0.7094999998807907,
+   "steady_s": 21.063000000000002,
+   "steady_tilt_mean_deg": 3.1954593644774465,
+   "steady_tilt_max_deg": 3.877134652059686,
+   "steady_err_m": 0.006574858787821274,
+   "steady_err_xy_m": 0.0029454774550773167,
+   "steady_err_z_m": 0.005696336428542533,
+   "steady_tension_n": null,
+   "path_err_m": 0.015405526307749304,
+   "path_tilt_peak_deg": 4.983503098599247,
+   "lag_s": 0.10232472528278382
+  },
+  {
+   "run": "R4080",
+   "config": "x11_u_slot_t08",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 8,
+   "dt": 0.08,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.07872565271283392,
+    0.21077777777777776
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.254,
+   "t_weld": 65.59,
+   "t_land": 136.391,
+   "t_fold": 65.73,
+   "t_path": 100.89,
+   "separation_min_m": 0.588117638163536,
+   "rho_true": [
+    0.0775792610542208,
+    0.2190506109323497,
+    0.04021942030133651
+   ],
+   "d_true_m": 0.07780704965488164,
+   "d_tan_m": 0.07621570639777302,
+   "d_rad_m": 0.007382684156015756,
+   "dz_m": 0.00021942030133650925,
+   "aim_err_m": 0.00835188495121446,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0402
+   ],
+   "e_model_xy_m": 0.07780704965488165,
+   "e_model_m": 0.077807052078493,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 2.363284167451825,
+   "fold_settle_s": 4.829999999999998,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.01926508296061069,
+   "pre_tilt_mean_deg": 0.03319239624329951,
+   "thr_peak": 0.6410000026226044,
+   "steady_s": 19.799999999999997,
+   "steady_tilt_mean_deg": 2.2623946993319195,
+   "steady_tilt_max_deg": 2.722284849053296,
+   "steady_err_m": 0.006353649533708168,
+   "steady_err_xy_m": 0.0059532787112908,
+   "steady_err_z_m": 0.002152907428154314,
+   "steady_tension_n": null,
+   "path_err_m": 0.01643086011622515,
+   "path_tilt_peak_deg": 3.4250891937875982,
+   "lag_s": 0.09447120009747703
+  },
+  {
+   "run": "R4081",
+   "config": "x11_u_slot_t08",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 8,
+   "dt": 0.08,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.07872565271283392,
+    0.21077777777777776
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.275,
+   "t_weld": 64.15,
+   "t_land": 136.417,
+   "t_fold": 64.265,
+   "t_path": 100.915,
+   "separation_min_m": 0.5878681504280935,
+   "rho_true": [
+    0.0815663044877851,
+    0.1857176147402757,
+    0.04013329552093134
+   ],
+   "d_true_m": 0.09053268923150067,
+   "d_tan_m": 0.09244930978867194,
+   "d_rad_m": -0.022159928878410368,
+   "dz_m": 0.00013329552093133828,
+   "aim_err_m": 0.025220647770680223,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0398
+   ],
+   "e_model_xy_m": 0.09053268923150067,
+   "e_model_m": 0.09053330274209458,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 4.445195302304725,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.04414729274797491,
+   "pre_tilt_mean_deg": 0.059581896193398404,
+   "thr_peak": 0.7080000042915344,
+   "steady_s": 21.265,
+   "steady_tilt_mean_deg": 6.141402549196759,
+   "steady_tilt_max_deg": 6.606770752096488,
+   "steady_err_m": 0.025256377685622774,
+   "steady_err_xy_m": 0.009843949578384697,
+   "steady_err_z_m": 0.021466674041897175,
+   "steady_tension_n": null,
+   "path_err_m": 0.02679427086854917,
+   "path_tilt_peak_deg": 7.677464418270702,
+   "lag_s": 0.10493776200388044
+  },
+  {
+   "run": "R4082",
+   "config": "x11_u_meas_t116",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 11.6,
+   "dt": 0.11647,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.11250128183554906,
+    0.19485497577777774
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.65",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.296,
+   "t_weld": 66.733,
+   "t_land": 136.435,
+   "t_fold": 66.858,
+   "t_path": 100.935,
+   "separation_min_m": 0.36620933665731964,
+   "rho_true": [
+    0.1135831305484094,
+    0.1920072510177977,
+    0.04007654561539988
+   ],
+   "d_true_m": 0.11827784674477138,
+   "d_tan_m": 0.11876829336515976,
+   "d_rad_m": -0.0019127704493406283,
+   "dz_m": 7.654561539988114e-05,
+   "aim_err_m": 0.0030462982365686083,
+   "rho_model": [
+    0.1131,
+    0.1938,
+    0.0401
+   ],
+   "e_model_xy_m": 0.0018567078499305586,
+   "e_model_m": 0.00185685598476315,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.82610410178324,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.012621970176883934,
+   "pre_tilt_mean_deg": 0.056058350860183404,
+   "thr_peak": 0.590499997138977,
+   "steady_s": 18.701999999999998,
+   "steady_tilt_mean_deg": 1.1340456536467265,
+   "steady_tilt_max_deg": 1.3321018280076016,
+   "steady_err_m": 0.0008497128136160675,
+   "steady_err_xy_m": 0.0006286002621228947,
+   "steady_err_z_m": -0.00044258297780980335,
+   "steady_tension_n": null,
+   "path_err_m": 0.011386028975090667,
+   "path_tilt_peak_deg": 2.29391530085614,
+   "lag_s": 0.09945151363815596
+  },
+  {
+   "run": "R4083",
+   "config": "x11_u_meas_t116",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 11.6,
+   "dt": 0.11647,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.11250128183554906,
+    0.19485497577777774
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.72",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.315,
+   "t_weld": 65.431,
+   "t_land": 136.431,
+   "t_fold": 65.609,
+   "t_path": 100.931,
+   "separation_min_m": 0.37174494502618394,
+   "rho_true": [
+    0.10839955897465968,
+    0.21378870268704223,
+    0.03928453264574002
+   ],
+   "d_true_m": 0.10897778476983397,
+   "d_tan_m": 0.10461834003404745,
+   "d_rad_m": 0.014699966171272644,
+   "dz_m": -0.0007154673542599799,
+   "aim_err_m": 0.019372922988081805,
+   "rho_model": [
+    0.1124,
+    0.1954,
+    0.0392
+   ],
+   "e_model_xy_m": 0.018818818106078296,
+   "e_model_m": 0.01881900796210725,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.526953637681324,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.010414194759864381,
+   "pre_tilt_mean_deg": 0.03419785647103515,
+   "thr_peak": 0.517000000923872,
+   "steady_s": 20.0,
+   "steady_tilt_mean_deg": 0.6279922672279244,
+   "steady_tilt_max_deg": 1.036486781730191,
+   "steady_err_m": 0.0038571917442929045,
+   "steady_err_xy_m": 0.0025555797696734557,
+   "steady_err_z_m": -0.002749736474596453,
+   "steady_tension_n": null,
+   "path_err_m": 0.009916750696845405,
+   "path_tilt_peak_deg": 2.0800203311163004,
+   "lag_s": 0.0916365438437803
+  },
+  {
+   "run": "R4084",
+   "config": "x11_u_slot_t116",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 11.6,
+   "dt": 0.11647,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.11250128183554906,
+    0.19485497577777774
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.209,
+   "t_weld": 65.185,
+   "t_land": 136.35,
+   "t_fold": 65.324,
+   "t_path": 100.851,
+   "separation_min_m": 0.5625301694272485,
+   "rho_true": [
+    0.1099762119168441,
+    0.21441346672839404,
+    0.03894902185218009
+   ],
+   "d_true_m": 0.11048457754043967,
+   "d_tan_m": 0.10563850897363251,
+   "d_rad_m": 0.015972823990728746,
+   "dz_m": -0.0010509781478199101,
+   "aim_err_m": 0.019720815053128206,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0388
+   ],
+   "e_model_xy_m": 0.11048457754043965,
+   "e_model_m": 0.11048467804090235,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 2.7544343174894967,
+   "fold_settle_s": 5.491,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.020454755893305476,
+   "pre_tilt_mean_deg": 0.046257968008865814,
+   "thr_peak": 0.6500000059604645,
+   "steady_s": 20.165999999999997,
+   "steady_tilt_mean_deg": 3.0939782479173643,
+   "steady_tilt_max_deg": 4.158581151243497,
+   "steady_err_m": 0.013830020720447771,
+   "steady_err_xy_m": 0.012798887742654388,
+   "steady_err_z_m": 0.005025143119524674,
+   "steady_tension_n": null,
+   "path_err_m": 0.018807748197782068,
+   "path_tilt_peak_deg": 4.659143695239498,
+   "lag_s": 0.09625140358070444
+  },
+  {
+   "run": "R4085",
+   "config": "x11_u_slot_t116",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 11.6,
+   "dt": 0.11647,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.11250128183554906,
+    0.19485497577777774
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.292,
+   "t_weld": 65.804,
+   "t_land": 136.44,
+   "t_fold": 65.931,
+   "t_path": 100.935,
+   "separation_min_m": 0.5624986718338265,
+   "rho_true": [
+    0.11270713448488284,
+    0.19093663637507696,
+    0.040599658873523015
+   ],
+   "d_true_m": 0.11774213733934508,
+   "d_tan_m": 0.11856384633346465,
+   "d_rad_m": -0.003280137845023401,
+   "dz_m": 0.0005996588735230138,
+   "aim_err_m": 0.003923742981898185,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0406
+   ],
+   "e_model_xy_m": 0.11774213733934508,
+   "e_model_m": 0.11774213733983924,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.76231208616314,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.03610729973564797,
+   "pre_tilt_mean_deg": 0.03595444072125901,
+   "thr_peak": 0.6704999953508377,
+   "steady_s": 19.631,
+   "steady_tilt_mean_deg": 5.047042914901171,
+   "steady_tilt_max_deg": 5.58980689902716,
+   "steady_err_m": 0.023840927591646344,
+   "steady_err_xy_m": 0.012485423973695628,
+   "steady_err_z_m": 0.017629940196832766,
+   "steady_tension_n": null,
+   "path_err_m": 0.023560107868991913,
+   "path_tilt_peak_deg": 6.729723965990308,
+   "lag_s": 0.10037358948256828
+  },
+  {
+   "run": "R4086",
+   "config": "x11_u_meas_t12",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 12,
+   "dt": 0.12,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.1156546583584077,
+    0.193
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.29",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.306,
+   "t_weld": 63.696,
+   "t_land": 136.531,
+   "t_fold": 63.853,
+   "t_path": 101.03,
+   "separation_min_m": 0.35738437248418936,
+   "rho_true": [
+    0.11278716517441287,
+    0.19716496311284523,
+    0.04037297655557656
+   ],
+   "d_true_m": 0.11617114059261688,
+   "d_tan_m": 0.11560153901685671,
+   "d_rad_m": 0.0021452559649219605,
+   "dz_m": 0.000372976555576561,
+   "aim_err_m": 0.0050566228741738516,
+   "rho_model": [
+    0.1158,
+    0.1942,
+    0.0404
+   ],
+   "e_model_xy_m": 0.004227076997974305,
+   "e_model_m": 0.004227163376704522,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.7908329114656518,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.015899358752943238,
+   "pre_tilt_mean_deg": 0.07512721692812176,
+   "thr_peak": 0.5599999986588955,
+   "steady_s": 21.834000000000003,
+   "steady_tilt_mean_deg": 1.1959056490848832,
+   "steady_tilt_max_deg": 1.31597606006914,
+   "steady_err_m": 0.0014372911292527568,
+   "steady_err_xy_m": 0.0009367691068924077,
+   "steady_err_z_m": -0.0009330599815008882,
+   "steady_tension_n": null,
+   "path_err_m": 0.010299003426760558,
+   "path_tilt_peak_deg": 2.41281984376581,
+   "lag_s": 0.09814837587600098
+  },
+  {
+   "run": "R4087",
+   "config": "x11_u_meas_t12",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 12,
+   "dt": 0.12,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.1156546583584077,
+    0.193
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.29",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.23,
+   "t_weld": 63.799,
+   "t_land": 136.362,
+   "t_fold": 63.936,
+   "t_path": 100.865,
+   "separation_min_m": 0.35764438030500256,
+   "rho_true": [
+    0.11772201981680229,
+    0.18325065072524394,
+    0.040407316580269505
+   ],
+   "d_true_m": 0.12490589303396844,
+   "d_tan_m": 0.12674127476887032,
+   "d_rad_m": -0.007194410216420449,
+   "dz_m": 0.0004073165802695039,
+   "aim_err_m": 0.009966132383268954,
+   "rho_model": [
+    0.1155,
+    0.194,
+    0.0403
+   ],
+   "e_model_xy_m": 0.010976606119241089,
+   "e_model_m": 0.010977130715508569,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.957104031244912,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.020519300643911054,
+   "pre_tilt_mean_deg": 0.07801974312144991,
+   "thr_peak": 0.6844999939203262,
+   "steady_s": 21.56599999999999,
+   "steady_tilt_mean_deg": 2.0297818253829485,
+   "steady_tilt_max_deg": 2.19598482188739,
+   "steady_err_m": 0.002327240827620939,
+   "steady_err_xy_m": 0.0011999586406486495,
+   "steady_err_z_m": 0.0019030860241521495,
+   "steady_tension_n": null,
+   "path_err_m": 0.013371738267317662,
+   "path_tilt_peak_deg": 3.2028965903894946,
+   "lag_s": 0.1054292906532576
+  },
+  {
+   "run": "R4088",
+   "config": "x11_u_slot_t12",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 12,
+   "dt": 0.12,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.1156546583584077,
+    0.193
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.216,
+   "t_weld": 64.321,
+   "t_land": 136.456,
+   "t_fold": 64.499,
+   "t_path": 100.958,
+   "separation_min_m": 0.5595424606269793,
+   "rho_true": [
+    0.1185733136702849,
+    0.1741075568924634,
+    0.03989043136272676
+   ],
+   "d_true_m": 0.12903360601101413,
+   "d_tan_m": 0.1325291732507329,
+   "d_rad_m": -0.014350831756177712,
+   "dz_m": -0.00010956863727323851,
+   "aim_err_m": 0.0191165623322044,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0397
+   ],
+   "e_model_xy_m": 0.12903360601101413,
+   "e_model_m": 0.12903374653287228,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 5.076649421576794,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.051391620866115595,
+   "pre_tilt_mean_deg": 0.05279568817384732,
+   "thr_peak": 0.6815000027418137,
+   "steady_s": 21.137,
+   "steady_tilt_mean_deg": 6.354778619049395,
+   "steady_tilt_max_deg": 6.62098729347367,
+   "steady_err_m": 0.03281449335531145,
+   "steady_err_xy_m": 0.016263236293030996,
+   "steady_err_z_m": 0.027362992194194725,
+   "steady_tension_n": null,
+   "path_err_m": 0.03286837983991084,
+   "path_tilt_peak_deg": 7.833028348747123,
+   "lag_s": 0.09648957493417604
+  },
+  {
+   "run": "R4089",
+   "config": "x11_u_slot_t12",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 12,
+   "dt": 0.12,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.1156546583584077,
+    0.193
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.314,
+   "t_weld": 67.705,
+   "t_land": 136.542,
+   "t_fold": 67.85,
+   "t_path": 101.038,
+   "separation_min_m": 0.559800739164399,
+   "rho_true": [
+    0.11494736491781474,
+    0.19435728584314504,
+    0.039916532627087054
+   ],
+   "d_true_m": 0.11896164353457793,
+   "d_tan_m": 0.11874683223211073,
+   "d_rad_m": 0.0008044535917377527,
+   "dz_m": -8.346737291294731e-05,
+   "aim_err_m": 0.001530519150846461,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0399
+   ],
+   "e_model_xy_m": 0.11896164353457793,
+   "e_model_m": 0.11896164468338416,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 3.4067590678848,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.03420689465505289,
+   "pre_tilt_mean_deg": 0.06108593462716702,
+   "thr_peak": 0.6650000065565109,
+   "steady_s": 17.833,
+   "steady_tilt_mean_deg": 4.641122603857581,
+   "steady_tilt_max_deg": 5.359082701172612,
+   "steady_err_m": 0.022989602090033742,
+   "steady_err_xy_m": 0.01367686319097219,
+   "steady_err_z_m": 0.015385643142306428,
+   "steady_tension_n": null,
+   "path_err_m": 0.022430752917032275,
+   "path_tilt_peak_deg": 6.436359836237711,
+   "lag_s": 0.10778669462704897
+  },
+  {
+   "run": "R4090",
+   "config": "x11_u_meas_t16",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 16,
+   "dt": 0.16,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.14954482378533754,
+    0.1681111111111111
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=144.04",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [
+    "newcomer 0.22 m from a carrier (< 0.30)"
+   ],
+   "notes": [],
+   "t_magnet": 30.285,
+   "t_weld": 62.351,
+   "t_land": 136.419,
+   "t_fold": 62.482,
+   "t_path": 100.916,
+   "separation_min_m": 0.22056118043778222,
+   "rho_true": [
+    0.15210086889823937,
+    0.14752298505034644,
+    0.03969581677731055
+   ],
+   "d_true_m": 0.17069669640947432,
+   "d_tan_m": 0.17537828442500933,
+   "d_rad_m": -0.013109213419355725,
+   "dz_m": -0.00030418322268944975,
+   "aim_err_m": 0.020746187633228573,
+   "rho_model": [
+    0.1499,
+    0.168,
+    0.0395
+   ],
+   "e_model_xy_m": 0.020594949991577377,
+   "e_model_m": 0.020595880883464278,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 2.164840141964567,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.015032292908178313,
+   "pre_tilt_mean_deg": 0.08011848704902448,
+   "thr_peak": 0.6835000067949295,
+   "steady_s": 23.064999999999998,
+   "steady_tilt_mean_deg": 2.530001600064599,
+   "steady_tilt_max_deg": 3.1086018329719862,
+   "steady_err_m": 0.004555701634960858,
+   "steady_err_xy_m": 0.0019736277220968163,
+   "steady_err_z_m": 0.004011451722503359,
+   "steady_tension_n": null,
+   "path_err_m": 0.014174827449574512,
+   "path_tilt_peak_deg": 4.171495744725243,
+   "lag_s": 0.10396976990378724
+  },
+  {
+   "run": "R4091",
+   "config": "x11_u_meas_t16",
+   "arm": "measured",
+   "direction": "t",
+   "d_cm": 16,
+   "dt": 0.16,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.14954482378533754,
+    0.1681111111111111
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.79",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [
+    "newcomer 0.22 m from a carrier (< 0.30)"
+   ],
+   "notes": [],
+   "t_magnet": 30.265,
+   "t_weld": 67.361,
+   "t_land": 136.492,
+   "t_fold": 67.507,
+   "t_path": 100.992,
+   "separation_min_m": 0.22481896232064638,
+   "rho_true": [
+    0.14907251573048705,
+    0.17656355343786667,
+    0.04000812998139171
+   ],
+   "d_true_m": 0.15674407262088957,
+   "d_tan_m": 0.15455239527907508,
+   "d_rad_m": 0.006078565316696372,
+   "dz_m": 8.129981391706564e-06,
+   "aim_err_m": 0.00846562792625602,
+   "rho_model": [
+    0.1496,
+    0.1675,
+    0.04
+   ],
+   "e_model_xy_m": 0.009078889831672604,
+   "e_model_m": 0.00907889347179741,
+   "logged_point": "measured",
+   "fold_tilt_peak_deg": 1.4685159812017945,
+   "fold_settle_s": 0.0,
+   "fold_settle_censored": false,
+   "carrier_dip_m": 0.011588444557653954,
+   "pre_tilt_mean_deg": 0.06778378022062433,
+   "thr_peak": 0.5344999991357327,
+   "steady_s": 18.131,
+   "steady_tilt_mean_deg": 0.6295376239542333,
+   "steady_tilt_max_deg": 0.8094234836149505,
+   "steady_err_m": 0.002779430778622123,
+   "steady_err_xy_m": 0.0017260546875091719,
+   "steady_err_z_m": -0.00213552358611883,
+   "steady_tension_n": null,
+   "path_err_m": 0.012016613737800372,
+   "path_tilt_peak_deg": 1.8523795473572564,
+   "lag_s": 0.10216892377415898
+  },
+  {
+   "run": "R4092",
+   "config": "x11_u_slot_t16",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 16,
+   "dt": 0.16,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.14954482378533754,
+    0.1681111111111111
+   ],
+   "failures": [],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.288,
+   "t_weld": 62.351,
+   "t_land": 136.519,
+   "t_fold": 62.521,
+   "t_path": 101.021,
+   "separation_min_m": 0.5366710172756995,
+   "rho_true": [
+    0.15173975744943322,
+    0.14804209234495974,
+    0.040032118126983054
+   ],
+   "d_true_m": 0.17013957076898523,
+   "d_tan_m": 0.1747681359695822,
+   "d_rad_m": -0.013006096557739655,
+   "dz_m": 3.211812698305366e-05,
+   "aim_err_m": 0.020188691092438753,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0398
+   ],
+   "e_model_xy_m": 0.17013957076898523,
+   "e_model_m": 0.17013972910604802,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 6.792095180293384,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.06883242691746738,
+   "pre_tilt_mean_deg": 0.0661873743631973,
+   "thr_peak": 0.6729999929666519,
+   "steady_s": 23.17,
+   "steady_tilt_mean_deg": 8.309579367688151,
+   "steady_tilt_max_deg": 8.557637282117003,
+   "steady_err_m": 0.051751291054630354,
+   "steady_err_xy_m": 0.031070082216905253,
+   "steady_err_z_m": 0.04066637730339375,
+   "steady_tension_n": null,
+   "path_err_m": 0.04862142968203762,
+   "path_tilt_peak_deg": 9.734637299618235,
+   "lag_s": 0.10065812367709294
+  },
+  {
+   "run": "R4093",
+   "config": "x11_u_slot_t16",
+   "arm": "slot",
+   "direction": "t",
+   "d_cm": 16,
+   "dt": 0.16,
+   "dr": 0.0,
+   "slot": [
+    0.0,
+    0.225
+   ],
+   "aim": [
+    0.14954482378533754,
+    0.1681111111111111
+   ],
+   "failures": [
+    "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.97",
+    "not LANDED"
+   ],
+   "void": [],
+   "crowded": [],
+   "notes": [],
+   "t_magnet": 30.226,
+   "t_weld": 62.974,
+   "t_land": 136.367,
+   "t_fold": 63.116,
+   "t_path": 100.866,
+   "separation_min_m": 0.5369691129607055,
+   "rho_true": [
+    0.14746323616567303,
+    0.17730679948442682,
+    0.04064495851078094
+   ],
+   "d_true_m": 0.1549840230342203,
+   "d_tan_m": 0.15298526029513654,
+   "d_rad_m": 0.005614629119368303,
+   "dz_m": 0.0006449585107809394,
+   "aim_err_m": 0.009428345118708503,
+   "rho_model": [
+    0.0,
+    0.225,
+    0.0407
+   ],
+   "e_model_xy_m": 0.1549840230342203,
+   "e_model_m": 0.1549840328080195,
+   "logged_point": "slot",
+   "fold_tilt_peak_deg": 4.447447981387696,
+   "fold_settle_s": null,
+   "fold_settle_censored": true,
+   "carrier_dip_m": 0.04457043788831161,
+   "pre_tilt_mean_deg": 0.07783645695644609,
+   "thr_peak": 0.6659999936819077,
+   "steady_s": 22.39200000000001,
+   "steady_tilt_mean_deg": 6.140211686407955,
+   "steady_tilt_max_deg": 6.601839108663906,
+   "steady_err_m": 0.030204217456594774,
+   "steady_err_xy_m": 0.012142398144499609,
+   "steady_err_z_m": 0.025232755674550307,
+   "steady_tension_n": null,
+   "path_err_m": 0.03039753479710191,
+   "path_tilt_peak_deg": 7.731401614136216,
+   "lag_s": 0.10675801632830337
+  }
+ ],
+ "table": {
+  "cells": {
+   "measured": {
+    "d0": {
+     "0": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4034",
+       "R4035"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.00856642070112412,
+       "values": [
+        0.01113329797939588,
+        0.005999543422852361
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.000374377741039213,
+       "values": [
+        -0.0007988428950405186,
+        5.00874129620926e-05
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.00255334545554306,
+       "values": [
+        -0.011106019676978718,
+        0.0059993287658925976
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.00856642070112412,
+       "values": [
+        0.01113329797939588,
+        0.005999543422852361
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.007665366940294415,
+       "values": [
+        0.009929287942924525,
+        0.005401445937664305
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.790391876800723,
+       "values": [
+        2.016578699745198,
+        1.5642050538562478
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.017964052458517066,
+       "values": [
+        0.020607591005058046,
+        0.015320513911976086
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.433618649290845,
+       "values": [
+        2.0938209151917184,
+        0.7734163833899714
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0025036564975015247,
+       "values": [
+        0.002774325999246797,
+        0.0022329869957562524
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.012050161230295939,
+       "values": [
+        0.013335795230783428,
+        0.01076452722980845
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.5744593497224377,
+       "values": [
+        3.1802103943697304,
+        1.9687083050751448
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09953798970157637,
+       "values": [
+        0.10322384752948531,
+        0.09585213187366744
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6480344316262829,
+       "values": [
+        0.6474801323479044,
+        0.6485887309046614
+       ]
+      }
+     }
+    },
+    "ri": {
+     "2": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4038",
+       "R4039"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.007924314563097664,
+       "values": [
+        0.011346222818082279,
+        0.00450240630811305
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.0011690289416114547,
+       "values": [
+        -0.001030602823319297,
+        -0.0013074550599036124
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.0078069354091287735,
+       "values": [
+        -0.011301680456087898,
+        -0.004312190362169649
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.012243708168848549,
+       "values": [
+        0.008750993296393108,
+        0.015736423041303987
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.012127262452090937,
+       "values": [
+        0.009912991659619938,
+        0.014341533244561937
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.9242229252886616,
+       "values": [
+        1.9694929206100895,
+        1.8789529299672336
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.013642448913629868,
+       "values": [
+        0.013573956639646445,
+        0.01371094118761329
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.5023905957284969,
+       "values": [
+        0.4251853717478974,
+        0.5795958197090965
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.003309147686131572,
+       "values": [
+        0.003288338435849226,
+        0.0033299569364139176
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.010329929384238072,
+       "values": [
+        0.010145479942277888,
+        0.010514378826198255
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.0937556697326665,
+       "values": [
+        2.100509987085603,
+        2.08700135237973
+       ]
+      },
+      "lag_s": {
+       "mean": 0.0993549547462986,
+       "values": [
+        0.09924388578799721,
+        0.09946602370459998
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6471789162502986,
+       "values": [
+        0.6467865255029086,
+        0.6475713069976886
+       ]
+      }
+     },
+     "4": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4042",
+       "R4043"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.054758294716433384,
+       "values": [
+        0.0529964524373072,
+        0.05652013699555958
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.0009883027442372273,
+       "values": [
+        -0.0031985327250614536,
+        0.0012219272365869992
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.05471641361753721,
+       "values": [
+        -0.052922582293464415,
+        -0.05651024494161
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.014853604383160371,
+       "values": [
+        0.01316914609664702,
+        0.016538062669673722
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.015150636710520148,
+       "values": [
+        0.013169146096647018,
+        0.01713212732439328
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.1396604022257275,
+       "values": [
+        1.9919545917999284,
+        2.287366212651527
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.02130281530098499,
+       "values": [
+        0.020416878404763583,
+        0.022188752197206396
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 2.40546504655713,
+       "values": [
+        2.0954250661431923,
+        2.715505026971068
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.004544878980535559,
+       "values": [
+        0.0036847218126933316,
+        0.005405036148377786
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.016429414859905782,
+       "values": [
+        0.01491973431643386,
+        0.0179390954033777
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 3.9040144890997537,
+       "values": [
+        3.3884864270582464,
+        4.4195425511412605
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09833188683423316,
+       "values": [
+        0.09481657396763364,
+        0.1018471997008327
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6471323030988455,
+       "values": [
+        0.6472465170902886,
+        0.6470180891074024
+       ]
+      }
+     },
+     "6": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4046",
+       "R4047"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.07616802081445835,
+       "values": [
+        0.06819184874612877,
+        0.08414419288278793
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.0025330200069581714,
+       "values": [
+        0.001127296862132868,
+        0.003938743151783475
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.07613589671844888,
+       "values": [
+        -0.06818535434783676,
+        -0.084086439089061
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.016229413362225727,
+       "values": [
+        0.008224933449043874,
+        0.024233893275407578
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.015081287695507492,
+       "values": [
+        0.007011824834495514,
+        0.02315075055651947
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.216687384250971,
+       "values": [
+        1.9036444412742977,
+        2.5297303272276443
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.02109104420594632,
+       "values": [
+        0.014278235583839116,
+        0.02790385282805352
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 2.419603852135162,
+       "values": [
+        1.3453706186198167,
+        3.4938370856505068
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.00530627678190658,
+       "values": [
+        0.0015755482440787424,
+        0.009037005319734417
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.013804874547648302,
+       "values": [
+        0.012343318027066268,
+        0.015266431068230335
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 4.290154178132205,
+       "values": [
+        2.541926856057759,
+        6.038381500206652
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10135589163987924,
+       "values": [
+        0.10043930446523337,
+        0.10227247881452509
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6461083625827795,
+       "values": [
+        0.6456877300057325,
+        0.6465289951598264
+       ]
+      }
+     },
+     "8": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4050",
+       "R4051"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.07689420966133981,
+       "values": [
+        0.09012850224493678,
+        0.06365991707774285
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.00015251211492934018,
+       "values": [
+        0.0009949527447537198,
+        -0.0012999769746124001
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.07688780410723423,
+       "values": [
+        -0.09012521017575134,
+        -0.06365039803871711
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.013258772744106603,
+       "values": [
+        0.010144077059727055,
+        0.01637346842848615
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.012660591182598765,
+       "values": [
+        0.009227032618260446,
+        0.016094149746937084
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.6380296016496454,
+       "values": [
+        1.8466136542629503,
+        1.4294455490363405
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.011810295303209872,
+       "values": [
+        0.01429172927466471,
+        0.009328861331755034
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.8541439600379417,
+       "values": [
+        1.35324451183756,
+        0.3550434082383235
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0027969357700942574,
+       "values": [
+        0.0020857570424444973,
+        0.0035081144977440176
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.012042252997903648,
+       "values": [
+        0.013042561132584892,
+        0.011041944863222406
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.2038256373754708,
+       "values": [
+        2.65815731708824,
+        1.749493957662701
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10761640324159831,
+       "values": [
+        0.10436320830265915,
+        0.11086959818053747
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.643444927660916,
+       "values": [
+        0.6425528239210161,
+        0.644337031400816
+       ]
+      }
+     },
+     "12": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4054",
+       "R4055"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.11859340679475466,
+       "values": [
+        0.13791826407930866,
+        0.09926854951020066
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.00315254159357526,
+       "values": [
+        -1.9228974338158108e-05,
+        0.006324312161488679
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.11853703598511159,
+       "values": [
+        -0.13791826356050263,
+        -0.09915580840972055
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.019505695271372803,
+       "values": [
+        0.017918265424038012,
+        0.021093125118707593
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.01861271626357777,
+       "values": [
+        0.01671955081254722,
+        0.020505881714608317
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.2913766260510555,
+       "values": [
+        1.5280447693225758,
+        1.0547084827795354
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.010392296778302446,
+       "values": [
+        0.015277805210708317,
+        0.005506788345896574
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.9822271089000978,
+       "values": [
+        1.650725392895964,
+        0.31372882490423154
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0034827164841228844,
+       "values": [
+        0.0037059874686097907,
+        0.003259445499635978
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.012288403816224352,
+       "values": [
+        0.013779762435809082,
+        0.010797045196639621
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.347376229665656,
+       "values": [
+        3.146908098305732,
+        1.5478443610255797
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10382743878722903,
+       "values": [
+        0.09757780491669535,
+        0.1100770726577627
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6360215174806146,
+       "values": [
+        0.6352609912709806,
+        0.6367820436902487
+       ]
+      }
+     },
+     "16": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4058",
+       "R4059"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.16040688541481463,
+       "values": [
+        0.14154217294159355,
+        0.17927159788803568
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.002015704563182848,
+       "values": [
+        -0.0017137735912416674,
+        -0.0023176355351240286
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.16040343862872258,
+       "values": [
+        -0.141538324352683,
+        -0.17926855290476218
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.018873466485135534,
+       "values": [
+        0.01847019763644368,
+        0.019276735333827393
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.019216796008627537,
+       "values": [
+        0.019260696898213355,
+        0.01917289511904172
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.247616443781105,
+       "values": [
+        0.9374100685543676,
+        1.5578228190078425
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.008658724528829875,
+       "values": [
+        0.005047284570885546,
+        0.012270164486774204
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.7359971278447396,
+       "values": [
+        0.21189601645082007,
+        1.260098239238659
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0032642116818710322,
+       "values": [
+        0.003571841229977737,
+        0.002956582133764328
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.01407204001947198,
+       "values": [
+        0.01069059169800979,
+        0.017453488340934173
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 1.9115456266179611,
+       "values": [
+        1.2512068642458556,
+        2.5718843889900667
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10721613906207517,
+       "values": [
+        0.10361715429561101,
+        0.11081512382853934
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6584612326771495,
+       "values": [
+        0.6584234961189434,
+        0.6584989692353556
+       ]
+      }
+     },
+     "20": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4062",
+       "R4063"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.19853760752208333,
+       "values": [
+        0.17698462123735864,
+        0.22009059380680798
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.04598808853553772,
+       "values": [
+        -0.0013470225566407973,
+        -0.09062915451443465
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.1983148331056181,
+       "values": [
+        -0.17698352729789985,
+        -0.21964613891333637
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.021604329931210357,
+       "values": [
+        0.023017407327072987,
+        0.020191252535347724
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.020934274756966544,
+       "values": [
+        0.022920796287969523,
+        0.018947753225963565
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 0.7670838266450772,
+       "values": [
+        0.9413517584996428,
+        0.5928158947905118
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.006472895997801653,
+       "values": [
+        0.003973276316038055,
+        0.008972515679565252
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.5082073935117791,
+       "values": [
+        0.40587968519147105,
+        0.6105351018320873
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0016539287586859594,
+       "values": [
+        0.0023511104292413747,
+        0.0009567470881305441
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.01289640619478929,
+       "values": [
+        0.012814118440290283,
+        0.012978693949288297
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 1.6901835434017662,
+       "values": [
+        1.7259988799235404,
+        1.654368206879992
+       ]
+      },
+      "lag_s": {
+       "mean": 0.1037962772446387,
+       "values": [
+        0.10699387517380214,
+        0.10059867931547527
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.7023636642313088,
+       "values": [
+        0.7028482306847567,
+        0.701879097777861
+       ]
+      }
+     }
+    },
+    "t": {
+     "2": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4066",
+       "R4067"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.026086649115996854,
+       "values": [
+        0.022183460272844856,
+        0.029989837959148856
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.018388705310639804,
+       "values": [
+        0.018856091699079574,
+        0.01792131892220003
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.017132596355563662,
+       "values": [
+        0.010922185186766714,
+        0.02334300752436061
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.017215026103635445,
+       "values": [
+        0.010984932192589607,
+        0.023445120014681284
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.016426302750303476,
+       "values": [
+        0.009694938686263825,
+        0.023157666814343128
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.671168905597993,
+       "values": [
+        1.696210804082857,
+        1.646127007113129
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.016413302420806075,
+       "values": [
+        0.017332296853070694,
+        0.015494307988541456
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.6724343348859887,
+       "values": [
+        0.504192504479655,
+        0.8406761652923224
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0031049292874177565,
+       "values": [
+        0.0031728345902426154,
+        0.0030370239845928975
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.010563341875782867,
+       "values": [
+        0.010676489421134555,
+        0.01045019433043118
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.025063218542902,
+       "values": [
+        1.9437274341526096,
+        2.1063990029331943
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09814712330807904,
+       "values": [
+        0.09705037015129223,
+        0.09924387646486586
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6119228416598103,
+       "values": [
+        0.6127579057998743,
+        0.6110877775197462
+       ]
+      }
+     },
+     "4": {
+      "n": 2,
+      "n_ok": 1,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4070",
+       "R4071"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.57"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.04298551490584759,
+       "values": [
+        0.04278137889743952,
+        0.04318965091425565
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.03912624918267163,
+       "values": [
+        0.04095732851676111,
+        0.03729516984858215
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.0011358368714759898,
+       "values": [
+        -0.016636695327934242,
+        0.018908369070886222
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.017890434547244566,
+       "values": [
+        0.016662390780934594,
+        0.019118478313554538
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.017933658278525538,
+       "values": [
+        0.01670056649687982,
+        0.019166750060171257
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.105295315925,
+       "values": [
+        2.687586697980442,
+        1.523003933869558
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.021637446875136024,
+       "values": [
+        0.025643146508485648,
+        0.0176317472417864
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.8890208145550438,
+       "values": [
+        2.9892493449535276,
+        0.7887922841565601
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.004391087400551254,
+       "values": [
+        0.00537716632557583,
+        0.003405008475526677
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.014444492293287143,
+       "values": [
+        0.01778401152321594,
+        0.011104973063358343
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 3.6110939741236363,
+       "values": [
+        4.919131133241236,
+        2.303056815006037
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10561753370118632,
+       "values": [
+        0.10454093831284178,
+        0.10669412908953085
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5707185038381253,
+       "values": [
+        0.5713308380453858,
+        0.5701061696308649
+       ]
+      }
+     },
+     "6": {
+      "n": 2,
+      "n_ok": 1,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4074",
+       "R4075"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.62"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.0642183362209238,
+       "values": [
+        0.06549340193055346,
+        0.06294327051129411
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.06463022456977738,
+       "values": [
+        0.06576153147033237,
+        0.06349891766922239
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.014648912726818633,
+       "values": [
+        -0.01717074107338523,
+        -0.012127084380252035
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.015331397145956008,
+       "values": [
+        0.018058395896796454,
+        0.01260439839511556
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.015038830566291406,
+       "values": [
+        0.018868564434142893,
+        0.011209096698439919
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.432929187120223,
+       "values": [
+        2.802225054328945,
+        2.063633319911501
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.023264971890285424,
+       "values": [
+        0.025965618902599408,
+        0.02056432487797144
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 2.7544056508522,
+       "values": [
+        3.2973370018014534,
+        2.211474299902946
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.005085519817056969,
+       "values": [
+        0.007023571448540804,
+        0.003147468185573134
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.01586249279262153,
+       "values": [
+        0.016725715219959726,
+        0.014999270365283332
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 4.417646907408967,
+       "values": [
+        5.407055349369798,
+        3.428238465448137
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10058886995080679,
+       "values": [
+        0.09640968959830798,
+        0.10476805030330559
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5223861700935095,
+       "values": [
+        0.5241037445123842,
+        0.5206685956746349
+       ]
+      }
+     },
+     "8": {
+      "n": 2,
+      "n_ok": 1,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4078",
+       "R4079"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.51"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.08337559649299867,
+       "values": [
+        0.07601562527540863,
+        0.09073556771058872
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.08205351178468746,
+       "values": [
+        0.07140451093848593,
+        0.092702512630889
+       ]
+      },
+      "d_rad_m": {
+       "mean": -1.3404205207165343e-05,
+       "values": [
+        0.01709766411207367,
+        -0.017124472522488
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.020254159359770464,
+       "values": [
+        0.01934256202972497,
+        0.02116575668981596
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.019713508380322868,
+       "values": [
+        0.01975802155031971,
+        0.01966899521032603
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.1409655037852433,
+       "values": [
+        1.6780473908107345,
+        2.6038836167597523
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.019014675371877288,
+       "values": [
+        0.01270407603424717,
+        0.025325274709507406
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.9759266190561404,
+       "values": [
+        0.7563938736348343,
+        3.1954593644774465
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.005036034038119923,
+       "values": [
+        0.0034972092884185723,
+        0.006574858787821274
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.012771880040344706,
+       "values": [
+        0.010138233772940108,
+        0.015405526307749304
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 3.59084901405834,
+       "values": [
+        2.1981949295174323,
+        4.983503098599247
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09947366893442426,
+       "values": [
+        0.09662261258606471,
+        0.10232472528278382
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.4703445899049441,
+       "values": [
+        0.47347972670340166,
+        0.4672094531064865
+       ]
+      }
+     },
+     "11.6": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4082",
+       "R4083"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.65",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.72"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.11362781575730267,
+       "values": [
+        0.11827784674477138,
+        0.10897778476983397
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.11169331669960361,
+       "values": [
+        0.11876829336515976,
+        0.10461834003404745
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.006393597860966008,
+       "values": [
+        -0.0019127704493406283,
+        0.014699966171272644
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.011209610612325206,
+       "values": [
+        0.0030462982365686083,
+        0.019372922988081805
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.010337762978004428,
+       "values": [
+        0.0018567078499305586,
+        0.018818818106078296
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.676528869732282,
+       "values": [
+        1.82610410178324,
+        1.526953637681324
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.011518082468374158,
+       "values": [
+        0.012621970176883934,
+        0.010414194759864381
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.8810189604373255,
+       "values": [
+        1.1340456536467265,
+        0.6279922672279244
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.002353452278954486,
+       "values": [
+        0.0008497128136160675,
+        0.0038571917442929045
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.010651389835968035,
+       "values": [
+        0.011386028975090667,
+        0.009916750696845405
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.18696781598622,
+       "values": [
+        2.29391530085614,
+        2.0800203311163004
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09554402874096812,
+       "values": [
+        0.09945151363815596,
+        0.0916365438437803
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.3689771408417518,
+       "values": [
+        0.36620933665731964,
+        0.37174494502618394
+       ]
+      }
+     },
+     "12": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4086",
+       "R4087"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.29"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.12053851681329267,
+       "values": [
+        0.11617114059261688,
+        0.12490589303396844
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.12117140689286351,
+       "values": [
+        0.11560153901685671,
+        0.12674127476887032
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.0025245771257492444,
+       "values": [
+        0.0021452559649219605,
+        -0.007194410216420449
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.007511377628721403,
+       "values": [
+        0.0050566228741738516,
+        0.009966132383268954
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.007601841558607697,
+       "values": [
+        0.004227076997974305,
+        0.010976606119241089
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.873968471355282,
+       "values": [
+        1.7908329114656518,
+        1.957104031244912
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.018209329698427146,
+       "values": [
+        0.015899358752943238,
+        0.020519300643911054
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.612843737233916,
+       "values": [
+        1.1959056490848832,
+        2.0297818253829485
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.001882265978436848,
+       "values": [
+        0.0014372911292527568,
+        0.002327240827620939
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.01183537084703911,
+       "values": [
+        0.010299003426760558,
+        0.013371738267317662
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.8078582170776523,
+       "values": [
+        2.41281984376581,
+        3.2028965903894946
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10178883326462929,
+       "values": [
+        0.09814837587600098,
+        0.1054292906532576
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.35751437639459593,
+       "values": [
+        0.35738437248418936,
+        0.35764438030500256
+       ]
+      }
+     },
+     "16": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 0,
+      "void": 0,
+      "runs": [
+       "R4090",
+       "R4091"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.79",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=144.04"
+      ],
+      "crowded": [
+       "newcomer 0.22 m from a carrier (< 0.30)"
+      ],
+      "d_true_m": {
+       "mean": 0.16372038451518195,
+       "values": [
+        0.17069669640947432,
+        0.15674407262088957
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.1649653398520422,
+       "values": [
+        0.17537828442500933,
+        0.15455239527907508
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.003515324051329677,
+       "values": [
+        -0.013109213419355725,
+        0.006078565316696372
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.014605907779742296,
+       "values": [
+        0.020746187633228573,
+        0.00846562792625602
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.014836919911624991,
+       "values": [
+        0.020594949991577377,
+        0.009078889831672604
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.8166780615831808,
+       "values": [
+        2.164840141964567,
+        1.4685159812017945
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.013310368732916134,
+       "values": [
+        0.015032292908178313,
+        0.011588444557653954
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.579769612009416,
+       "values": [
+        2.530001600064599,
+        0.6295376239542333
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0036675662067914908,
+       "values": [
+        0.004555701634960858,
+        0.002779430778622123
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.013095720593687441,
+       "values": [
+        0.014174827449574512,
+        0.012016613737800372
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 3.01193764604125,
+       "values": [
+        4.171495744725243,
+        1.8523795473572564
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10306934683897312,
+       "values": [
+        0.10396976990378724,
+        0.10216892377415898
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.22269007137921432,
+       "values": [
+        0.22056118043778222,
+        0.22481896232064638
+       ]
+      }
+     }
+    }
+   },
+   "slot": {
+    "d0": {
+     "0": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4036",
+       "R4037"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.017411878622090267,
+       "values": [
+        0.022892632415411698,
+        0.01193112482876884
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.001949299520243068,
+       "values": [
+        0.0006764777002143914,
+        0.003222121340271745
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.017197276045224794,
+       "values": [
+        -0.022883652228986195,
+        -0.011510899861463392
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.017411878622090267,
+       "values": [
+        0.022892632415411698,
+        0.011931124828768836
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.017411878622090267,
+       "values": [
+        0.022892632415411698,
+        0.01193112482876884
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.6780664420685634,
+       "values": [
+        3.268586256086309,
+        2.0875466280508173
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.026499119027258877,
+       "values": [
+        0.031470399643418245,
+        0.02152783841109951
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 3.2447995707348274,
+       "values": [
+        4.196642573478736,
+        2.2929565679909185
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.007009445597206256,
+       "values": [
+        0.010632528283500378,
+        0.003386362910912134
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.017348933837869215,
+       "values": [
+        0.021265161442072952,
+        0.013432706233665478
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 5.008157092428857,
+       "values": [
+        6.403531552339763,
+        3.612782632517951
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09532816569503005,
+       "values": [
+        0.09453980615198392,
+        0.09611652523807619
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6480489118270207,
+       "values": [
+        0.6486093674804333,
+        0.6474884561736082
+       ]
+      }
+     }
+    },
+    "ri": {
+     "2": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4040",
+       "R4041"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.031805079660690766,
+       "values": [
+        0.025961892728114326,
+        0.03764826659326721
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.0008144452753662337,
+       "values": [
+        0.0015976245494451935,
+        3.126600128727401e-05
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.03178330888603448,
+       "values": [
+        -0.025918361989281963,
+        -0.037648255782786993
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.011868996729233826,
+       "values": [
+        0.006089716664076781,
+        0.01764827679439087
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.031805079660690766,
+       "values": [
+        0.025961892728114326,
+        0.03764826659326721
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.7242180317745346,
+       "values": [
+        3.525078515382148,
+        1.9233575481669216
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.026302358012384452,
+       "values": [
+        0.03533586358708907,
+        0.017268852437679838
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 2.7282395022513333,
+       "values": [
+        4.830335514620736,
+        0.6261434898819307
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.05446193085124105,
+       "values": [
+        0.013955915686430653,
+        0.09496794601605145
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.04868998988126049,
+       "values": [
+        0.02398820926292725,
+        0.07339177049959374
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 4.451001667618766,
+       "values": [
+        7.240893179907958,
+        1.661110155329575
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09415808586630059,
+       "values": [
+        0.09598962998469734,
+        0.09232654174790382
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6487032234381793,
+       "values": [
+        0.6483763570665699,
+        0.6490300898097886
+       ]
+      }
+     },
+     "4": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4044",
+       "R4045"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.02638346065162437,
+       "values": [
+        0.02945834565847589,
+        0.02330857564477285
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.0008585352379658583,
+       "values": [
+        -0.00031283051845376456,
+        -0.001404239957477952
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.026363760982499027,
+       "values": [
+        -0.02945690204644047,
+        -0.023270619918557583
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.013659591774288394,
+       "values": [
+        0.010546413849445675,
+        0.016772769699131114
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.02638346065162437,
+       "values": [
+        0.02945834565847589,
+        0.02330857564477285
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 3.6128429169854734,
+       "values": [
+        3.920846617492854,
+        3.304839216478093
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.03596318076986338,
+       "values": [
+        0.04029379550190004,
+        0.031632566037826715
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 4.83999355599016,
+       "values": [
+        5.468334385768155,
+        4.211652726212165
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.01453087841444043,
+       "values": [
+        0.018092077456728785,
+        0.010969679372152076
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.024289074610945385,
+       "values": [
+        0.026825591900906158,
+        0.021752557320984616
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 7.054122787353641,
+       "values": [
+        7.576088163790755,
+        6.532157410916528
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09508269474296735,
+       "values": [
+        0.09298169351593345,
+        0.09718369597000125
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6480112002948362,
+       "values": [
+        0.6483275997999994,
+        0.6476948007896728
+       ]
+      }
+     },
+     "6": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4048",
+       "R4049"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.07519513101122352,
+       "values": [
+        0.07632086138922499,
+        0.07406940063322207
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.0003517473123828516,
+       "values": [
+        0.001090258133533539,
+        -0.0003867635087678358
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.07519221925422778,
+       "values": [
+        -0.07631571523729816,
+        -0.0740687232711574
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.015202348218180547,
+       "values": [
+        0.016333358210956064,
+        0.01407133822540503
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.07519513101122353,
+       "values": [
+        0.07632086138922499,
+        0.07406940063322208
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 5.912511884315809,
+       "values": [
+        6.140880827511512,
+        5.684142941120107
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.005689466654738573,
+       "values": [
+        0.0050155924577561795,
+        0.006363340851720967
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 5.623467942858995,
+       "values": [
+        5.779811180528078,
+        5.467124705189912
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.23123788374859586,
+       "values": [
+        0.23506390567065066,
+        0.22741186182654105
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.16447473016808523,
+       "values": [
+        0.16688858523409217,
+        0.16206087510207828
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 6.553351294001165,
+       "values": [
+        6.749078309650792,
+        6.357624278351538
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09687108602894787,
+       "values": [
+        0.0887250051440018,
+        0.10501716691389391
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6494152648689371,
+       "values": [
+        0.649323932856164,
+        0.6495065968817101
+       ]
+      }
+     },
+     "8": {
+      "n": 2,
+      "n_ok": 1,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4052",
+       "R4053"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.07557178842119872,
+       "values": [
+        0.09589142864959334,
+        0.05525214819280408
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.00038005925952987944,
+       "values": [
+        0.002837457727899434,
+        -0.0020773392088396752
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.07554500275525175,
+       "values": [
+        -0.09586733197059369,
+        -0.05522267353990981
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.020390263677634152,
+       "values": [
+        0.0159608909551003,
+        0.024819636400168005
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.07557178842119872,
+       "values": [
+        0.09589142864959334,
+        0.05525214819280408
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 5.717737754413692,
+       "values": [
+        8.370221377705443,
+        3.065254131121942
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.008127756562854693,
+       "values": [
+        0.006760795165393407,
+        0.00949471796031598
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 5.609620773209317,
+       "values": [
+        8.262728131033027,
+        2.956513415385605
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.22837913777176055,
+       "values": [
+        0.2951962461272676,
+        0.16156202941625353
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.16025648243000545,
+       "values": [
+        0.20296532993374053,
+        0.11754763492627039
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 6.725691204368578,
+       "values": [
+        9.702929260438673,
+        3.748453148298484
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09430337450216902,
+       "values": [
+        0.08562196714734106,
+        0.10298478185699698
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6496530556335055,
+       "values": [
+        0.6503374469626728,
+        0.6489686643043382
+       ]
+      }
+     },
+     "12": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4056",
+       "R4057"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.10207838136237996,
+       "values": [
+        0.10518162225087936,
+        0.09897514047388055
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.0032739472367762368,
+       "values": [
+        0.005097509186370398,
+        0.0014503852871820756
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.10204248712518306,
+       "values": [
+        -0.105115786530358,
+        -0.09896918772000812
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.018071789192344517,
+       "values": [
+        0.015099696970832022,
+        0.02104388141385701
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.10207838136237996,
+       "values": [
+        0.10518162225087936,
+        0.09897514047388055
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 9.081748654574938,
+       "values": [
+        9.558865151488948,
+        8.604632157660928
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.007722834398077638,
+       "values": [
+        0.0074761088409252,
+        0.007969559955230077
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 9.00172058782517,
+       "values": [
+        9.572216424840356,
+        8.431224750809985
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.310935166438164,
+       "values": [
+        0.3199688805556095,
+        0.30190145232071847
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.21040977800343172,
+       "values": [
+        0.21626108638995503,
+        0.2045584696169084
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 10.641668460682766,
+       "values": [
+        11.267972857020215,
+        10.015364064345317
+       ]
+      },
+      "lag_s": {
+       "mean": 0.0892405507448074,
+       "values": [
+        0.08327308746350322,
+        0.09520801402611158
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.650290097854868,
+       "values": [
+        0.6499765578701696,
+        0.6506036378395664
+       ]
+      }
+     },
+     "16": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4060",
+       "R4061"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.1709041746806094,
+       "values": [
+        0.17670654671817557,
+        0.16510180264304322
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.0014597937790842618,
+       "values": [
+        0.00023094637725409577,
+        -0.003150533935422619
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.17090015667578562,
+       "values": [
+        -0.17670651432558013,
+        -0.16509379902599108
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.010937404767140311,
+       "values": [
+        0.016706613304349888,
+        0.005168196229930736
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.17090417468060937,
+       "values": [
+        0.17670654671817557,
+        0.1651018026430432
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 19.397491273364935,
+       "values": [
+        19.869485826561323,
+        18.92549672016855
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.010132758598435765,
+       "values": [
+        0.010773779296762376,
+        0.009491737900109154
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 18.79690276121668,
+       "values": [
+        19.13923066048293,
+        18.454574861950427
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.4389270984289274,
+       "values": [
+        0.4478590406626695,
+        0.4299951561951853
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.29844437324732576,
+       "values": [
+        0.3055395907798724,
+        0.2913491557147791
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 19.29429699745883,
+       "values": [
+        19.70559823243904,
+        18.882995762478615
+       ]
+      },
+      "lag_s": {
+       "mean": 0.1066040235499174,
+       "values": [
+        0.10073930397488386,
+        0.11246874312495093
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6529391295219147,
+       "values": [
+        0.6533858424959081,
+        0.6524924165479211
+       ]
+      }
+     },
+     "20": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4064",
+       "R4065"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.21361528646186415,
+       "values": [
+        0.21177271548054233,
+        0.21545785744318596
+       ]
+      },
+      "d_tan_m": {
+       "mean": -0.011241497496964088,
+       "values": [
+        0.01214086847154694,
+        -0.034623863465475115
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.21354529336726247,
+       "values": [
+        -0.21175222363896654,
+        -0.21533836309555837
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.013658437380784316,
+       "values": [
+        0.01179317905541818,
+        0.015523695706150453
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.21361528646186417,
+       "values": [
+        0.21177271548054233,
+        0.215457857443186
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 16.485024751661427,
+       "values": [
+        15.420058617438102,
+        17.54999088588475
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.013567940115573274,
+       "values": [
+        0.015126568357149761,
+        0.012009311873996786
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 15.24980336651768,
+       "values": [
+        13.809711731809845,
+        16.689895001225516
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.43675894451199915,
+       "values": [
+        0.4183821113237466,
+        0.4551357777002517
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.30254185910184833,
+       "values": [
+        0.2898269840547604,
+        0.3152567341489363
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 15.529652210755806,
+       "values": [
+        14.137313963064534,
+        16.921990458447077
+       ]
+      },
+      "lag_s": {
+       "mean": 0.11930046775736014,
+       "values": [
+        0.1217382450587088,
+        0.11686269045601147
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6537249628501216,
+       "values": [
+        0.6540607591482376,
+        0.6533891665520055
+       ]
+      }
+     }
+    },
+    "t": {
+     "2": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4068",
+       "R4069"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.02685236513315766,
+       "values": [
+        0.026806175772206765,
+        0.026898554494108558
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.018440313215408254,
+       "values": [
+        0.018865477970589666,
+        0.018015148460226837
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.01876786383876891,
+       "values": [
+        0.018269273688876236,
+        0.019266453988661586
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.018842360301541253,
+       "values": [
+        0.018307392245653885,
+        0.019377328357428617
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.02685236513315766,
+       "values": [
+        0.026806175772206765,
+        0.026898554494108558
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 1.6754217863209342,
+       "values": [
+        1.6820904083244963,
+        1.6687531643173723
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0,
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.017053724673683934,
+       "values": [
+        0.01794316049094391,
+        0.01616428885642396
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 0.8037029579046833,
+       "values": [
+        0.780916447315188,
+        0.8264894684941785
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.003447954776551308,
+       "values": [
+        0.0036641859731203273,
+        0.0032317235799822893
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.010635410759507413,
+       "values": [
+        0.010162236169872002,
+        0.011108585349142825
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 2.2118528574954417,
+       "values": [
+        2.2377345829521587,
+        2.1859711320387247
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10387399108075293,
+       "values": [
+        0.09928242741062142,
+        0.10846555475088446
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6337526255764176,
+       "values": [
+        0.6341850647984221,
+        0.6333201863544132
+       ]
+      }
+     },
+     "4": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4072",
+       "R4073"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.04172376201990202,
+       "values": [
+        0.041495517367531404,
+        0.04195200667227264
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.03802457553331424,
+       "values": [
+        0.03474963642694169,
+        0.041299514639686785
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.004037867910487991,
+       "values": [
+        0.02015386598307964,
+        -0.012078130162103656
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.016517674559180108,
+       "values": [
+        0.02089070180395027,
+        0.01214464731440995
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.04172376201990202,
+       "values": [
+        0.041495517367531404,
+        0.04195200667227263
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.1430882878252118,
+       "values": [
+        1.7937174136672769,
+        2.4924591619831467
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 0.0,
+       "values": [
+        0.0
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.020453771954505817,
+       "values": [
+        0.01634108592590766,
+        0.024566457983103973
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 1.9350450656611722,
+       "values": [
+        0.8527007359335851,
+        3.017389395388759
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.0055058626101567865,
+       "values": [
+        0.003596160642926424,
+        0.00741556457738715
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.01310523285768812,
+       "values": [
+        0.01075892303501129,
+        0.015451542680364947
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 3.389105239563445,
+       "values": [
+        2.230279636404666,
+        4.547930842722224
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10003810817648967,
+       "values": [
+        0.10195217277811855,
+        0.0981240435748608
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.618042311465939,
+       "values": [
+        0.6178518615325194,
+        0.6182327613993587
+       ]
+      }
+     },
+     "6": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4076",
+       "R4077"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.06091108681630846,
+       "values": [
+        0.057717072120130775,
+        0.06410510151248615
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.06062115658936544,
+       "values": [
+        0.05729365281412078,
+        0.06394866036461011
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.00820863424624127,
+       "values": [
+        0.0028004008390521418,
+        -0.01921766933153468
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.011757337077695214,
+       "values": [
+        0.003922471093080754,
+        0.019592203062309674
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.06091108681630846,
+       "values": [
+        0.057717072120130775,
+        0.06410510151248615
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 2.8007871858943307,
+       "values": [
+        2.08781434865056,
+        3.5137600231381017
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 2.8970000000000056,
+       "values": [
+        2.8970000000000056
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.026344197342495268,
+       "values": [
+        0.018039990994983324,
+        0.03464840369000721
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 3.2377243359018117,
+       "values": [
+        1.87914163253627,
+        4.596307039267353
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.010634511908602217,
+       "values": [
+        0.0038877239136659455,
+        0.01738129990353849
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.017934206499479015,
+       "values": [
+        0.014274233931143169,
+        0.021594179067814863
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 4.633455915346725,
+       "values": [
+        2.953022531380513,
+        6.313889299312938
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10078779005931403,
+       "values": [
+        0.09395474675116426,
+        0.1076208333674638
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.6028335367931281,
+       "values": [
+        0.6027855955351006,
+        0.6028814780511558
+       ]
+      }
+     },
+     "8": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4080",
+       "R4081"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.08416986944319116,
+       "values": [
+        0.07780704965488164,
+        0.09053268923150067
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.08433250809322249,
+       "values": [
+        0.07621570639777302,
+        0.09244930978867194
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.007388622361197306,
+       "values": [
+        0.007382684156015756,
+        -0.022159928878410368
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.016786266360947343,
+       "values": [
+        0.00835188495121446,
+        0.025220647770680223
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.08416986944319116,
+       "values": [
+        0.07780704965488165,
+        0.09053268923150067
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 3.404239734878275,
+       "values": [
+        2.363284167451825,
+        4.445195302304725
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 4.829999999999998,
+       "values": [
+        4.829999999999998
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.0317061878542928,
+       "values": [
+        0.01926508296061069,
+        0.04414729274797491
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 4.20189862426434,
+       "values": [
+        2.2623946993319195,
+        6.141402549196759
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.01580501360966547,
+       "values": [
+        0.006353649533708168,
+        0.025256377685622774
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.02161256549238716,
+       "values": [
+        0.01643086011622515,
+        0.02679427086854917
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 5.551276806029151,
+       "values": [
+        3.4250891937875982,
+        7.677464418270702
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09970448105067874,
+       "values": [
+        0.09447120009747703,
+        0.10493776200388044
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5879928942958148,
+       "values": [
+        0.588117638163536,
+        0.5878681504280935
+       ]
+      }
+     },
+     "11.6": {
+      "n": 2,
+      "n_ok": 2,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4084",
+       "R4085"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.11411335743989237,
+       "values": [
+        0.11048457754043967,
+        0.11774213733934508
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.11210117765354857,
+       "values": [
+        0.10563850897363251,
+        0.11856384633346465
+       ]
+      },
+      "d_rad_m": {
+       "mean": 0.006346343072852673,
+       "values": [
+        0.015972823990728746,
+        -0.003280137845023401
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.011822279017513196,
+       "values": [
+        0.019720815053128206,
+        0.003923742981898185
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.11411335743989237,
+       "values": [
+        0.11048457754043965,
+        0.11774213733934508
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 3.258373201826318,
+       "values": [
+        2.7544343174894967,
+        3.76231208616314
+       ]
+      },
+      "fold_settle_s": {
+       "mean": 5.491,
+       "values": [
+        5.491
+       ]
+      },
+      "carrier_dip_m": {
+       "mean": 0.028281027814476722,
+       "values": [
+        0.020454755893305476,
+        0.03610729973564797
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 4.070510581409268,
+       "values": [
+        3.0939782479173643,
+        5.047042914901171
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.01883547415604706,
+       "values": [
+        0.013830020720447771,
+        0.023840927591646344
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.021183928033386992,
+       "values": [
+        0.018807748197782068,
+        0.023560107868991913
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 5.694433830614903,
+       "values": [
+        4.659143695239498,
+        6.729723965990308
+       ]
+      },
+      "lag_s": {
+       "mean": 0.09831249653163636,
+       "values": [
+        0.09625140358070444,
+        0.10037358948256828
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5625144206305375,
+       "values": [
+        0.5625301694272485,
+        0.5624986718338265
+       ]
+      }
+     },
+     "12": {
+      "n": 2,
+      "n_ok": 1,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4088",
+       "R4089"
+      ],
+      "failures": [],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.12399762477279602,
+       "values": [
+        0.12903360601101413,
+        0.11896164353457793
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.1256380027414218,
+       "values": [
+        0.1325291732507329,
+        0.11874683223211073
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.00677318908221998,
+       "values": [
+        -0.014350831756177712,
+        0.0008044535917377527
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.01032354074152543,
+       "values": [
+        0.0191165623322044,
+        0.001530519150846461
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.12399762477279602,
+       "values": [
+        0.12903360601101413,
+        0.11896164353457793
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 4.241704244730797,
+       "values": [
+        5.076649421576794,
+        3.4067590678848
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.04279925776058424,
+       "values": [
+        0.051391620866115595,
+        0.03420689465505289
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 5.497950611453488,
+       "values": [
+        6.354778619049395,
+        4.641122603857581
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.027902047722672595,
+       "values": [
+        0.03281449335531145,
+        0.022989602090033742
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.027649566378471557,
+       "values": [
+        0.03286837983991084,
+        0.022430752917032275
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 7.134694092492417,
+       "values": [
+        7.833028348747123,
+        6.436359836237711
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10213813478061251,
+       "values": [
+        0.09648957493417604,
+        0.10778669462704897
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5596715998956892,
+       "values": [
+        0.5595424606269793,
+        0.559800739164399
+       ]
+      }
+     },
+     "16": {
+      "n": 2,
+      "n_ok": 0,
+      "n_sep": 2,
+      "void": 0,
+      "runs": [
+       "R4092",
+       "R4093"
+      ],
+      "failures": [
+       "not LANDED",
+       "runner: /fleet/abort fired: drone 4 disarmed unexpectedly at t=143.97"
+      ],
+      "crowded": [],
+      "d_true_m": {
+       "mean": 0.16256179690160277,
+       "values": [
+        0.17013957076898523,
+        0.1549840230342203
+       ]
+      },
+      "d_tan_m": {
+       "mean": 0.1638766981323594,
+       "values": [
+        0.1747681359695822,
+        0.15298526029513654
+       ]
+      },
+      "d_rad_m": {
+       "mean": -0.003695733719185676,
+       "values": [
+        -0.013006096557739655,
+        0.005614629119368303
+       ]
+      },
+      "aim_err_m": {
+       "mean": 0.014808518105573628,
+       "values": [
+        0.020188691092438753,
+        0.009428345118708503
+       ]
+      },
+      "e_model_xy_m": {
+       "mean": 0.16256179690160277,
+       "values": [
+        0.17013957076898523,
+        0.1549840230342203
+       ]
+      },
+      "fold_tilt_peak_deg": {
+       "mean": 5.61977158084054,
+       "values": [
+        6.792095180293384,
+        4.447447981387696
+       ]
+      },
+      "fold_settle_s": {
+       "mean": null,
+       "values": []
+      },
+      "carrier_dip_m": {
+       "mean": 0.056701432402889496,
+       "values": [
+        0.06883242691746738,
+        0.04457043788831161
+       ]
+      },
+      "steady_tilt_mean_deg": {
+       "mean": 7.224895527048053,
+       "values": [
+        8.309579367688151,
+        6.140211686407955
+       ]
+      },
+      "steady_err_m": {
+       "mean": 0.040977754255612564,
+       "values": [
+        0.051751291054630354,
+        0.030204217456594774
+       ]
+      },
+      "path_err_m": {
+       "mean": 0.039509482239569765,
+       "values": [
+        0.04862142968203762,
+        0.03039753479710191
+       ]
+      },
+      "path_tilt_peak_deg": {
+       "mean": 8.733019456877226,
+       "values": [
+        9.734637299618235,
+        7.731401614136216
+       ]
+      },
+      "lag_s": {
+       "mean": 0.10370807000269816,
+       "values": [
+        0.10065812367709294,
+        0.10675801632830337
+       ]
+      },
+      "separation_min_m": {
+       "mean": 0.5368200651182025,
+       "values": [
+        0.5366710172756995,
+        0.5369691129607055
+       ]
+      }
+     }
+    }
+   }
+  },
+  "d_tol": {
+   "measured": {
+    "t": 2,
+    "ri": 20
+   },
+   "slot": {
+    "t": 11.6,
+    "ri": 4
+   }
+  },
+  "d_sep": {
+   "measured": {
+    "t": 12,
+    "ri": 20
+   },
+   "slot": {
+    "t": 16,
+    "ri": 20
+   }
+  },
+  "d_task": {
+   "measured": {
+    "t": 2,
+    "ri": 20
+   },
+   "slot": {
+    "t": 11.6,
+    "ri": 4
+   }
+  },
+  "d_tol_true": {
+   "measured": {
+    "t": 4.3,
+    "ri": 22.0
+   },
+   "slot": {
+    "t": 11.9,
+    "ri": 5.5
+   }
+  },
+  "mechanism": {
+   "t": {
+    "fold_tilt_peak_deg": {
+     "delta": {
+      "0": 0.8876745652678404,
+      "2": 0.004252880722941166,
+      "4": 0.037792971900211914,
+      "6": 0.36785799877410774,
+      "8": 1.2632742310930318,
+      "11.6": 1.581844332094036,
+      "12": 2.367735773375515,
+      "16": 3.8030935192573594
+     },
+     "growth": {
+      "2": -0.8834216845448992,
+      "4": -0.8498815933676285,
+      "6": -0.5198165664937326,
+      "8": 0.37559966582519144,
+      "11.6": 0.6941697668261957,
+      "12": 1.4800612081076745,
+      "16": 2.9154189539895192
+     },
+     "spread0": 1.1810396280354918,
+     "shown": true
+    },
+    "steady_tilt_mean_deg": {
+     "delta": {
+      "0": 1.8111809214439825,
+      "2": 0.13126862301869457,
+      "4": 0.0460242511061284,
+      "6": 0.48331868504961184,
+      "8": 2.2259720052081993,
+      "11.6": 3.1894916209719426,
+      "12": 3.8851068742195722,
+      "16": 5.645125915038637
+     },
+     "growth": {
+      "2": -1.6799122984252879,
+      "4": -1.765156670337854,
+      "6": -1.3278622363943706,
+      "8": 0.4147910837642168,
+      "11.6": 1.3783106995279601,
+      "12": 2.07392595277559,
+      "16": 3.8339449935946543
+     },
+     "spread0": 1.9036860054878177,
+     "shown": true
+    },
+    "shown": true
+   },
+   "ri": {
+    "fold_tilt_peak_deg": {
+     "delta": {
+      "0": 0.8876745652678404,
+      "2": 0.799995106485873,
+      "4": 1.473182514759746,
+      "6": 3.6958245000648384,
+      "8": 4.079708152764047,
+      "12": 7.7903720285238816,
+      "16": 18.14987482958383,
+      "20": 15.71794092501635
+     },
+     "growth": {
+      "2": -0.08767945878196737,
+      "4": 0.5855079494919055,
+      "6": 2.8081499347969983,
+      "8": 3.1920335874962067,
+      "12": 6.902697463256041,
+      "16": 17.26220026431599,
+      "20": 14.83026635974851
+     },
+     "spread0": 1.1810396280354918,
+     "shown": true
+    },
+    "steady_tilt_mean_deg": {
+     "delta": {
+      "0": 1.8111809214439825,
+      "2": 2.2258489065228364,
+      "4": 2.4345285094330302,
+      "6": 3.203864090723833,
+      "8": 4.755476813171375,
+      "12": 8.019493478925073,
+      "16": 18.060905633371938,
+      "20": 14.741595973005902
+     },
+     "growth": {
+      "2": 0.41466798507885394,
+      "4": 0.6233475879890478,
+      "6": 1.3926831692798507,
+      "8": 2.9442958917273927,
+      "12": 6.20831255748109,
+      "16": 16.249724711927957,
+      "20": 12.93041505156192
+     },
+     "spread0": 1.9036860054878177,
+     "shown": true
+    },
+    "shown": true
+   }
+  }
+ },
+ "landing_reading": {
+  "note": "added by the lab chat 7 Nov (not tools/catch_offset.py): the newcomer (drone 4, run.csv d3) over [LAND, LAND + 15] s; the tracker envelope disarms the fleet at 60 deg",
+  "runs": {
+   "R4034": {
+    "newcomer_tilt_max_deg": 43.8,
+    "at_s_after_land": 10.1,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.11,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4035": {
+    "newcomer_tilt_max_deg": 45.0,
+    "at_s_after_land": 8.7,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.34,
+     0.35,
+     0.34
+    ],
+    "fleet_abort": false
+   },
+   "R4036": {
+    "newcomer_tilt_max_deg": 45.9,
+    "at_s_after_land": 9.3,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.16,
+     0.27,
+     0.25
+    ],
+    "fleet_abort": false
+   },
+   "R4037": {
+    "newcomer_tilt_max_deg": 53.0,
+    "at_s_after_land": 10.2,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4038": {
+    "newcomer_tilt_max_deg": 42.3,
+    "at_s_after_land": 10.4,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4039": {
+    "newcomer_tilt_max_deg": 46.4,
+    "at_s_after_land": 8.8,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.32,
+     0.34,
+     0.32
+    ],
+    "fleet_abort": false
+   },
+   "R4040": {
+    "newcomer_tilt_max_deg": 52.5,
+    "at_s_after_land": 10.3,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.11,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4041": {
+    "newcomer_tilt_max_deg": 39.8,
+    "at_s_after_land": 10.2,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.11,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4042": {
+    "newcomer_tilt_max_deg": 50.4,
+    "at_s_after_land": 9.1,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.24,
+     0.29,
+     0.28
+    ],
+    "fleet_abort": false
+   },
+   "R4043": {
+    "newcomer_tilt_max_deg": 44.3,
+    "at_s_after_land": 9.3,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.19,
+     0.26,
+     0.25
+    ],
+    "fleet_abort": false
+   },
+   "R4044": {
+    "newcomer_tilt_max_deg": 40.0,
+    "at_s_after_land": 10.4,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4045": {
+    "newcomer_tilt_max_deg": 56.2,
+    "at_s_after_land": 8.9,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.25,
+     0.36,
+     0.34
+    ],
+    "fleet_abort": false
+   },
+   "R4046": {
+    "newcomer_tilt_max_deg": 25.8,
+    "at_s_after_land": 10.9,
+    "newcomer_z_m": 0.16,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4047": {
+    "newcomer_tilt_max_deg": 48.1,
+    "at_s_after_land": 10.2,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4048": {
+    "newcomer_tilt_max_deg": 50.5,
+    "at_s_after_land": 9.0,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.28,
+     0.34,
+     0.33
+    ],
+    "fleet_abort": false
+   },
+   "R4049": {
+    "newcomer_tilt_max_deg": 50.0,
+    "at_s_after_land": 9.1,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.26,
+     0.32,
+     0.31
+    ],
+    "fleet_abort": false
+   },
+   "R4050": {
+    "newcomer_tilt_max_deg": 42.2,
+    "at_s_after_land": 10.1,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4051": {
+    "newcomer_tilt_max_deg": 39.6,
+    "at_s_after_land": 10.4,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4052": {
+    "newcomer_tilt_max_deg": 53.7,
+    "at_s_after_land": 8.9,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.3,
+     0.35,
+     0.34
+    ],
+    "fleet_abort": false
+   },
+   "R4053": {
+    "newcomer_tilt_max_deg": 52.6,
+    "at_s_after_land": 8.8,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.31,
+     0.38,
+     0.36
+    ],
+    "fleet_abort": false
+   },
+   "R4054": {
+    "newcomer_tilt_max_deg": 43.8,
+    "at_s_after_land": 11.2,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4055": {
+    "newcomer_tilt_max_deg": 54.8,
+    "at_s_after_land": 9.7,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.16,
+     0.15,
+     0.14
+    ],
+    "fleet_abort": false
+   },
+   "R4056": {
+    "newcomer_tilt_max_deg": 51.6,
+    "at_s_after_land": 8.6,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.34,
+     0.39,
+     0.38
+    ],
+    "fleet_abort": false
+   },
+   "R4057": {
+    "newcomer_tilt_max_deg": 45.1,
+    "at_s_after_land": 10.0,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.12,
+     0.14,
+     0.13
+    ],
+    "fleet_abort": false
+   },
+   "R4058": {
+    "newcomer_tilt_max_deg": 48.0,
+    "at_s_after_land": 11.2,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4059": {
+    "newcomer_tilt_max_deg": 46.7,
+    "at_s_after_land": 10.5,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4060": {
+    "newcomer_tilt_max_deg": 48.1,
+    "at_s_after_land": 10.3,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.12,
+     0.11
+    ],
+    "fleet_abort": false
+   },
+   "R4061": {
+    "newcomer_tilt_max_deg": 38.5,
+    "at_s_after_land": 9.8,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.12,
+     0.19,
+     0.18
+    ],
+    "fleet_abort": false
+   },
+   "R4062": {
+    "newcomer_tilt_max_deg": 53.1,
+    "at_s_after_land": 11.4,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4063": {
+    "newcomer_tilt_max_deg": 57.6,
+    "at_s_after_land": 9.7,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.15,
+     0.16,
+     0.15
+    ],
+    "fleet_abort": false
+   },
+   "R4064": {
+    "newcomer_tilt_max_deg": 49.9,
+    "at_s_after_land": 11.2,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4065": {
+    "newcomer_tilt_max_deg": 36.0,
+    "at_s_after_land": 10.0,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.2,
+     0.19
+    ],
+    "fleet_abort": false
+   },
+   "R4066": {
+    "newcomer_tilt_max_deg": 54.9,
+    "at_s_after_land": 7.5,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.55,
+     0.57,
+     0.56
+    ],
+    "fleet_abort": false
+   },
+   "R4067": {
+    "newcomer_tilt_max_deg": 55.5,
+    "at_s_after_land": 7.5,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.55,
+     0.56,
+     0.56
+    ],
+    "fleet_abort": false
+   },
+   "R4068": {
+    "newcomer_tilt_max_deg": 39.4,
+    "at_s_after_land": 9.0,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.27,
+     0.29,
+     0.29
+    ],
+    "fleet_abort": false
+   },
+   "R4069": {
+    "newcomer_tilt_max_deg": 39.6,
+    "at_s_after_land": 10.2,
+    "newcomer_z_m": 0.17,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4070": {
+    "newcomer_tilt_max_deg": 56.6,
+    "at_s_after_land": 7.4,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.54,
+     0.61,
+     0.58
+    ],
+    "fleet_abort": false
+   },
+   "R4071": {
+    "newcomer_tilt_max_deg": 64.6,
+    "at_s_after_land": 7.1,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.62,
+     0.63,
+     0.63
+    ],
+    "fleet_abort": true
+   },
+   "R4072": {
+    "newcomer_tilt_max_deg": 29.6,
+    "at_s_after_land": 8.5,
+    "newcomer_z_m": 0.19,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.37,
+     0.38,
+     0.37
+    ],
+    "fleet_abort": false
+   },
+   "R4073": {
+    "newcomer_tilt_max_deg": 49.1,
+    "at_s_after_land": 8.8,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.29,
+     0.3,
+     0.4
+    ],
+    "fleet_abort": false
+   },
+   "R4074": {
+    "newcomer_tilt_max_deg": 58.9,
+    "at_s_after_land": 7.3,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.55,
+     0.64,
+     0.6
+    ],
+    "fleet_abort": false
+   },
+   "R4075": {
+    "newcomer_tilt_max_deg": 66.5,
+    "at_s_after_land": 7.1,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.61,
+     0.65,
+     0.64
+    ],
+    "fleet_abort": true
+   },
+   "R4076": {
+    "newcomer_tilt_max_deg": 33.6,
+    "at_s_after_land": 8.2,
+    "newcomer_z_m": 0.19,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.42,
+     0.4,
+     0.48
+    ],
+    "fleet_abort": false
+   },
+   "R4077": {
+    "newcomer_tilt_max_deg": 33.5,
+    "at_s_after_land": 8.4,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.34,
+     0.37,
+     0.51
+    ],
+    "fleet_abort": false
+   },
+   "R4078": {
+    "newcomer_tilt_max_deg": 62.7,
+    "at_s_after_land": 7.1,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.62,
+     0.64,
+     0.62
+    ],
+    "fleet_abort": false
+   },
+   "R4079": {
+    "newcomer_tilt_max_deg": 68.4,
+    "at_s_after_land": 7.1,
+    "newcomer_z_m": 0.25,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.6,
+     0.68,
+     0.66
+    ],
+    "fleet_abort": true
+   },
+   "R4080": {
+    "newcomer_tilt_max_deg": 46.5,
+    "at_s_after_land": 10.4,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.1
+    ],
+    "fleet_abort": false
+   },
+   "R4081": {
+    "newcomer_tilt_max_deg": 25.9,
+    "at_s_after_land": 8.7,
+    "newcomer_z_m": 0.2,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.28,
+     0.31,
+     0.5
+    ],
+    "fleet_abort": false
+   },
+   "R4082": {
+    "newcomer_tilt_max_deg": 65.4,
+    "at_s_after_land": 7.2,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.61,
+     0.63,
+     0.6
+    ],
+    "fleet_abort": true
+   },
+   "R4083": {
+    "newcomer_tilt_max_deg": 64.2,
+    "at_s_after_land": 7.3,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.6,
+     0.62,
+     0.6
+    ],
+    "fleet_abort": true
+   },
+   "R4084": {
+    "newcomer_tilt_max_deg": 49.8,
+    "at_s_after_land": 9.1,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.25,
+     0.16,
+     0.41
+    ],
+    "fleet_abort": false
+   },
+   "R4085": {
+    "newcomer_tilt_max_deg": 55.0,
+    "at_s_after_land": 7.8,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.45,
+     0.44,
+     0.66
+    ],
+    "fleet_abort": false
+   },
+   "R4086": {
+    "newcomer_tilt_max_deg": 68.0,
+    "at_s_after_land": 6.8,
+    "newcomer_z_m": 0.25,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.68,
+     0.7,
+     0.69
+    ],
+    "fleet_abort": true
+   },
+   "R4087": {
+    "newcomer_tilt_max_deg": 68.3,
+    "at_s_after_land": 6.9,
+    "newcomer_z_m": 0.27,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.64,
+     0.67,
+     0.65
+    ],
+    "fleet_abort": true
+   },
+   "R4088": {
+    "newcomer_tilt_max_deg": 54.2,
+    "at_s_after_land": 8.3,
+    "newcomer_z_m": 0.18,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.34,
+     0.37,
+     0.6
+    ],
+    "fleet_abort": false
+   },
+   "R4089": {
+    "newcomer_tilt_max_deg": 56.0,
+    "at_s_after_land": 7.6,
+    "newcomer_z_m": 0.21,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.5,
+     0.47,
+     0.7
+    ],
+    "fleet_abort": false
+   },
+   "R4090": {
+    "newcomer_tilt_max_deg": 66.3,
+    "at_s_after_land": 7.6,
+    "newcomer_z_m": 0.2,
+    "ring_z_m": 0.03,
+    "carriers_z_m": [
+     0.53,
+     0.58,
+     0.53
+    ],
+    "fleet_abort": true
+   },
+   "R4091": {
+    "newcomer_tilt_max_deg": 70.5,
+    "at_s_after_land": 7.3,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.59,
+     0.61,
+     0.59
+    ],
+    "fleet_abort": true
+   },
+   "R4092": {
+    "newcomer_tilt_max_deg": 57.5,
+    "at_s_after_land": 10.5,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.1,
+     0.1,
+     0.24
+    ],
+    "fleet_abort": false
+   },
+   "R4093": {
+    "newcomer_tilt_max_deg": 66.8,
+    "at_s_after_land": 7.6,
+    "newcomer_z_m": 0.22,
+    "ring_z_m": 0.02,
+    "carriers_z_m": [
+     0.48,
+     0.48,
+     0.72
+    ],
+    "fleet_abort": true
+   }
+  }
+ }
+}

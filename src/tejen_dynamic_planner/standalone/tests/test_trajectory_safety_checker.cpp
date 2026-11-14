@@ -2,6 +2,7 @@
 #include "test_common.hpp"
 
 #include <iostream>
+#include <Eigen/Geometry>
 
 using namespace dynamic_planner;
 
@@ -43,13 +44,86 @@ CommittedTrajectory constantTrajectory(const Vec3& p, double t0, double t1) {
     return result;
 }
 
+void testChangedRelationChecking() {
+    TrajectorySafetyChecker checker;
+    const auto ego = linearPiece(Vec3(0, 0, 1.3), Vec3(.1, 0, 1.3), 0, 1);
+    WorldSnapshot base;
+    base.workspace.enabled = true;
+    base.workspace.lower = Vec3(-2, -2, 0);
+    base.workspace.upper = Vec3(2, 2, 3);
+    base.ego_suspended_geometry.enabled = base.ego_suspended_geometry.payload_attached = true;
+    base.ego_suspended_geometry.swing_envelope = SwingEnvelope::OuterOctagon;
+    base.physical_static_obstacles.push_back({"wall", boxVertices(Vec3(1, 1, 1), Vec3(.1, .1, 1))});
+    CooperativeObstacleTrajectory peer;
+    peer.name = "peer";
+    peer.trajectory = constantTrajectory(Vec3(-1, 1, 1.3), 0, 2);
+    base.cooperative_obstacles.push_back(peer);
+    requireTrue(checker.checkPiece(ego, 0, 1, base).safe, "invalid incremental baseline");
+    auto latest = base;
+    latest.ego_body_rotation = Eigen::AngleAxisd(.02, Vec3::UnitY()).toRotationMatrix();
+    auto full = checker.checkPiece(ego, 0, 1, latest);
+    auto selected = checker.checkPiece(ego, 0, 1, latest, latest.collisionChangesSince(base));
+    requireTrue(selected.safe == full.safe && selected.relations_reused > 0 &&
+                selected.relations_checked < full.relations_checked,
+                "rotation catch-up still rechecks every component");
+    requireTrue(selected.status == "SAFE_CHANGED_RELATIONS", "subset masquerades as full certificate");
+    latest = base;
+    latest.cooperative_obstacles[0].trajectory = constantTrajectory(Vec3(.05, 0, 1.3), 0, 2);
+    full = checker.checkPiece(ego, 0, 1, latest);
+    selected = checker.checkPiece(ego, 0, 1, latest, latest.collisionChangesSince(base));
+    requireTrue(!selected.safe && selected.safe == full.safe, "changed peer collision missed");
+    latest = base;
+    latest.ego_half_extents = Vec3(.1, .1, .35);
+    latest.physical_static_obstacles[0] = {"rotation_blocker", boxVertices(Vec3(.3, 0, 1.3), Vec3(.03, .1, .1))};
+    const auto rotated_base = latest;
+    requireTrue(checker.checkPiece(ego, 0, 1, rotated_base).safe, "rotation fixture initially blocked");
+    latest.ego_body_rotation = Eigen::AngleAxisd(std::acos(-1.)/2, Vec3::UnitY()).toRotationMatrix();
+    full = checker.checkPiece(ego, 0, 1, latest);
+    selected = checker.checkPiece(ego, 0, 1, latest, latest.collisionChangesSince(rotated_base));
+    requireTrue(!selected.safe && selected.safe == full.safe, "changed body collision missed");
+    latest = base;
+    const auto unchanged = checker.checkPiece(ego, 0, 1, latest, latest.collisionChangesSince(base));
+    requireTrue(unchanged.safe && unchanged.relations_checked == 0 && unchanged.relations_reused > 0,
+                "unchanged input performed collision work");
+    for (int variant = 0; variant < 16; ++variant) {
+        latest = base;
+        latest.ego_body_rotation = Eigen::AngleAxisd(.03*(variant+1), Vec3::UnitY()).toRotationMatrix();
+        latest.cooperative_obstacles[0].trajectory = constantTrajectory(
+            Vec3(.05, .08*variant, 1.3), 0, 2);
+        full = checker.checkPiece(ego, .2, .9, latest);
+        selected = checker.checkPiece(ego, .2, .9, latest, latest.collisionChangesSince(base));
+        requireTrue(full.safe == selected.safe, "combined body/peer check differs from full validation");
+        if (!full.safe) requireTrue(full.obstacle_name == selected.obstacle_name,
+                                  "combined change lost the actual blocker");
+        if (full.safe) requireTrue(selected.relations_checked <= full.relations_checked,
+                                  "combined selection duplicated relation checks");
+    }
+}
+
 }  // namespace
 
 int main() {
     try {
+        testChangedRelationChecking();
         const TrajectoryPiece ego = linearPiece(
             Vec3(0.0, 0.0, 1.5), Vec3(1.0, 0.0, 1.5), 0.0, 1.0);
         TrajectorySafetyChecker checker;
+        {
+            WorldSnapshot workspace;
+            workspace.workspace.enabled = true;
+            workspace.workspace.lower = Vec3(-1., -1., 0.);
+            workspace.workspace.upper = Vec3(1., 1., 2.);
+            workspace.ego_half_extents = Vec3(.1, .1, .3);
+            workspace.ego_tracking_error_half_extents = Vec3(.05, .05, .05);
+            const auto near_side = linearPiece(Vec3(.8, 0., 1.), Vec3(.8, 0., 1.), 0., 1.);
+            requireTrue(checker.checkPiece(near_side, 0., 1., workspace).safe,
+                        "identity body should fit workspace");
+            workspace.ego_body_rotation = Eigen::AngleAxisd(
+                3.14159265358979323846 / 2., Vec3::UnitY()).toRotationMatrix();
+            const auto rotated = checker.checkPiece(near_side, 0., 1., workspace);
+            requireTrue(!rotated.safe && rotated.status == "WORKSPACE_BOUNDS",
+                        "latest rotation must be used by workspace final checking");
+        }
 
         WorldSnapshot safe_world;
         safe_world.captured_at_s = 0.0;

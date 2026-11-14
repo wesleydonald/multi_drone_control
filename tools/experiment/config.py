@@ -37,18 +37,28 @@ EVENT_KINDS = {
     'ATTACH',     # /fleet/attach <drone id>    -> tell the network directly; a carrier's id (below
                   # num_drones) is a departed carrier's rejoin (rejoin_departed, card 2026-10-23_rejoin_departed)
     'DETACH',     # /fleet/detach <drone id>
+    'DETACH_SET',  # /fleet/detach_set std_msgs/String "2,3": one set detach of several partners (4 -> 2 -> 4, the
+                   # mdc_424 contract); arg the drone ids, a comma list
     'RELEASE',    # /drone_<id>/detach only: the joint lets go and the planner is NOT told
+                  # (a reserved partner's: its ring weld, /payload/detach for QUAD4, /drone_<id>/payload/detach else)
                   # (an unannounced detach, a magnet failing mid-mission; 7 Oct)
     'DROP',       # /fleet/drop "<arg>": ask the planner to drop the ring and land every drone, as a
                   # tracker's ring-tilt rule does (card 2026-10-08_drop_and_land)
-    'HIS_LAND',   # /join_planner/land_now True: his planner's own LAND, as the console's his LAND button
+    'OPERATOR_GIVE_UP',  # Bool True on a partner's give-up topic, as the console's GIVE UP (/join_planner/give_up
+                         # for QUAD4, /tejen_d<d>/join_planner/give_up else); arg the drone ids, or 'last_proven': the
+                         # partner whose co-motion proof reached 'attached' last (4 -> 2 -> 4 runs)
+    'HIS_LAND',   # /join_planner/land_now True: his planner's own LAND, as the console's his LAND button; arg
+                  # (optional) partners' drone ids, another partner d's on /tejen_d<d>/join_planner/land_now
+    'FORCE_DROP',  # /join_planner/force_drop True: the console's FORCE DROP (his drop gates skipped; 11 Nov)
     'WAIT_WELD',  # not published: block until /magnet/object_attached goes True
     'WAIT_LIFT',  # not published: block until the payload is above arg m (default 0.5), then
                   # shift every later event by the wait (a creep lift varies by ~10 s, R0553);
                   # arg 'z timeout_s' gives up after timeout_s (event LIFT_TIMEOUT)
     'WAIT_REWELD',  # not published: block until the magnet welds AGAIN after a release
                     # (a drone that starts welded, leaves and rejoins), then shift later events;
-                    # arg 'timeout_s' gives up after timeout_s (event REWELD_TIMEOUT) and goes on
+                    # arg 'timeout_s' gives up after timeout_s (event REWELD_TIMEOUT) and goes on;
+                    # 'd<id> [timeout_s]' waits for that partner's own weld (/drone_<id>/magnet/object_attached;
+                    # QUAD4's is today's /magnet/object_attached)
     'LAUNCH',     # not published: start a second launch mid-run, arg "pkg file [k:=v ...]"
                   # (the partner's mission once the ring flies); stopped with the stack
     'HANDOFF',    # /join_planner/handoff_ready True: our tracker takes the partner's last
@@ -60,7 +70,11 @@ EVENT_KINDS = {
     'GZ_PUB',     # gz.msgs.Empty on the gz topic in arg, sent 3x (gz CLI one-shots drop):
                   # e.g. /pickup/detach, which the partner mission sends at its start
     'PARTNER_GO',  # '{"running": true}' on /runner/partner_go for 3 s: his supervisor's start gate when his launch
-                   # has start_gate_topic:=/runner/partner_go (his takeoff late, card 2026-10-10 rev 10 F3)
+                   # has start_gate_topic:=/runner/partner_go (his takeoff late, card 2026-10-10 rev 10 F3); in the twin
+                   # his TAKEOFF (his supervisor arms and sends TAKEOFF on its own drone_command once its gate opens).
+                   # arg (optional) the partners' drone ids, "2,3": QUAD4's gate is /runner/partner_go, another
+                   # partner d's /drone_<d>/runner/partner_go (his instance takes a start gate of its drone's only),
+                   # all in one tick (both his TAKEOFFs at once)
     'FLEET_HANDOVER',  # /fleet/handover True for 1.5 s: the elrs_mux (partner_m2) hands each
                        # drone to our tracker on its first flying command (M2 bench)
     'WRENCH',     # persistent wrench on a Gazebo link, arg "fx fy fz [tx ty tz] [scoped link]" (N, N m, world
@@ -211,6 +225,66 @@ def wait_reweld_arg(arg, what='WAIT_REWELD'):
     return timeout
 
 
+def wait_reweld_spec(arg):
+    """WAIT_REWELD arg -> (timeout SIM s or None, partner drone id or None): 'timeout_s' (QUAD4, today's) or
+    'd<id> [timeout_s]' (that partner's own weld)."""
+    parts = str(arg if arg is not None else '').split()
+    m = re.fullmatch(r'd(\d+)', parts[0]) if parts else None
+    if m is None:
+        return wait_reweld_arg(arg), None
+    if len(parts) > 2:
+        raise ValueError(f"WAIT_REWELD arg {arg!r}: expected 'timeout_s' or 'd<id> [timeout_s]'")
+    return wait_reweld_arg(parts[1] if len(parts) == 2 else None), int(m.group(1))
+
+
+def drone_set_arg(arg, what):
+    """A comma list of drone ids ("2,3", [2, 3] or 3) -> tuple of distinct ids >= 0, in the order given."""
+    raw = arg if isinstance(arg, (list, tuple)) else str(arg if arg is not None else '').replace(' ', '').split(',')
+    try:
+        ids = tuple(int(v) for v in raw if str(v) != '')
+    except ValueError:
+        ids = ()
+    if not ids or len(set(ids)) != len(ids) or min(ids) < 0:
+        raise ValueError(f'{what} arg {arg!r}: expected distinct drone ids, e.g. "2,3"')
+    return ids
+
+
+QUAD4 = 3                               # the partner that keeps today's topic names (graph_attach.ATTACH_DRONE_ID)
+PARTNER_GO_TOPIC = '/runner/partner_go'
+LAST_PROVEN = 'last_proven'             # OPERATOR_GIVE_UP: the partner proven last
+
+
+def release_topic(d, num_drones, quad4=QUAD4):
+    """RELEASE's joint: a carrier's tether weld /drone_<d>/detach, a reserved partner's ring weld (QUAD4's /payload/detach,
+    another partner's /drone_<d>/payload/detach, as the world names them)."""
+    if d < num_drones:
+        return f'/drone_{d}/detach'
+    return '/payload/detach' if d == quad4 else f'/drone_{d}/payload/detach'
+
+
+def partner_go_topic(d=None, quad4=QUAD4):
+    """PARTNER_GO's start gate for partner d: QUAD4's (or no drone) /runner/partner_go, another partner's under its own
+    /drone_<d>/ (partner_mission refuses a second instance's start gate outside its drone's topics)."""
+    return PARTNER_GO_TOPIC if d is None or d == quad4 else f'/drone_{d}{PARTNER_GO_TOPIC}'
+SHARED_TOPICS = ('/payload/', '/pickup/')
+OUR_ROOT_TOPICS = ('/magnet/', '/magnet_tip_pose', '/partner/')
+
+
+def instance_topic(topic, d, quad4=QUAD4):
+    """Today's (QUAD4's) name of a partner topic -> partner d's (the mdc_424 contract): ours /drone_3/x -> /drone_<d>/x,
+    /magnet/x, /magnet_tip_pose, /partner/x -> /drone_<d>/...; his /tejen/x -> /tejen_d<d>/x and every other absolute
+    name of his (/join_planner/x, /runner/x, ...) under /tejen_d<d>; the shared ring and object unchanged."""
+    if d == quad4 or topic.startswith(SHARED_TOPICS):
+        return topic
+    if topic.startswith(f'/drone_{quad4}/'):
+        return f'/drone_{d}/' + topic[len(f'/drone_{quad4}/'):]
+    if topic.startswith(OUR_ROOT_TOPICS):
+        return f'/drone_{d}' + topic
+    if topic.startswith('/tejen/'):
+        return f'/tejen_d{d}/' + topic[len('/tejen/'):]
+    return f'/tejen_d{d}' + topic
+
+
 def mocap_tilt_arg(arg):
     """MOCAP_TILT arg -> (drone id, deg, seconds, ramp_s): 'id deg [seconds [ramp_s]]' (default 1 s, a step)."""
     parts = str(arg if arg is not None else '').split()
@@ -330,8 +404,17 @@ class Event:
             raise ValueError('LAUNCH needs "package launch_file [k:=v ...]" as its arg')
         if self.do == 'WAIT_LIFT':
             wait_lift_arg(self.arg)
-        if self.do in ('WAIT_REWELD', 'WAIT_WELD', 'WAIT_PICKUP_FREE'):
+        if self.do in ('WAIT_WELD', 'WAIT_PICKUP_FREE'):
             wait_reweld_arg(self.arg, self.do)
+        if self.do == 'WAIT_REWELD':
+            wait_reweld_spec(self.arg)
+        if self.do == 'DETACH_SET':
+            self.arg = ','.join(str(d) for d in drone_set_arg(self.arg, 'DETACH_SET'))
+        if self.do in ('PARTNER_GO', 'HIS_LAND') and self.arg is not None:
+            self.arg = ','.join(str(d) for d in drone_set_arg(self.arg, self.do))
+        if self.do == 'OPERATOR_GIVE_UP':
+            last = str(self.arg).strip() == LAST_PROVEN
+            self.arg = LAST_PROVEN if last else ','.join(str(d) for d in drone_set_arg(self.arg, self.do))
         if self.do == 'WAIT_LOG':
             wait_log_arg(self.arg)
         if self.do == 'WAIT_TRAJ':
@@ -563,6 +646,7 @@ class ExperimentConfig:
             bad.append('load_traj fig_8 without fig8_size: since 22 Oct the figure-8 is sized by fig8_size (profile '
                        '0.9), no longer traj_radius; type the size it flies (before 22 Oct it flew traj_radius, '
                        '0.5 untyped)')
+        bad += self._partner_set_problems()
         bad += self._rejoin_problems(knobs)
         bad += self._traj_problems(knobs)
         bad += self._relay_problems(knobs)
@@ -570,6 +654,29 @@ class ExperimentConfig:
             raise ValueError(f'{self.name}: invalid experiment config:\n  '
                              + '\n  '.join(bad))
         return True
+
+    def _partner_set_problems(self):
+        """DETACH_SET names drones of this fleet; PARTNER_GO and WAIT_REWELD 'd<id>' name partners (the reserved
+        drones after the carriers), each with its own instance of his stack."""
+        bad = []
+        partners = range(self.num_drones, self.n_total)
+        for e in self.events:
+            if e.do == 'DETACH_SET':
+                ids = drone_set_arg(e.arg, e.do)
+                if any(d >= self.n_total for d in ids):
+                    bad.append(f'{e!r}: drone ids must be below n_total {self.n_total}')
+            elif (e.do in ('PARTNER_GO', 'HIS_LAND') and e.arg is not None
+                  or e.do == 'OPERATOR_GIVE_UP' and e.arg != LAST_PROVEN):
+                ids = drone_set_arg(e.arg, e.do)
+                if any(d not in partners for d in ids):
+                    bad.append(f'{e!r}: a partner is a reserved drone, {list(partners)}')
+            elif e.do == 'OPERATOR_GIVE_UP' and not len(partners):
+                bad.append(f'{e!r}: no partner to give up')
+            elif e.do == 'WAIT_REWELD':
+                d = wait_reweld_spec(e.arg)[1]
+                if d is not None and d not in partners:
+                    bad.append(f'{e!r}: a partner is a reserved drone, {list(partners)}')
+        return bad
 
     def _rejoin_problems(self, knobs):
         """An ATTACH of a carrier (an id below num_drones) is a departed carrier's rejoin: the planner refuses it

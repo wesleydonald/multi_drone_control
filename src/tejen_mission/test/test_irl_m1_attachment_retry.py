@@ -105,6 +105,9 @@ def _attached_manager(module, *, now=10.0):
     manager.attach_dwell_s = 0.15
     manager.detach_dwell_s = 0.20
     manager.pose_timeout_s = 0.25
+    manager.preloaded_takeoff_attachment_override = False
+    manager.mission_phase = ''
+    manager.last_phase_time = None
     manager.tip_contact_position = np.zeros(3)
     manager.pickup_contact_position = np.zeros(3)
     manager.tip_contact_velocity = np.zeros(3)
@@ -116,6 +119,86 @@ def _attached_manager(module, *, now=10.0):
     manager.publish_elrs = lambda force=False: None
     manager.get_logger = lambda: _Logger()
     return manager
+
+
+def test_preloaded_takeoff_overrides_setup_loss_without_releasing_magnet(monkeypatch):
+    module = _import_manager_module_without_ros()
+    manager = _attached_manager(module, now=10.)
+    manager.preloaded_takeoff_attachment_override = True
+    manager.assumed_attached = False
+    manager.attachment_loss_latched = True
+    manager.pickup_contact_position = np.array([.7, 0., 0.])
+    monkeypatch.setattr(module.time, 'time', lambda: 10.)
+    phase = module.String()
+    phase.data = 'TAKEOFF'
+    manager.phase_cb(phase)
+    manager.timer_cb()
+    assert manager.magnet_on and manager.assumed_attached
+    assert not manager.attachment_loss_latched
+    assert manager.attached_pub.messages[-1].data
+    assert 'preloaded_takeoff_override=True' in manager.state_pub.messages[-1].data
+    # An explicit OFF cannot be defeated by the TAKEOFF phase assumption.
+    command = module.String()
+    command.data = 'OFF'
+    manager.command_cb(command)
+    manager.timer_cb()
+    assert not manager.assumed_attached
+
+
+def test_takeoff_override_exit_restores_original_airborne_loss_detection(monkeypatch):
+    module = _import_manager_module_without_ros()
+    manager = _attached_manager(module, now=20.)
+    manager.preloaded_takeoff_attachment_override = True
+    manager.assumed_attached = False
+    manager.attachment_loss_latched = True
+    now = [20.]
+    monkeypatch.setattr(module.time, 'time', lambda: now[0])
+    phase = module.String()
+    phase.data = 'TAKEOFF'
+    manager.phase_cb(phase)
+    manager.timer_cb()
+    phase.data = 'TRANSIT_TO_DROP_POINT'
+    manager.phase_cb(phase)
+    manager.timer_cb()
+    assert manager.assumed_attached  # Fresh close geometry maintains the load.
+    assert 'preloaded_takeoff_override=False' in manager.state_pub.messages[-1].data
+    manager.pickup_contact_position = np.array([.13, 0., 0.])
+    manager.timer_cb()
+    now[0] += .21
+    manager.last_tip_time = manager.last_pickup_time = now[0]
+    manager.timer_cb()
+    assert not manager.assumed_attached and manager.attachment_loss_latched
+
+
+def test_stale_takeoff_phase_cannot_keep_override_active(monkeypatch):
+    module = _import_manager_module_without_ros()
+    manager = _attached_manager(module, now=30.)
+    manager.preloaded_takeoff_attachment_override = True
+    now = [30.]
+    monkeypatch.setattr(module.time, 'time', lambda: now[0])
+    phase = module.String()
+    phase.data = 'TAKEOFF'
+    manager.phase_cb(phase)
+    manager.timer_cb()
+    now[0] += .26
+    manager.timer_cb()  # Old phase and poses start the existing loss dwell.
+    assert 'preloaded_takeoff_override=False' in manager.state_pub.messages[-1].data
+    now[0] += .21
+    manager.timer_cb()
+    assert not manager.assumed_attached
+
+
+def test_default_manager_does_not_override_a_lost_load_during_takeoff(monkeypatch):
+    module = _import_manager_module_without_ros()
+    manager = _attached_manager(module, now=40.)
+    manager.assumed_attached = False
+    manager.attachment_loss_latched = True
+    monkeypatch.setattr(module.time, 'time', lambda: 40.)
+    phase = module.String()
+    phase.data = 'TAKEOFF'
+    manager.phase_cb(phase)
+    manager.timer_cb()
+    assert not manager.assumed_attached and manager.attachment_loss_latched
 
 
 def test_irl_config_uses_one_detach_dwell_without_extra_thresholds():

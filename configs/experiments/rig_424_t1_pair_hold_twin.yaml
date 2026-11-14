@@ -1,0 +1,114 @@
+name: rig_424_t1_pair_hold_twin
+description: 'Exploratory twin check T1 of the 4 -> 2 -> 4 (results/analysis/424_design_2026-11-13/rig_and_twin.md 4.3; one
+  run, judged after the run, no bars): the pair alone, on today''s code with our planner only (mode dissipative, no partner
+  stack). The square 0/3/6/9 on the M2A ring with 1 m rods (four_rigid_ground_rig_L100: drones 0-3 on plates 0/9/6/3, typed
+  0,270,180,90 cw) lifts to 1.0 m in hover; DETACH 1 (plate 9, announced, 3 s unload) leaves the T 0/3/6; 7 s later DETACH 3
+  (plate 3) leaves the pair 0/6 (drones 0 and 2, QUAD1/QUAD2 on the rig); 30 s on the pair from its resize; LAND (the freed
+  quads land alone). The pair''s rules as configs/rig/attach_424_pair.yaml: drop_gap_deg 200, min_survivors 2, int_k_xy 0,
+  drop tilt 55, the 15 cm loss check. Read: the T and pair transitions'' tilt peaks, the pair''s lean about the 0-6 line,
+  its throttle against the 0.95 cap, the ring''s sink. Falsifier: a drop, an abort, or the pair not carrying the ring for
+  30 s. Score: tools/score_424.py <run>.'
+world: four_rigid_ground_rig_L100.sdf
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2,3
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    mode: dissipative
+    num_drones: 4
+    attach_azimuths_deg: 0,270,180,90
+    load_traj: hover
+    target_z: 1.0
+    lift_ramp_vel: 0.15
+    creep_vel: 0.2
+    pretension_s: 3.0
+    start_taut: false
+    cable_len: 1.0
+    attach_radius: 0.225
+    attach_z: 0.02
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    load_mass: 0.86
+    drone_mass: 0.55
+    measure_rod_len: true
+    rod_tol_frac: 0.25
+    rod_spread_m: 0.08
+    z_taut_gate: 0.9
+    z_i_gate: 0.25
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    reconfig_mode: ocp
+    thrust_ratio: 35.2
+    takeoff_thrust_ratio: 0.0
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    throttle_max: 0.95
+    kt_trim: false
+    cable_notch_hz: 5.3
+    pos_limit_m: 1.8
+    detach_unload_s: 3.0
+    detach_detect_m: 0.15
+    drop_on_loss: true
+    drop_gap_deg: 200.0
+    min_survivors: 2
+    drop_tilt_deg: 55.0
+    int_k_xy: 0.0
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    sim_pack_v0: 23.8
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 4
+    detach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 4
+  n_total: 4
+timing:
+  duration_s: 300.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: DETACH              # plate 9 (QUAD4's plate on the rig), announced: the square -> the T 0/3/6
+  arg: 1
+- t: 27.0
+  do: DETACH              # plate 3, 7 s later: the T -> the pair 0/6
+  arg: 3
+- t: 28.0
+  do: WAIT_LOG            # the pair's resize; LAND is timed from it
+  arg: 60 DETACH drone 4 \(/drone_3\) \(OCP resize\)
+- t: 58.0
+  do: LAND                # 30 s on the pair
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos: [2.0, -4.6, 2.9]
+      look_at: [0.0, 0.0, 1.1]
+      hfov_deg: 66.0
+      size: [1280, 720]

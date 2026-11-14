@@ -278,3 +278,14 @@ time the tilt stays under 10 deg for 1 s.
   is what survives the T, and that the resized T's steady tilt is worth a look (the rider's planned share).
 - Caveat as stated before the runs: rigid hinged rods may exaggerate the T's roll against the rig's cables.
 
+
+## The claim re-fly on the earlier quadrotor masses (7 Nov, R4150-R4193; feed F087)
+Wesley 6 Nov ~11:35: X1 re-flies on the masses of before 4 Nov (the final-mass X1, R3821-R3906 / F059 / F060, stays
+recorded). 44 runs, one tree (section-5 hash 057e999eadce, diff_sha256 cc4c1a017289: bf52a8a plus the old-mass worlds,
+tools and an unused X8 twin config; no src/ change), no void, every release detected in 0.27-0.38 s, nothing dropped.
+Against this card's bars (set by the lab chat before any run; judged after the run, Wesley 7 Nov F086): h4, h8 B1 and B2
+FALSIFIED, B4 holds; f4 B1 / B2 FALSIFIED, B4 holds; h4p115 B1 FALSIFIED, B4 misses by T6 5.4-5.5 s > 5 (the frozen t_level
+rule holds); sqTnoxy U1 and U2 CONFIRMED, U5 misses in R4181 (T6 5.3 s). The resize leaves the transient unchanged and the
+ring more level afterwards (four quads 0.03-0.06 vs 0.21 deg; the square to a T 0.6 vs 2.2 deg, dip 97-99 vs 107-108 mm).
+34 solver switches: no first, next or in-1-s solve failed. Scores: results/analysis/x1_oldlinks_2026-11-07.json (+ _bars,
+_switches). R4178's planner read-back file is missing (its run times show the 2 s delay). Written 17:35.

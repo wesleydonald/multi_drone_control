@@ -50,9 +50,9 @@ def test_pending_brake_installation_cannot_publish_or_launch_a_replacement():
 def test_ready_completion_precedes_attitude_update_and_preserves_admission():
     source = (Path(__file__).resolve().parents[3] /
               'src/tejen_dynamic_planner/src/transfer_backend_node.cpp').read_text()
-    state = source.split('    void stateCallback(', 1)[1].split('    void targetCallback(', 1)[0]
-    # the fork's stateCallback predates his ego-orientation sample: the drain precedes the kinematics update
-    assert state.index('pollPlannerFuture();') < state.index('latest_state_ = kinematics_.update(')
+    state = source.split('    void stateCallback(', 1)[1].split('    void latchBodyOrientation()', 1)[0]
+    assert state.index('pollPlannerFuture();') < state.index('latest_body_orientation_ = orientation.normalized();')
+    assert 'world_->setEgoBodyOrientation' not in state
     replan = source.split('    void replanTimer()', 1)[1].split('    void referenceTimer()', 1)[0]
     assert 'std::packaged_task<PlannerOutcome()>' in replan
     assert replan.index('(*task)();') < replan.index('completion->notify()')
@@ -70,6 +70,222 @@ def recovery(reference=None):
     result.begin(request_id="a" * 32, reference=hold() if reference is None else reference,
                  now_s=10., ros_time_ns=1_000_000_000_000)
     return result
+
+
+def preloaded_prepare_adapter(*, preloaded=True, measured_offset=(0., 0., -.01)):
+    """Recorded S25 geometry: prepare began while climbing from Z1.179 to1.35."""
+    module = importlib.import_module('tejen_mission.online_join_planner')
+    planner = object.__new__(module.OnlineJoinPlanner)
+    planner.preloaded_navigation = preloaded
+    planner.phase = module.MissionPhase.TAKEOFF
+    planner.c1f2_cpp_authority_enabled = True
+    planner.c1f2_initial_prepare_active = lambda: True
+    planner.c1f2_handoff_ready = False
+    planner.c1f2_prepare_active = True
+    planner.c1f2_prepare_settled = True  # Dwell previously earned at the old anchor.
+    planner.c1f2_prepare_settle_start_time = 9.7
+    planner.c1f2_prepare_lift_end_position = np.array([-1.459053, 1.412015, 1.178810])
+    planner.c1f2_prepare_hold_position = planner.c1f2_prepare_lift_end_position.copy()
+    planner.c1f2_prepare_max_lift_drift_m = .15
+    planner.c1f2_prepare_settle_speed_mps = .08
+    planner.c1f2_prepare_revoke_speed_mps = .08
+    planner.c1f2_prepare_settle_acceleration_mps2 = .5
+    planner.c1f2_prepare_settle_dwell_s = .3
+    endpoint = np.array([-1.430279, 1.394178, 1.35])
+    planner.drone_position = endpoint + measured_offset
+    planner.drone_velocity = np.zeros(3)
+    planner.drone_acceleration = np.zeros(3)
+    planner.c1f2_reference_recovery = recovery(hold(endpoint))
+    planner.c1f2_authority_grant_pending = False
+    planner.experiment_start_requested = False
+    planner.object_attached = True
+    planner.input_timeout_s = .5
+    planner._test_now = 10.
+    planner._physical_now_s = lambda: planner._test_now
+    planner.last_object_attached_time = planner._test_now
+    planner.dt = 1/30
+    planner.get_logger = lambda: SimpleNamespace(warning=lambda *args, **kwargs: None)
+    planner.transition_to = lambda *args: pytest.fail('no START or current authority grant')
+    return planner
+
+
+def test_preloaded_prepare_uses_commanded_hold_and_resets_dwell_only_once():
+    planner = preloaded_prepare_adapter()
+    expected = planner.c1f2_reference_recovery.continuation
+    actual = planner.select_c1f2_authority_reference(None)
+    for field in ('positions', 'velocities', 'accelerations'):
+        np.testing.assert_array_equal(getattr(actual, field), getattr(expected, field))
+    np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position,
+                                  expected.positions[0])
+    assert planner.c1f2_prepare_drift_m == pytest.approx(.01)
+    assert not planner.c1f2_prepare_settled
+    assert planner.c1f2_prepare_settle_start_time is None
+    planner.update_preloaded_navigation()
+    assert planner.c1f2_prepare_settle_start_time == 10.
+    # Subsequent reference ticks must not keep resetting the existing dwell.
+    planner._test_now += .31
+    planner.last_object_attached_time = planner._test_now
+    planner.select_c1f2_authority_reference(None)
+    planner.update_preloaded_navigation()
+    assert planner.c1f2_prepare_settled
+    assert not planner.c1f2_handoff_ready  # Settling never invents C++ authority.
+    planner.select_c1f2_authority_reference(None)
+    assert planner.c1f2_prepare_settled
+
+
+def settled_pending_prepare(*, revoke_speed=.10):
+    planner = preloaded_prepare_adapter()
+    planner.c1f2_prepare_lift_end_position = planner.c1f2_reference_recovery.continuation.positions[-1].copy()
+    planner.c1f2_prepare_hold_position = planner.c1f2_prepare_lift_end_position.copy()
+    if revoke_speed is not None:
+        planner.c1f2_prepare_revoke_speed_mps = revoke_speed
+    planner.c1f2_authority_grant_pending = True
+    planner.c1f2_cpp_authority_active = False
+    planner.actions = []
+    planner.cancel_c1f2_reference_recovery = lambda: planner.actions.append('cancel')
+    planner.c1f2_publish_authority = lambda value: planner.actions.append(('authority', value))
+    planner.c1f1_publish_shadow_enable = lambda value: planner.actions.append(('enable', value))
+    return planner
+
+
+def test_pending_handoff_speed_hysteresis_preserves_reference_and_grant():
+    planner = settled_pending_prepare()
+    expected = planner.c1f2_reference_recovery.continuation
+    anchor = planner.c1f2_prepare_lift_end_position.copy()
+    for speed in (.079, .081, .089, .08, .099, .10):
+        planner.drone_velocity = np.array([speed, 0., 0.])
+        actual = planner.select_c1f2_authority_reference(None)
+        assert planner.c1f2_prepare_settled and planner.c1f2_authority_grant_pending
+        assert not planner.c1f2_handoff_ready  # retained request is NOT granted authority
+        assert planner.actions == []
+        for field in ('positions', 'velocities', 'accelerations'):
+            np.testing.assert_array_equal(getattr(actual, field), getattr(expected, field))
+        np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position, anchor)
+
+
+@pytest.mark.parametrize('reason', ['speed', 'drift', 'acceleration', 'legacy'])
+def test_pending_handoff_still_revokes_real_motion_or_legacy_threshold(reason):
+    planner = settled_pending_prepare(revoke_speed=None if reason == 'legacy' else .10)
+    if reason == 'speed': planner.drone_velocity = np.array([.100001, 0., 0.])
+    if reason == 'legacy': planner.drone_velocity = np.array([.081, 0., 0.])
+    if reason == 'drift': planner.drone_position = planner.c1f2_prepare_lift_end_position + [.151, 0., 0.]
+    if reason == 'acceleration': planner.drone_acceleration = np.array([.501, 0., 0.])
+    planner.select_c1f2_authority_reference(None)
+    assert not planner.c1f2_prepare_settled and not planner.c1f2_authority_grant_pending
+    assert planner.actions == ['cancel', ('authority', False), ('enable', False)]
+    assert planner.c1f2_prepare_settle_start_time is None
+
+
+def test_retention_band_cannot_earn_initial_settlement_or_stale_load_dwell():
+    planner = settled_pending_prepare()
+    planner.c1f2_prepare_settled = False
+    planner.c1f2_prepare_settle_start_time = None
+    planner.c1f2_authority_grant_pending = False
+    for now in (10., 10.4, 11.):
+        planner._test_now = planner.last_object_attached_time = now
+        planner.drone_velocity = np.array([.085, 0., 0.])
+        planner.select_c1f2_authority_reference(None)
+        planner.update_preloaded_navigation()
+        assert not planner.c1f2_prepare_settled
+        assert planner.c1f2_prepare_settle_start_time is None
+    planner.drone_velocity[:] = 0.
+    planner.last_object_attached_time = 0.
+    planner.update_preloaded_navigation()
+    assert not planner.c1f2_prepare_settled
+    assert planner.c1f2_prepare_settle_start_time is None
+    for now in (11., 11.31):
+        planner._test_now = planner.last_object_attached_time = now
+        planner.update_preloaded_navigation()
+    assert planner.c1f2_prepare_settled and not planner.c1f2_handoff_ready
+
+
+def test_stale_load_cannot_bridge_unfinished_settle_dwell():
+    planner = settled_pending_prepare()
+    planner.c1f2_prepare_settled = False
+    planner.c1f2_prepare_settle_start_time = 9.9
+    planner.last_object_attached_time = 0.
+    planner.update_preloaded_navigation()
+    assert planner.c1f2_prepare_settle_start_time is None
+    planner._test_now = planner.last_object_attached_time = 11.
+    planner.update_preloaded_navigation()
+    assert not planner.c1f2_prepare_settled
+    assert planner.c1f2_prepare_settle_start_time == 11.
+    planner._test_now = planner.last_object_attached_time = 11.31
+    planner.update_preloaded_navigation()
+    assert planner.c1f2_prepare_settled
+
+
+def test_main_input_loss_resets_only_unfinished_navigation_dwell():
+    source = (Path(__file__).resolve().parents[1]/'tejen_mission/online_join_planner.py').read_text()
+    loop = source[source.index('            if not self.inputs_ready():', source.index('    def timer_callback(')):] if '    def timer_callback(' in source else source[source.index('            if not self.inputs_ready():'):]
+    blocks = loop.split('            if not self.inputs_ready():')[1:]
+    assert len(blocks) == 2
+    for block in blocks:
+        pause = block[:block.index('                return')]
+        assert "getattr(self, 'preloaded_navigation', False)" in pause
+        assert 'not self.c1f2_prepare_settled' in pause
+        assert 'self.c1f2_prepare_settle_start_time = None' in pause
+        assert 'self.c1f2_prepare_settled = False' not in pause
+
+
+@pytest.mark.parametrize('value', [None, .10, .079, float('nan'), float('inf')])
+def test_revoke_parameter_validation_uses_actual_initialization(value):
+    import textwrap
+    source = (Path(__file__).resolve().parents[1]/'tejen_mission/online_join_planner.py').read_text()
+    start = source.index('        self.c1f2_prepare_revoke_speed_mps =')
+    end = source.index('        self.c1f2_prepare_settle_acceleration_mps2 =', start)
+    planner = SimpleNamespace(c1f2_prepare_settle_speed_mps=.08,
+        declare_parameter=lambda name, default: SimpleNamespace(value=default if value is None else value))
+    if value is not None and (not np.isfinite(value) or value < .08):
+        with pytest.raises(ValueError): exec(textwrap.dedent(source[start:end]), {'self': planner, 'np': np})
+    else:
+        exec(textwrap.dedent(source[start:end]), {'self': planner, 'np': np})
+        assert planner.c1f2_prepare_revoke_speed_mps == (.08 if value is None else value)
+
+
+def test_preloaded_prepare_retains_real_drift_limit_and_does_not_chase_measurement():
+    planner = preloaded_prepare_adapter(measured_offset=(.151, 0., 0.))
+    endpoint = planner.c1f2_reference_recovery.continuation.positions[0].copy()
+    for now in (10., 10.31, 11.):
+        planner._test_now = planner.last_object_attached_time = now
+        planner.select_c1f2_authority_reference(None)
+        planner.update_preloaded_navigation()
+        np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position, endpoint)
+        assert planner.c1f2_prepare_drift_m == pytest.approx(.151)
+        assert not planner.c1f2_prepare_settled
+        assert planner.c1f2_prepare_settle_start_time is None
+
+
+def test_legacy_prepare_retains_measured_anchor():
+    planner = preloaded_prepare_adapter(preloaded=False)
+    original = planner.c1f2_prepare_lift_end_position.copy()
+    planner.select_c1f2_authority_reference(None)
+    np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position, original)
+    assert planner.c1f2_prepare_drift_m > .15
+    assert not planner.c1f2_prepare_settled
+
+
+def test_preloaded_prepare_finishes_the_existing_climb_before_adopting_hold():
+    planner = preloaded_prepare_adapter()
+    initial_anchor = planner.c1f2_prepare_lift_end_position.copy()
+    t = np.arange(61) / 30.
+    s = t / 2.
+    climb = hold(planner.c1f2_reference_recovery.continuation.positions[0])
+    climb.positions[:, 2] -= .17 * (1 - (10*s**3 - 15*s**4 + 6*s**5))
+    climb.velocities[:, 2] = .17/2 * (30*s**2 - 60*s**3 + 30*s**4)
+    climb.accelerations[:, 2] = .17/4 * (60*s - 180*s**2 + 120*s**3)
+    planner.c1f2_reference_recovery = recovery(climb)
+    actual = planner.select_c1f2_authority_reference(None)
+    assert planner.c1f2_reference_recovery.hold_position is None
+    np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position, initial_anchor)
+    for field in ('positions', 'velocities', 'accelerations'):
+        np.testing.assert_array_equal(getattr(actual, field), getattr(climb, field))
+    planner._test_now = 12.1
+    actual = planner.select_c1f2_authority_reference(None)
+    np.testing.assert_array_equal(planner.c1f2_prepare_lift_end_position, climb.positions[-1])
+    np.testing.assert_array_equal(actual.positions, np.tile(climb.positions[-1], (61, 1)))
+    np.testing.assert_allclose(actual.velocities, 0.)
+    np.testing.assert_allclose(actual.accelerations, 0.)
 
 
 def status(result, *, epoch=3, prepared=False, granted=False, stamp_ns=0,

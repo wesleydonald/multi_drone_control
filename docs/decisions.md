@@ -823,3 +823,848 @@ DECIDED 2026-11-05  (Wesley ~18:00) No frozen bars on the rig either: "it makes 
 FINDING 2026-11-05  (an agent, ~18:30; scratchpad k1ob/) RIG-1105-k1ob_2's ring jerk: the bigger object (~0.15 kg) fell 0.53 m into the net and hit 14 cm off centre at ~2.8 m/s: the plate 7 and plate 3 magnets were pulled off (~16 N on plate 7 against their ~10 N hold), the ring swung down from plate 11 and that magnet peeled off too; our drop at 60 deg came after. k1d's 60 g object (same fall, 11 cm off centre) held. For the rig: never drop the bigger object into the net with these magnets; the small object needs no change (Thu 12 Nov's k1z, ring at 1.2 m, drop_height 0.28: about k1d's impulse or less).
 FINDING 2026-11-05  (~18:37, planner log vs bag, scratchpad pose_lag_day.py) The planner's late carrier poses recur: of 19 rig flights on 4-5 Nov, nr9m_4 (4 Nov: one carrier, ~680 ms) and sq8_2 (5 Nov: all three carriers, 610-670 ms; the false loss in LAND) had a carrier's poses 0.6-0.7 s behind the bag, while the ring and QUAD4 stayed ~0.15 s; every other flight had every body within 60-150 ms. The bag (another subscriber) had them on time; the planner's subscriptions are depth-5 RELIABLE. Cause not found (a candidate: a RELIABLE reader blocked on a lost sample's repair). OPEN for after the claim batch's freeze: look at the planner's pose QoS (best effort for mocap) and its receive path; meanwhile the loss check stays at 15 cm on the rig lines.
 DECIDED 2026-11-05  (Wesley ~19:40) (1) The ring-low landing rule (ring_low_land_m/_s, 0.15 m / 5 s proposed 4 Nov) stays OFF on the rig. (2) The planner's late-pose fix (FINDING 5 Nov ~18:37: the pose QoS / receive path) is left until after hand-in; the rig keeps the 15 cm loss margin. (3) The funnel version (v1/v2) on 6 Nov. (4) "You may as well freeze the code now if its ready, we dont need to be so strict on the freeze, lets just get the results": commit the tree the claim batch flies (no push).
+DECIDED 2026-11-05  (Wesley ~21:48: "Ok skip match_dwell") No match_dwell 1.0 try on the rig: his MATCH dwell stays 0.5 s (typed since 29 Oct). Why (the lab chat's recommendation after RIG-1105-joins): QUAD4 was already still before its descents (0.05 m/s over the last second), a 1 m pendulum (~2 s period) does not settle in another half second, and the misses came from the 8 cm match window and the magnet's swing adding up, which the funnel addresses; one change on Thursday's triangle try (nrtf). Thursday's nrt line and both copies of rig_nrt.sh removed (Wednesday's at 22:56, found by a review); desk check 16 OK (22:56). Closes the match_dwell half of OPEN 2026-11-05 (d); the funnel half stays open (Wesley, Fri 6 Nov).
+DECIDED 2026-11-05  (Wesley ~21:55, X4 on the frozen tree) X4 is reported as flown: R3772/R3773 (x4_relay_30min_v3_norod) did 26/26 swaps with no fault, mission 2109-2118 s (R1 now holds), R2-R6 hold, but R7 MISSES: every pack flew 695-707 s against B 600 s. Cause (measured): the rejoin takes 35 s median against 18 s on 3 Nov (R3519/R3564): the twin's hardware links of 4 Nov 23:15 put the magnet's 0.038 kg at the cable end (~3x the swing inertia of the old 0.040 kg rod, same joint damping), so the end settles on its plate more slowly in the end hold (the short relay shows it too: R3741 vs R3483). The miss stays recorded with its cause; no swing-damping or weld-gate change, no re-fly. The thesis says a 35 min mission with 26 swaps on ~12 min packs (10 min packs would need faster swaps or more quads). Rejoin times in the other chunks (X2, X3, X11 rejoin) will show the same slower rejoin.
+CLOSED  2026-11-05  (the lab chat, ~23:00, after a read-only audit of decisions against the defaults; nothing new decided here, each OPEN line was settled by a later line that never closed it) 22 Oct OPEN "the carriers' mocap velocity filter slope" -> DECIDED 28 Oct (slope on every carrier, both sides; CLAUDE.md). 29 Oct OPEN "type the debounce on Tejen's descent restart" -> typed on every attach script since (descent_debounce 1.0, descent_abort_xy 0.10). 29 Oct OPEN "the 2-quad baselines B2 on 0.86 kg, or skip" -> DECIDED 30 Oct 13:10 (the 28 Oct pair flights). 30 Oct OPEN "the attach's gates after the descent" -> the contact radius loosened 4 Nov, K 4 Nov, tip_skip_repeats / comotion_speed_window_s 0.5 / contact_give_up_s 120 typed on every attach script. 30 Oct OPEN "h3tw, plan_w_pos_scale 2.0" -> moot: never flown, not on any later sheet (corner cutting closed 18 Oct). 30 Oct OPEN "the 4-quad T1 streams 9 bodies" -> the Wed 11 four-quad T1 streams 7 (rig_t1_q4.sh). 30 Oct OPEN "does the heave go with the delay gone?" -> FINDING 5 Nov: the heave was a Motive recording (fm9y_2 clean once stopped). 30 Oct ~14:00 OPEN "the 1.15 kg ring's attach_z" -> closed by the 30 Oct line that says so. 4 Nov OPEN "four proposals from 4 Nov's logs" -> (1) DECIDED 4 Nov (contact radius stays 0.025), (2)(3) BUILT 4 Nov, (4) CORRECTION 4 Nov. 4-5 Nov PROPOSED "the ring-low gate's numbers" -> DECIDED 5 Nov: stays OFF on the rig (Wesley); the twin default stays off (no decision to adopt it).
+OPEN    2026-11-06  For Wesley (morning), from the 5 Nov night reviews (docs/reports/reviews_2026-11-05/; lab chat's recommendation first): (1) QUAD4's tracker gets the carriers' drop rule (card docs/experiments/2026-11-06_quad4_tracker_drop_rule.md; a gate change: critic or waiver; build after the last claim chunk starts, before Wed 11). (2) The thesis headline: the real-world attach and detach first with their denominators (1 re-attach caught of 43 descents, 1 attach from the mat, 6 of 15 pickups proven), composition at scale second, X1 as a mechanism result (its B1/B2 falsified). (3) Wednesday's order: one plain four-carrier hover LAND before the claim's first flight, and rel right after the re-hang. (4) The 0.86 kg ring on 1 m cables named "Setup 3" in the thesis. (5) The catch radius stated as flown (rig confirmation 25 mm; the twin's weld 10 mm), not 45 mm. (6) The funnel, v1 (recommended) or v2. Also for the record, no rush: the 22 dead switches (review C, section 3a) deleted after hand-in; WP7 (fold our planner into mpc_planner, 14 Oct) withdrawn; z_i_max 0.3 recorded as flown since 4 Oct (decisions.md said 0.15); the rel line's tip_detect_m 0.04 on the rig (no line approves it).
+DECIDED 2026-11-06  (Wesley, the morning of 6 Nov, the funnel; closes the funnel half of OPEN 2026-11-05 (d) and item (6) of OPEN 2026-11-06) He prints two: v2 (mouth 174 x 144 mm, 45 deg wall, 75 mm tall, 1.6 mm across the wall, a 15 mm round where the cone meets the base, a 2 mm lead-in, four ribs; 93 g in PETG) and v3 (v1's mouth 214 x 164 mm at 45 deg, 97 mm tall, reinforced less for its weight: 1.2 mm wall, the same rounds, two radial ribs; 97 g). cad/funnel/funnel.py VARIANTS; files in ~/Downloads/funnel/. By geometry on the 24 plate-9 descents of 4-5 Nov (results/analysis/rig_joins_2026-11-04_05/funnel_catch.md): into the mouth / disc fully inside v2 20 / 11, v3 22 / 15. The funnel's weight sits on plate 9 (carriers 7 and 11 carry ~half each with QUAD4 away); no ring-mass change (Wesley 5 Nov).
+CORRECTION 2026-11-06  (the X4 reviewer, ~10:00; registry R3772c2) Of DECIDED 2026-11-05 ~21:55 "X4 on the frozen tree": its numbers and verdicts stand, but (1) its "R2-R6 hold" is R2, R3, R5, R6 hold and R4 not confirmed (R3772c); (2) the stated mechanism is wrong: the old twin link already carried a 0.035 kg magnet at the ring end, and the swing inertia about the pivot fell (0.048 -> 0.039 kg m2), not tripled; the slower return is the link change of 4 Nov ~23:15 by elimination only (the return code, the weld filter and int_k_xy did not change), mechanism not established; (3) the worse 7-carrier laps and release tilts follow the massless plan (Wesley 4 Nov ~23:00), not the slower return; (4) the relays fly the 0.9 kg ring. Wesley's call (report as flown) is unaffected.
+FINDING 2026-11-06  (~10:24, exploratory A/B R3907/R3908; feed F058) The slower returns of the final simulation (X3, X4; 35-37 s against 17 s) come from the twin's model change of 4 Nov ~23:15 (cable 0.075 -> 0.040 kg, airframe 0.475 -> 0.510, each drone 0.55 kg), not from the 4-5 Nov code: on the frozen code the 4 Nov models return in 16.6 s, the final ones in 37.0 s. Mechanism not identified. Corrects the cause lines of CORRECTION 2026-11-06 (X4 reviewer: "by elimination") and R3779c ("not established"). For Wesley: report as flown (recommended; the final models are the hardware's), or look for a faster end hold (a change to the return, a critic, and a re-fly of every return claim before the simulation freeze).
+DECIDED 2026-11-06  (Wesley ~10:30, after the A/B R3907/R3908: "use the old sim hardware code", then "only claims with returns, no explanation needed") The simulation claims WITH RETURNS re-fly on the quadrotor masses of before 4 Nov (cable 0.040 + magnet 0.035 kg on a 0.475 kg airframe; each drone 0.55 kg): X4 (5 runs), X3 with its bases (32), X3b's two chains (4), X2 (6), the rejoin cells (8): 55 runs, configs/experiments_oldlinks/ (the same names, world -> *_oldlinks.sdf), batches configs/batches/oldlinks1106_*.txt. The worlds and drone models come from the same generator with the old masses (tools/make_oldlink_worlds.py; byte-identical to 9f20f8b's for the worlds that existed then). Every other claim (X1, X8, 4.1/4.2, the joins, U, Quan, the gap) stays on the final models. The new-model runs of X3/X3b/X4 (R3772-R3820) stay in the registry as the recorded comparison. The thesis does not explain the two mass splits (Wesley).
+DECIDED 2026-11-06  (Wesley ~11:35, after X1's reviewer: the square-to-T cell settled 0.6 vs 2.2 deg on the earlier masses and the 30 Oct tree, 1.74 vs 1.80 now) X1 also re-flies on the earlier masses: its 44 runs (configs/batches/oldlinks1106_4_x1.txt, staged in ~/mdc_overnight/x1_oldlinks_stage/ and installed by ~/mdc_overnight/claim1106_x1old.sh after the running batch, so the running chunks' recorded diffs stay one tree), with two more *_oldlinks worlds (four_rigid_ground_rig_3915_L100, its _p115). The new-mass X1 (R3821-R3906, F059/F060) stays in the registry.
+DECIDED 2026-11-06  (Wesley ~14:20, the laptop at 1.5 GB free: "I dont need replays, any that I want a video for I can just rerun") The batch no longer fetches each run's Gazebo replay (tools/remote/lab_batch.py fetch: --exclude gz_record/; from the next chunk on, the running chunk keeps fetching). The replays already on the laptop (157 runs of 5-6 Nov, 9.0 GB) are Wesley's to delete (he runs the command). Orchestration only: the code that flies is unchanged, but the chunks started after this edit record lab_batch.py in their laptop diff (the one-tree hash moves; noted in the claim batch manifest).
+DECIDED 2026-11-06  (Wesley ~14:30, four answers) (1) QUAD4's tracker gets the carriers' drop rule (card docs/experiments/2026-11-06_quad4_tracker_drop_rule.md; critic WAIVED by Wesley): built and tested in a separate git worktree now (the running batch untouched), unit and launch tests and twin checks, merged after the batch ends, ready for Wed 11. Closes item (1) of OPEN 2026-11-06. (2) The thesis keeps its structure, simulation first then real world; within it the recommended framing: the real-world detach, re-attach and pickup as demonstrations with their counts, X1 as a supporting mechanism result (not a headline), the abstract's re-attach singular with its conditions. Item (2). (3) Wednesday's order stays as written (item (3) closed: no change); Wesley wants to review the plan of the four sessions left (Wed 11, Thu 12, Wed 18, Thu 19), and his supervisor asks to prioritise the results for the combined paper with him and Te-Jen. (4) The thesis names the 0.86 kg ring on 1 m cables "Setup 3", and states the catch radius as flown: 25 mm for the real confirmation, 10 mm in the simulation. Items (4), (5). All items of OPEN 2026-11-06 are now closed (the funnel: DECIDED 6 Nov morning).
+DECIDED 2026-11-06  (Wesley ~14:45, the combined paper with his supervisor and Te-Jen; its Overleaf clone: multi_drone_swung_payload_item_collection_wesley_version/main.tex; the supervisor: prioritise its results) The paper's real-world sections needed from the sessions of 11, 12, 18 and 19 Nov: attach performance and detach performance, each evaluated separately (reliability, settle time, payload swing; static and moving payload), and the application (the full mission in one flight). Te-Jen already has its single-agent path-planning results. (1) The detach is the UNANNOUNCED release (rel: the magnet switched off). (2) The moving case is the orbit with the attach pause (stop, attach, resume): an attach on a moving ring is unlikely to work on the hardware. (3) The application flies the triangle (fm9), with the funnel once printed: the square's catch (sq8_2) looked lucky on the day. (4) Repeats: 5 static and 3 moving per condition.
+DECIDED 2026-11-06  (Wesley ~14:43) The plan of the four sessions (docs/rig/plan_sessions_2026-11-11_to_19.md) is approved as drafted: Wed 11 the triangle all session (rel x5, then the re-attach x5 with the funnel if fitted); Thu 12 relo x3 (the release on the orbit), nro x3, k1z x2; Wed 18 fm9 x3 and the gaps; Thu 19 fm9 on the orbit, video takes, the demo. The 1 m baselines and the square claim leave the plan. Also: if QUAD4 struggles to pick the object up (the other quads' wind in the cage), the drop cases may start with the object already on QUAD4's magnet (his planner's delivery_rejoin mode); and the lab chat works up other ideas to help the attach (hardware or otherwise).
+DECIDED 2026-11-06  (Wesley ~15:05, thesis chat) The thesis keeps three real-world setups, to report thoroughly what was tried: Setup 1 the 0.86 kg M2A ring on 0.55 m cables (until 28 Oct), Setup 2 the 1.15 kg ring on 1 m cables (29-30 Oct, sq6b 4 Nov: too heavy for the platform, the quadrotors near their throttle limit, the T out of thrust, and the batteries flat after one or two flights (Wesley)), Setup 3 the 0.86 kg ring on 1 m cables (from 4 Nov). The thesis's tab:setups, 3.1, 3.3 and 3.4 now name all three; Results reports Setup 2 as tried (one figure-eight, the thrust limit, the batteries, the drop rule caught all four of its drops) and the bigger object's impact on Setup 3 (two magnets pulled off at once). Closes the F053 naming question.
+DECIDED 2026-11-06  (Wesley ~15:20, the sessions' setup; docs/analysis/attach_ideas_2026-11-06.md) (1) Funnel v3 on plate 9 for EVERY flight from Wed 11 (rel included, one setup for the paper), v2 the spare; a 30-45 min bench check at setup (Wednesday's sheet); flown as the only change (Te-Jen's match, dwell and descent as flown). (2) relo flies without the 5 s hold (no params file for it). (3) fm9h (the object held from take-off: drop into the ring, then attach to plate 9; no detach, no pickup) is the application's fallback: fm9 first, fm9h after two fm9 flights that fail at the pickup; the paper says which flew. The spare steel oval and the swing gate (ideas 4, 5) wait for Wednesday's funnel flights.
+DECIDED 2026-11-06  (Wesley ~15:20) With funnel v3 on plate 9 (its inward rim ~11.8 cm from the ring centre), the drops release within 8 cm: `drop_on_arrival_xy:=0.08` typed in rig_k1z.sh, rig_fm9.sh, rig_fm9h.sh, rig_fm9o.sh (was the default 0.12). Why: all three 5 Nov drops released toward plate 9 (+4.1, +9.0, +5.6 cm; QUAD4 arrives from that side), and a 70 mm object released at +9 cm would clip v3's rim.
+BUILT   2026-11-06  (~14:35-15:20, an agent in the worktree .claude/worktrees/agent-aa650a10b71d57ce6, branch worktree-agent-aa650a10b71d57ce6; critic waived by Wesley) QUAD4's tracker gets the carriers' drop knobs: graph_attach.py passes tracker_drop_options (and the now unused tracker_land_options is deleted from real_mode.py); test test_quad4s_tracker_carries_the_carriers_drop_knobs (fails without, passes with); launch tests 157 passed, tracker tests 153, gate --quick PASSED (2195). Twin R3915/R3916 (a carrier released 5 s after the re-weld, drop 55): the planner's own loss check drops the ring before any tilt rule in both, so the fast-upset case is not reproduced in the twin; the fix is in effect (QUAD4's tracker reads drop_on_loss true). R3917 (a normal re-attach with the fix): as R3714, no spurious drop request. To merge into week8 after the batch and X1's old-mass re-fly (Sat), then gate, the desk check, before Wed 11.
+DECIDED 2026-11-06  (Wesley ~15:30: the magnet's wire fitting does not pass v3's 72 mm base; "make the diameter of the base part of v3 2 cm wider, the height ideally 8.5 cm"; then "92 mm base, 2 outer bolts") Funnel v3 now has a 92 mm base (bore radius 46), 85 mm tall, the same 214 x 164 mm mouth at 45 deg (59.5 deg sideways), 91 g; the disc's play is 14 mm. The ring's inner M4 hole (44.6 mm from the plate centre) falls inside the base, so v3 bolts through the two outer holes only (bosses radius 8 mm); each nut pocket opens ~2 mm into the base below 10 mm up (the nut seats on about two thirds of a full seat). cad/funnel/funnel.py VARIANTS v3 (a `bolts` parameter); files in ~/Downloads/funnel/ (funnel_v3.*, funnel_v3_92mm_base.png); Wednesday's sheet updated.
+DECIDED 2026-11-06  (Wesley ~15:40: "85mm is fine for the base" = 85 mm across; "I am using TPU") Funnel v3, printed in TPU: base 85 mm across (bore radius 42.5), 85 mm tall (the mouth trimmed 3.5 mm a side to 207 x 157 mm), the wall kept at 45 deg (59.5 deg sideways): TPU sags on shallower overhangs and its grip needs the steeper wall for the disc to slide (tan 40 = 0.84 against TPU's ~0.5-0.8); the disc's play 10.5 mm; two outer bolts with full nut seats (the inner hole breaks into the base by 0.2 mm); 83.5 g at TPU's 1.21 g/cm3; the inward rim at ~121 mm from the ring centre. Replaces the 92 mm base of ~15:30.
+DECIDED 2026-11-06  (Wesley ~15:55: "can you call it v4?") The TPU funnel with the 85 mm base, 85 mm tall, 207 x 157 mm mouth, two outer bolts and the zip-tie notch (around the net's zip-tie hole, which an 85 mm base would otherwise sit on) is v4 (cad/funnel/funnel.py VARIANTS['v4'], 83 g); v3 is back to its 72 mm base (97 mm tall, PETG, 3 bolts) for the record. v2 and v3 have the 72 mm base the magnet's wire fitting does not pass, so v4 has no spare unless a second is printed. The sheets say v4. By geometry on the 24 plate-9 descents: v4 21 into the mouth, 14 fully inside.
+FINDING 2026-11-06 17:29  One-quad rig tests (RIG-1106-q4f, -q4f_2, VOID): two of Te-Jen's stacks ran at once on QUAD4's
+        radio and `ros2 topic pub --once` reached only the first subscriber (TAKEOFF one controller, DISARM the other): QUAD4
+        flipped 3 s after TAKEOFF and its flying controller stayed armed ~37 s, also while it was picked up. Fixed in the
+        lab chat's scripts (no src/ change): every one-quad script refuses while any flight stack is up, and a bridge
+        (results/rig/2026-11-06/scripts/one_quad_panel_bridge.py, node name fleet_manager) drives his stacks from the RViz
+        ArmPanel (ARM / TAKEOFF / LAND / SPACE = DISARM; DISARM x10 to his controller and a disarmed ELRSCommand to his radio
+        for 2 s). Desk-checked (domain 98). Never `pub --once` to a topic with several subscribers for flight commands.
+CORRECTION 2026-11-06 17:33  (the FINDING of 17:29) QUAD4's flight controller disarmed itself at the flip (CRSF mode AIR ->
+        !ERR*) and refused to arm afterwards (q4f_3, q4f_4): the ~37 s "armed" was our controller's command only; the
+        motors were off. The bridge now shows the FC's mode on the panel and refuses ARM while it reads !ERR (replug).
+DECIDED 2026-11-07 10:10  (Wesley) X3 on the earlier masses: "Those results are fine, you can just change the bars because they
+        are arbitrary". The X3 card's bars (N4, J's 20 s, the b2b overlap, P) were frozen 23 Oct, before his rule of 2 / 5 Nov
+        (no bars unless compared with another paper). Recorded openly: the card keeps its bars and the misses as scored
+        (R3922c, F065 / F066), and Wesley's judgement after the runs replaces the verdicts: X3's results are ACCEPTED (judged
+        after the run). The thesis shows the numbers, not the bars.
+DECIDED 2026-11-07 10:10  (Wesley) The six X3b runs on the earlier masses stay queued after X1 (x3b_s8_hover_rt, x3b_s8_fig8_rt,
+        x3b_s9_hover_rt x2), so C8 and N9 each sit on one quadrotor model.
+DECIDED 2026-11-07 10:10  (Wesley) X8's hub: add our arm with the sideways integral off (x8_hub_ours_noxy x2, int_k_xy 0, staged
+        in ~/mdc_overnight/x1_oldlinks_stage, flown after X1), so both X8 cells follow the 5 Nov T rule; the as-flown hub
+        runs R4008 / R4009 stay recorded.
+DECIDED 2026-11-07 16:52  (Wesley) Bars on the simulation claims are arbitrary: "it is fine to state results as is and compare to
+        other papers where possible". Applies to every claim of the 5-7 Nov batch (X1, X2, X3, X3b, X4, X8, 4.1 / 4.2, X11 U,
+        joins, rejoin, Quan, the gap table): the registry and the cards keep every miss as scored; the thesis states the
+        numbers as they are, and compares with other papers' published numbers where possible.
+DECIDED 2026-11-07 16:52  (Wesley) Te-Jen's one-quad changes are not needed: the one-vehicle M2 15 deg proof (rig_q4m2.sh, never
+        flown) and LAND beside the magnet (landing_side_step_m, desk-checked only), both only in the overlay ~/mdc_m2one_ws
+        (src/ untouched). Recorded (results/rig/2026-11-06/scripts/overlay_tejen_mission_2026-11-06.diff), overlay deleted.
+DECIDED 2026-11-07 16:52  (Wesley) No one-quad tests in the lab sessions: "that is tejens job and he has done all he needs to do".
+        Multi-quad testing is allowed only 08:00-11:00, so those hours go to multi-quad flights; anything one-quad, if ever,
+        outside 08:00-11:00. The Wed 11 plan stays as approved (rel x5, nrtf x5, k1z if time).
+FACT    2026-11-07 16:52  (Wesley) QUAD4 is fine after the 6 Nov one-quad crash. The 'week8' session on this laptop is the thesis chat.
+DECIDED 2026-11-07 17:46  (Wesley) X1 is reported on BOTH quadrotor models, side by side, with the conditions stated: the
+        hardware-matched masses (R3821-R3906, F059 / F060) and the earlier split (R4150-R4193, F087 / F088). The square-to-T
+        benefit is the earlier model's only (0.6 vs 2.2 deg with the sideways integral off; 1.74 vs 1.80 on the final
+        masses). For this table the thesis explains the two mass splits.
+DONE    2026-11-07 18:34  QUAD4's tracker drop rule (card docs/experiments/2026-11-06_quad4_tracker_drop_rule.md; critic waived;
+        twin R3915-R3917) applied to the working tree after the claim batch, as planned: graph_attach.py gives QUAD4's tracker
+        tracker_drop_options (the carriers' drop knobs as typed), tracker_land_options removed; its test added. gate --quick
+        PASSED (2190 passed, 17 skipped), the rig desk check 9 OK (results/rig/2026-11-11/desk/check_2026-11-07_1833.txt).
+        The worktree .claude/worktrees/agent-aa650a10b71d57ce6 is now redundant (Wesley removes it).
+FACT    2026-11-07 18:34  The October simulation results are archived (results/archive/<day>.tar.zst). Analysis and figure tools
+        name many October runs (tools/thesis_runsets.py, release_bands.py, thesis_rig*_figures.py: ~300 runs); extract a run
+        on demand: tar -I zstd -xf results/archive/<day>.tar.zst -C results <day>/<run dir>. Restored for the gate:
+        R1140, R1145, R1206-R1208, R1211-R1213 (10-07 / 10-08), R1459, R1460 (10-10), R1626 (10-11).
+DONE    2026-11-07 18:35  tools/yaw_track.py aligns the planner log on run.csv's clock through record.json's t_ready_sim (twin
+        runs; rig runs keep the lift-off alignment): R4028 now reads 4.0 deg RMS, delay 0.13 s, as F077's recompute; its
+        tests pass. The Gazebo replay (gz_record) was already opt-in (config default false; only --record, a record
+        section or the demo configs turn it on); the lab batch's copy-back skips it since 6 Nov.
+DECIDED 2026-11-09 23:02  (Wesley, via the thesis chat's Q011) Re-fly the 4.3 joins on the 0.86 kg M2A ring on the lab PC:
+        the six join cells with only the ring changed (worlds without _p115; the planner's ring as every final claim on
+        this ring: attach_radius 0.225, attach_z 0.02, payload_rest_z 0.02 as the world's plates, load_mass 0.86, inertia
+        untyped; his geometry rig_twin_L100), x2, from 22:58. The pickup cell needed more than the ring (the M2A worlds
+        carry a ball, not the plate): on Wesley's word a NEW WORLD sq_rigid_ground_rig_attach_pickup_L100_plate.sdf (the M2A
+        world with the p115 plate block; tools/make_m2a_plate_world.py, --check) and his geometry rig_twin_L100_plate.
+DONE    2026-11-10 00:06  Q011 answered (feed F097 + its reviewer's corrections F098; registry R4214-R4227, R4214c). The re-fly
+        that counts flew from 23:14 on 9 Nov on the PLATE worlds (Wesley: every cell on a plate world, so only the ring
+        changes; sq_ / three_rigid_ground_rig_attach_pickup_L100_plate.sdf from tools/make_m2a_plate_world.py), his geometry
+        rig_twin_L100_plate, QUAD4's weld point 0.225 / 0.032, LAND 30 s after the weld (the thesis chat's addendum). The
+        first attempt (worlds without _p115, geometry rig_twin_L100; R4202-R4213) is VOID. Figure 15: R4227.
+DECIDED 2026-11-10 23:10  (Wesley, after the supervisor's message of 10 Nov: "results are king", at least a full run once and
+        3-5 detach and re-attach flights; it may take 10 attempts for one success; the funnel is fine; the circling case
+        matters less for the re-attach) The rig plan for the four sessions left, replacing the 6 Nov order:
+        (1) detach and re-attach: nrtf in hover x8 (5, plus "add 3 x nrtf"), then nro x3 (detach on the circle, the three
+        circle on, his TAKEOFF stops the ring for the re-attach, four circle on), Wed 11;
+        (2) the drop into the circling ring: k1zo x3 (k1z on the 0.3 m orbit, small object only; new script), Thu 12;
+        (3) only if the pickup keeps failing: the held object dropped into the circling ring, then the re-attach;
+        then the FULL MISSION, defined by Wesley as on the circle: detach on the circle, the pickup and the drop with the
+        three circling, the ring stopping for the re-attach, four circling on (18th-19th; fallback fm9 in hover).
+        The full mission's stop starts AUTOMATICALLY when his planner starts the re-attach (Wesley's choice over a button):
+        new switch in our planner, default off, tests and a simulation run. Dropped: rel and relo (the unannounced
+        releases), fm9o (the circle paused from his TAKEOFF, before the pickup), k1z as a line (backup only).
+        Funnel: v4 first, then the supervisor's (105 mm mouth, 11 g; guides the 64 mm disc only within ~2 cm).
+        The sheets are rewritten after Wesley has read the pre-measurements (his ask, 10 Nov ~23:05).
+OPEN    2026-11-10 23:10  The re-attach descent bands with the funnel (now match_xy 0.08, descent_abort_xy 0.10): an analysis of
+        the rig descents is running (results/analysis/attach_band_2026-11-10/); Wesley decides the values.
+OPEN    2026-11-10 23:10  The thesis's real-world freeze is set for Thu 12 11:00; the full mission (18th-19th) reaches the
+        thesis only if the freeze moves to Thu 19 (the rescope's latest). Wesley's call.
+CORRECTION 2026-11-10 23:27  of DECIDED 2026-11-10 23:10: "add 3 x nrtf" means 3 flights of the detach from plate 9 and the
+        re-attach on PLATE 1 (nr1r's route round the outside, 5 Nov; the funnel moved to plate 1): nr1f x3. Experiment (1) is
+        nrtf x5 + nr1f x3 + nro x3, not nrtf x8.
+DECIDED 2026-11-10 23:27  (Wesley) The thesis's real-world freeze moves from Thu 12 to Thu 19 Nov (closes the OPEN of 23:10).
+        Wednesday is not limited to the attach lines: one list of everything, in priority order, flown as far as the
+        session gets (the pickup lines included). The setup pre-checks are cut to what Wesley asked (his batteries; body 24
+        in the funnel read from Friday's q4f_5/q4f_6 instead of a bench check; W/X/Y kept as measured 4 Nov).
+FACT    2026-11-10 23:25  Body 24 inside funnel v4 (Friday's one-quad flights RIG-1106-q4f_5, -q4f_6, from DESCEND to the
+        end, 0.29 m down to seated): 238-239 Hz, longest gap 21-24 ms, none over 50 ms, no frozen stretch over 9 samples.
+DECIDED 2026-11-10 23:42  (Wesley: the recommended bands become tomorrow's default) His re-attach descent bands with the
+        funnel, from results/analysis/attach_band_2026-11-10/summary.md (32 rig descents of 4-5 Nov; exploratory): funnel v4
+        keeps the bands as flown (match_xy 0.08, match_dwell 0.5, descent_abort_xy 0.10, descent_hold on); the supervisor's
+        105 mm funnel flies 0.05 / 0.5 / 0.05 through `BAND=cone` in front of any attach script (rig_nrtf, nr1f, nro, fm9c,
+        fm9hc, fm9, fm9h). Why: the start offset does not predict the arrival (r +0.02), with descent_hold on
+        descent_abort_xy pauses the descent down to the mouth (the only band that aims, ~2.5 cm at best; his code raises it
+        to at least match_xy), and below 4-5 cm QUAD4 would often not try. Closes the OPEN of 23:10.
+FACT    2026-11-10 23:42  Built for the list (Wesley 10 Nov): attach_pause_at ('takeoff' default = as before; 'reattach': the
+        pause only from his re-attach leg: TRANSIT_TO_REATTACH, APPROACH_ABOVE_TARGET, MATCH_VELOCITY, DESCEND_TO_ATTACHMENT,
+        latched until the fold-in), dissipative_node.py + common.yaml + real_mode.py, tests in test_attach_pause.py (2) and
+        test_real_mode_launches.py; console DETACH QUAD4 and QUAD4 magnet OFF (two presses) / ON (tools/console.py, 3 tests);
+        scripts rig_nr1f, rig_k1zo, rig_fm9c, rig_fm9hc (results/rig/2026-11-11/scripts/), params
+        attach_m1_1m_m2a_around_drop55_det15.yaml and attach_m1_1m_m2a_orbit_reattach_det15.yaml. gate --quick PASSED
+        (2193 passed) before the console change; rig desk check 13 OK. Critic not run: a trigger for an existing pause, not
+        a new control law (Wesley may waive or ask for one).
+DECIDED 2026-11-10 23:50  (Wesley ~23:48) The drop has a switch with a default per case: on the circle (k1zo, fm9c, fm9hc) his
+        settle drop by default (drop_on_arrival off, drop_height 0.48: over the moving drop point at 2.76 m, match its
+        velocity, settle, lower, release), `DROP=arrival` for the drop on arrival; in hover (k1z, fm9, fm9h) the drop on
+        arrival stays the default (0.28, as flown 5 Nov), `DROP=settle` for his. Desk-checked every combination (heights
+        2.56 / 2.76 m, under max_body_z 2.8). Pushed back once: on 4 Nov in hover his settle gate passed at most once a flight
+        (the object swung 23-26 cm round the drop point, RIG-1104-k1m_2..4); Wesley's call stands. Every line and option is
+        simulated overnight (~/mdc_overnight/plan1110.sh, plan1110b.sh; configs/experiments/rig_*_twin.yaml).
+FACT    2026-11-11 06:38  Overnight twin checks of every rig-list line and switch (R4228-R4244, registry; laptop, tonight's
+        tree): WORKED fm9c (settle R4231 / arrival R4228: the circle ran through pickup and drop, the ring stopped by itself
+        at his re-attach leg, first-try re-weld, the circle resumed), k1zo (R4232 / R4229), fm9hc arrival (R4230), fm9 and
+        fm9 settle (R4239 / R4242), k1z and k1z settle (R4238 / R4241), fm9h (re-fly R4244). DID NOT RE-ATTACH in the twin:
+        nrtf, nrtf BAND=cone, nro, nr1f (R4233, R4237, R4234, R4235; ring 1.2 m too, R4243): the tip centred on plate 9 and
+        pushed by the twin's rigid rod (contact_dz -0.03) sinks into the plate, outside the twin's contact window; their
+        descents, bands, nro's pause and resume and nr1f's route ran as designed. Twin flake: 2 of 4 held-object runs never
+        climbed after his TAKEOFF (R4236, R4240).
+DECIDED 2026-11-11 07:18  (Wesley: "test the tighter band on the new funnel, to make sure we don't get stuck") Line 1b on the
+        sheet: `BAND=cone bash ~/rig_nrtf.sh nrtfc` x2-3 on the supervisor's funnel; stuck = MATCH_VELOCITY or "Contact
+        descent held" for 30 s: GIVE UP, next flight `BAND=mid` (new: 0.06 / 0.5 s / 0.06 in the 7 attach scripts, desk OK),
+        then the default. The twin cannot answer it: its QUAD4 holds still (R4237: MATCH 0.56 s at 5 cm, no pause), the rig's
+        tip swings ~3.8 cm (RIG-1014-t6f). History: his defaults 2.5 cm / 0.08 m/s held 1 s never held on 14 Oct (t6f) ->
+        5 cm / 0.15 m/s; 29 Oct at 5 cm / 1.0 s sq2_5 waited 12.3 s and a second MATCH 9.9 s with no window, and the 8 cm
+        abort (no hold) cut every descent of sq5_2 -> 8 cm, 0.5 s dwell, the 1 s debounce, then the 0.10 hold (5 Nov).
+FACT    2026-11-11 08:37  Plate 1 vs plate 9 measured with QUAD4's magnet seated (payload_geometry.py, T1 four markers): plate 1
+        marker (+0.2013, -0.1119) m, 4.27 cm over the ring pivot; plate 9 (+0.0048, +0.2276), 4.95 cm (4 Nov's typed 0.0, 0.2293,
+        4.91: plate 9 unchanged). Plate 1 sits 6.8 mm lower. rig_nr1f.sh now types W 0.0427, X -0.0037, Y 0.2303 (the
+        launch turns it onto plate 1's measured point; QUAD4's start on plate 9 within ~1.1 cm, K 0.025); desk OK. Body 6
+        (08:30): contact height 37.6 mm (typed 38), marker 0.5 cm off the object's centre: unchanged.
+FIX     2026-11-11 09:41  magnet_gate race (RIG-1111-k1zo_3): his OFF reaching the gate before his DROP_OBJECT phase was held
+        and never sent (the object stayed on the magnet). Now a held OFF goes when his phase reaches DROP_OBJECT /
+        CLEAR_DROP_ZONE, unless an ON of his came after it (src/drone_magnet/drone_magnet/magnet_gate.py, test added; 21 pass).
+        Also 09:25: his settle drop's release is typable (`drop_release`, partner_mission.launch.py; script switch RELEASE,
+        k1zo default 0.03) after RIG-1111-k1zo's impact detached the ring.
+FACT    2026-11-11 10:07  (Wesley, lab) QUAD4's magnet lead was not fully home in QUAD4: pushed in, the grip came back. The
+        uncommanded releases of RIG-1111-nrtfc_3 (4 s after the proof) and -nrtfc_4 (in the pretension) are put down to
+        it; check the lead before each flight.
+FIX     2026-11-11 10:39  His drop check (our fork, online_join_planner.update_measured_drop): an object still on the magnet at
+        the end of the 0.4 s release dwell now gets drop_puck_wait_s (2 s on the rig) to leave before the give-up
+        (RIG-1111-fm9hc_8: the object rode the magnet 0.8-0.9 s after the coil OFF, then fell into the net; he had given up
+        at 0.4 s). Tests updated (test_m1_contact_attach.py, 69 pass); CHANGES_FROM_TEJEN.md to follow.
+DECIDED 2026-11-11 10:47  (Wesley, lab: fm9c's pickup failed in the circling carriers' wind) attach_pause_at 'pickup_reattach'
+        (our planner): the circle also comes to rest for his pickup (APPROACH_ABOVE_PICKUP .. MAGNET_ATTACH_WAIT), circles
+        again from LIFT_OBJECT for the drop, and stops again for his re-attach. Switch PAUSE=pickup on rig_fm9c.sh
+        (configs/rig/attach_m1_1m_m2a_orbit_pickreattach_det15.yaml); test added (6 pass); desk OK; not simulated (no time).
+FACT    2026-11-11 11:32  Today's code (magnet_gate held-OFF fix, his drop check wait, drop_release, attach_pause_at
+        pickup_reattach, console buttons, OBJ=big / PAUSE=pickup / RELEASE switches): gate --quick PASSED (2199 passed;
+        test_floor_join_delivery_rejoin's stuck-drop test moved to the 2 s wait), rig desk check 13 OK. Not simulated yet.
+FINDING 2026-11-11 11:32  The pickup is the full mission's blocker, and it is alignment, not wind: every pickup descent that
+        reached MAGNET_ATTACH_WAIT within ~2 cm of the object lifted within 1.5 s (k1zo, k1zo_3, fm9c_4 #3, fm9c_6: 4 of 4);
+        every one 4.7-9.7 cm off failed after 13-23 s ('vertical separation'; fm9c, fm9c_3, fm9c_4: 7 of 7), with the circle
+        running or at rest (fm9c_3). The off-centre arrivals came after QUAD4 flew in from the ring (fm9c), the centred ones
+        from its mat (k1zo) and on later tries.
+FINDING 2026-11-11 11:41  QUAD4's bounce (docs/analysis/quad4_bounce_2026-11-11.md, RIG-1111-bounce): its cable runs near slack
+        because the level-ring split on plates 3/7/9/11 gives plate 9 the smallest share (1.62 of 9.74 N planned, dips to
+        0.55 N; 0.3-1.1 N measured); bounce ratio vs slack share r +0.77 over 20 flights; after a re-attach the fold-in ramps
+        QUAD4 up from zero. Not the mux, the tracker settings, the thrust map, the object mass or the circle.
+OPEN    2026-11-11 11:41  For Wesley: raise the planner's tension_min (0.1 N) to ~1.0 N (solver rebuild, twin, rig) and/or start
+        the fold-in at that floor and hold QUAD4's kT estimate through it.
+DECIDED 2026-11-11 15:56  (Wesley, plan approved; ~/.claude/plans/curious-frolicking-castle.md) Thu 12 Nov, "minimum first":
+        (1) nrtf in hover until 3 more clean re-attaches (5 with nrtfc_2 and nrtfc_5), (2) fm9, the full mission in HOVER,
+        until one completes, (3) the circle versions (nro, then fm9c PAUSE=pickup) with the time left, (4) 1-2 late
+        comparison flights with the bounce switch on. Setup: the supervisor's funnel on plate 9 (Wesley: on from about
+        10:15 on 11 Nov; nrtfc_5, the catch that held, was in it), the 5 cm bands as the scripts' default, the small
+        object only, with one of the supervisor's funnels fitted on it (body 6 redefined, contact height re-measured),
+        the settle drop with the 3 cm release as the default in hover and on the circle, a FORCE DROP console button
+        (new), a fixed camera on every flight. The bounce fix: built behind a switch, default off, flown late. Dropped
+        from the plan on Wesley's word: the console layout gate (his arm-then-place-then-restart routine explains the
+        launches that never armed) and the held-object takeoff loss (a weak magnet connection, fixed).
+FINDING 2026-11-11 15:56  RIG-1111-fm9c_6, the fly-away (Wesley: QUAD4 "went really high, flew into the wall around 3 m high",
+        DISARM): it began before LAND under his controller. The big object fell off 7.6 s into the lift (LAND -2.80 s);
+        QUAD4 went from (-0.47, 1.63, 1.58) m at -3.0 s to (+0.20, 2.30, 2.88) at -1.0 s (the pickup spot was at
+        y 1.77 m, past the 1.75 m limit, which by the 22 Oct decision does not cover QUAD4 under his stream). From
+        -0.67 s QUAD4's pose (body 14) was frozen at (0.29, 2.34, 2.89): /drone_3/motion_capture_state kept arriving at
+        94 Hz with a bit-identical pose until the DISARM at +4.2 s (the magnet marker kept changing until +2.83 s). Our
+        tracker took over at LAND on that frozen pose (velocity estimate 0, a constant command, reference y held at 1.70 by
+        the planner); the 0.25 s pose watchdog reads arrival times, so it never fired. Fix planned (Wesley's word, in the
+        approved plan): an unchanged pose counts as no pose (the mocap node stops publishing it; critic first).
+FINDING 2026-11-11 15:56  QUAD4's bounce, second reading (supersedes the cause in FINDING 11:41; the slack-cable part stands):
+        body-to-magnet distance shows the cable going slack and taut 22-36 mm deep at 3-4 Hz in fm9c, fm9c_3, fm9c_4
+        (slack 36-69 % of the lift and hover) and 5-7 mm deep in nrtfc_2, nrtfc_3, nrtfc_5, fm9c_6. Planner tick, tracker
+        loop, mocap rate, mux delay, packs: the same in both groups. Twin R4233 / R4243 / R4239 / R4228: ring height 1.2 m
+        and the circle change nothing there. With four carrying the ring hangs 3.7-5.4 deg off level in 6 of 7 flights
+        (plate 9 low 14-19 mm, plate 3 high); in fm9c_3 it was level within 2 mm and QUAD4's cable was slack 69 %. Cause
+        open: tonight's comparison.
+FACT    2026-11-11 16:27  The small object with one of the supervisor's funnels on it, body 6 redefined by Wesley (props off,
+        m1_irl_pickup measure + pickup_geometry.py, raw packets logs/motion_capture_udp/motion_capture_udp_20261111_162210.csv):
+        magnet marker 11.4 mm above body 6's pivot and (-13.1, -8.9) mm from it in the object's axes with the magnet seated
+        in the funnel (object yaw -4.3 deg, tilt 0.4 deg; all three bodies live at 240 Hz). The six pickup scripts type
+        PC 0.011, PX -0.0131, PY -0.0089, PS 0.105 (new launch args pickup_point_x / _y -> his payload_pickup_point_x / _y
+        and his manager's pickup_point_offset_x / _y); PT 0.050 is a placeholder until Wesley gives the height; OBJ=bare
+        keeps 0.038 / 0.022 / 0.07.
+FINDING 2026-11-11 16:27  In the same packets streaming ID 14 arrives at 480 Hz as TWO live bodies: QUAD4 on the floor at
+        (-0.776, -0.007, 0.064) and another at (0.020, 1.540, 1.218). Told Wesley at once: one of them must lose the ID
+        before any flight (QUAD4's pose would alternate between them). Not yet confirmed fixed.
+FACT    2026-11-11 16:38  The object with its funnel, second seat (Wesley turned it a quarter turn and set the magnet back in
+        the centre, 16:36): the magnet at (-4.9, -10.7, +11.0) mm in body 6's axes against (-13.1, -9.0, +11.4) at 16:25,
+        8 mm apart; body 6 tracked at 240 Hz with no repeated pose while the magnet sat in it. The six pickup scripts type
+        the mean: PX -0.0090, PY -0.0098, PC 0.011. PT stays 0.050 (Wesley: no height measurement; it is only his
+        obstacle box and RViz marker: the release height is the magnet's, as in RIG-1111-fm9hc_8). Excerpts of the raw
+        packets: results/rig/2026-11-11/desk/object_funnel_seat{1,2}_udp.csv.
+DECIDED 2026-11-11 16:38  Streaming ID 14's second body (FINDING 16:27) is another user's, as are any other IDs streamed
+        this afternoon (Wesley 16:33: "for someone else ... i will not use those tomorrow"). Not ours to change today;
+        before the first launch on 12 Nov only our bodies are streamed. tools/mocap_stream_check.py now also fails on a
+        shared ID (a body arriving at more than 1.5 x the camera rate), which it passed before.
+FINDING 2026-11-11 16:44  The frozen-pose guard after its critic (card docs/experiments/2026-11-11_frozen_pose_guard.md):
+        "fly it with changes". Done: the four quads' bodies only (the ring, the magnet marker and the object pass as
+        before: withheld, they stall his pickup, his attachment manager and carriers_down_alone); the check before the
+        parser; the velocity re-seeded on resume; the desk check on the real node (tools/frozen_pose_desk_check.py: OK).
+        Replay at 0.5 s over the 43 flown flights of 4, 5, 6 and 11 Nov (172 quad recordings): no carrier ever withheld;
+        QUAD4 only at |y| >= 1.72 m: fm9c (0.17 s, no effect: under the 0.25 s pose rule by 0.08 s), fm9c_4 (from LAND
+        +19.9 s, our take-back; the carriers down at +13.2 s; operator DISARM at +21.7 s), fm9c_6 (from LAND -0.17 s).
+        OPEN for Wesley (asked 16:43): a QUAD4 freeze while OUR tracker flies it off the ring is a fleet-wide EMERGENCY
+        STOP (welded starts publish no on_load flag): accept it, or type welded_on_load (twin only, 11 Oct), or leave
+        the guard off on 12 Nov. The guard is OFF in the code (MDC_MOCAP_FROZEN_S, default 0) until he answers.
+FINDING 2026-11-11 16:44  fm9c_4 was a second blind flight: QUAD4's pose froze at (1.02, 1.72, 1.14) at LAND +19.4 s under
+        our take-back and Wesley's DISARM came 2.2 s later. It got there by design: a take-back with the object on steps
+        QUAD4 out to 2.23 m from the ring (the 1.2 m clear radius + the cable, so the object lands clear of the carriers),
+        cut back to 0.10 m inside the position limit: (0.99, 1.63), then it drifted to y 1.75 (POSITION LIMIT line). The
+        same step out is the POSITION LIMIT of fm9hc_2 and fm9hc_4. Not changed (landing nearer puts the object or QUAD4
+        on the carriers, R1482). Sheet rule for 12 Nov: with the object on and the drop stalling, FORCE DROP, not LAND.
+FINDING 2026-11-11 17:27  The fly-away of RIG-1111-fm9c_6, its start explained (the bag and his log; it was "unexplained"
+        in the 15:56 finding and in the guard's critic). (1) The bigger object came off the magnet by itself 7.46 s into
+        his LIFT_OBJECT while swinging 0.4 m sideways (its pose froze at z 0.52 m and it was on the floor 0.28 s later:
+        a free fall; his "measured pickup proof separation; magnet OFF" came 0.18 s AFTER it left, so his OFF did not
+        drop it). (2) It slid to (-0.07, +2.16) m, 0.36 m further out in y than its start (-0.38, +1.80). (3) His retry
+        (LIFT_OBJECT -> APPROACH_ABOVE_PICKUP) flew to it: his reference went from (-0.35, 1.75, 1.98) to
+        (0.25, 2.15, 2.54) m in 2.4 s at up to 0.8 m/s sideways, and QUAD4 overshot it to (0.29, 2.34, 2.89), 0.35 m
+        high (just rid of ~0.15 kg) and 0.19 m beyond in y, where motion capture lost it. His planner has no bound on
+        where a pickup may go (only visual_astar_bounds, +-5 m). So an object that falls and rolls outward takes QUAD4
+        out of the tracked volume by itself, whatever the object's start. OPEN for Wesley: a typed pickup box in our
+        copy of his planner (the object outside it: no retry, he lands QUAD4 in place); built behind a switch tonight.
+        The guard card's sentence "his proof then ... switched the magnet off with the object in the air" is
+        superseded by (1).
+DECIDED 2026-11-11 20:19  (Wesley, asked with the options) The frozen-pose guard stays OFF on the rig: "We should have it
+        off because I will disarm in this situation anyway it does not need to be automatic". The code stays (default 0,
+        MDC_MOCAP_FROZEN_S; card 2026-11-11_frozen_pose_guard, its F3 question closed by this); the twin runs of its
+        downstream (rig_fm9_q4lost_*) finish as records only. Closes the OPEN of FINDING 16:44.
+DECIDED 2026-11-11 20:19  (Wesley: "Make the limit 1.9 m") The pickup box is ON at 1.9 m in the six pickup scripts
+        (PBOX=0 off): an object further than 1.9 m from the cage centre in x or y while his planner would fly to it is a
+        give-up and our take-back. Said once: motion capture lost QUAD4 at |y| 1.72 m and beyond on 11 Nov, so at 1.9 m
+        he can still be lost over an object lying between 1.7 and 1.9 m; fm9c_6's object (y 2.16 m) would have been
+        refused. Unit-tested and desk-checked; not simulated, not flown. Closes the OPEN of FINDING 17:27.
+FACT    2026-11-11 20:37  The funnel on the small object is about 4 cm tall from the steel top to its rim (Wesley). So the pickup hold
+        (the last 8 cm, 4 cm sideways) is already acting 4 cm above the rim, and the 105 mm mouth (5.2 cm radius) is wider
+        than the hold: no change to the scripts. PT 0.050 stays.
+CORRECTION 2026-11-11 21:13  (Te-Jen's reply to the 11 Nov note, read from the code) (1) Our note to Te-Jen, the 15:56 plan
+        and my explanation to Wesley said his LOW band "only gates the crossing" and that inside the last 8 cm the descent
+        "just keeps lowering": WRONG. At bf52a8a TieredDescent already paused the height inside LOW while the tip was over
+        pickup_alignment_low_xy_m (pause_low_for_xy True); on our rig that is 0.10 (partner_mission.launch.py, after 0.045
+        stalled HIGH on 14 Oct t5_5) with low_dwell_s 1.0 at the crossing. So the 4.7-9.7 cm arrivals were inside the
+        pause. The LOW hold (pickup_low_hold_xy 0.04) narrows that in-LOW pause only and keeps the entry at 0.10 / 1.0 s:
+        the same effect at contact as Te-Jen's single band (his overlay 0.025), without tightening the crossing that
+        stalled. No code change. (2) "fresh measured vertical separation; retry" is his RECOVERY line, not the failure.
+        The 11 Nov failed attempts' triggers: "contact wait made no progress for 10 s" (fm9c #1, fm9c_3 #1, fm9c_4 #1),
+        "object attached but the tip 0.084-0.085 m off target" (fm9c_3 #2, fm9c_4 #2), "measured pickup proof separation"
+        (fm9c_6, the big object falling in the lift); fm9c #2 and fm9c_3 #3 ended in Wesley's LAND. Counts unchanged.
+        (3) He confirms his pose timeout reads arrival times, finds no bound on the pickup's place in his Python retry
+        path (the pickup box fills a real gap), and has no online mass estimate (kT adapts slowly; unloading plausible
+        but not the sole cause of fm9c_6's climb). (4) The moving-drop gate is target-relative: fm9c_4's transit had a
+        median magnet error 28.5 cm vs 18 allowed, so a speed change alone would not pass it; he advises against
+        drop_on_arrival (it skips the lowering): the sheet now says FORCE DROP, not DROP=arrival.
+DECIDED 2026-11-11 21:30  (Wesley, for Te-Jen's individual paper, asked with options) Three simulation application demos,
+        5 trials each (card docs/experiments/2026-11-11_tejen_app_demos.md; configs tejen_app_{hover,circle,fig8}_twin):
+        QUAD1-3 on 3/11/7 lift the ring to 1.2 m, QUAD4 from the FLOOR picks up, drops into the net, attaches on 9;
+        no pause of the ring's motion; LAND 10 s after the attach. Circle 0.3 m and figure-eight 1.0 m, both at 0.2 m/s
+        (Wesley: "1 m, to make it nice and clean ... 0.2 m/s for all the trajectories"; 0.125 was only the rig's cage
+        speed). All 15 on the lab PC tonight (R4254-R4268), videos of each case's first trial, Wesley notified when the
+        first of each is back. Reported as simulation, not real-world validation.
+DECIDED 2026-11-11 21:42  (Wesley, asked with options) TB16 lifted in the TWIN ONLY for Te-Jen's figure-eight demo: a new
+        sim.yaml switch contact_sim_fig8 (default false; twin only; the rig refusal unchanged) lets partner_contact fly
+        load_traj fig_8, typed only in configs/experiments/tejen_app_fig8_twin.yaml. Said with it: the take-back clears
+        hover and the circle only, so a figure-eight run that fails before the attach may land QUAD4 badly. Test
+        test_tb16_the_twin_flies_the_figure_eight_only_with_its_switch. The fig8 slots of the 21:36 batch (R4256, R4259,
+        R4262, R4265, R4268) were refused at launch (void); the 5 trials re-fly after the batch.
+FINDING 2026-11-11 21:53  Te-Jen's second review (source-level, 11 Nov evening), checked against the code; FIXED, unit-tested,
+        gate --quick PASSED (2218) 21:51, rig desk check 13 OK 21:52, not flown: (1) FORCE DROP stepped the reference:
+        a press in the lowering jumped to the release height (his example 0.25 -> 0.03 m), a press in the transit
+        jumped from the transfer reference to the nominal start over the drop point (up to the 0.25 m reach). Now the
+        release holds where the lowering had got to, and the lowering starts from the commanded offset; a pending
+        press dies with its phases. (2) A TAKEOFF held until our release survived DISARM: now cancelled by DISARM, LAND
+        and a take-back. (3) The twin's C++ re-attach branch dropped the typed drop_release and pickup_box: kept now.
+        (4) pickup_point_x / _y alone were silently ignored: refused now. (5) The magnet gate's held OFF does reach the
+        coil through the phase subscription (node-level test added); on the rig it has not yet been exercised (fm9hc_8:
+        his OFF came after DROP_OBJECT). Corrections in CHANGES_FROM_TEJEN.md: the drop check gives up ~2.4 s after
+        DROP_OBJECT (2 s after the 0.4 s dwell); the pickup box rejects the target, it is not a geofence; his off-target
+        retry is pickup_lift_xy_tolerance 0.04 m held 1.5 s. For Wesley to send: ~/Downloads/tejen_fork_changes_2026-11-11b.zip
+        (with tejen_mpc/main.py and throttle_bound.py, unchanged since bf52a8a, as Te-Jen asked). Te-Jen's demo runs: the
+        hover and circle trials (R4254-R4267) fly the tree before these fixes, the figure-eight re-fly the tree after;
+        none of the fixed paths (FORCE DROP, the held TAKEOFF, the C++ re-attach, the sideways offsets) is used in them.
+DECIDED 2026-11-11 22:08  (Wesley, after R4255: on the ring circling at 0.2 m/s QUAD4's tip trailed plate 9 by a steady 5 cm
+        on the 5 cm descent band, and the twin gave up at his 30 s) Te-Jen's moving cases keep 0.2 m/s with the wider
+        bands 0.08/0.10 (the rig's until 11 Nov) and the give-up 120 s as the rig; the batch stopped; ONE circle and ONE
+        figure-eight first, the repeats only after Wesley has seen them. Hover stays 0.05/0.05 (3 of 3 passed: R4254,
+        R4257, R4260). Twin parity fix: partner_mission.launch.py now passes a typed contact_give_up_s in the twin too
+        (it was rig-only, silently ignored; test test_the_twin_takes_a_typed_give_up_time).
+FINDING 2026-11-11 22:28  Te-Jen's third review (package 11b): his checks confirm the FORCE DROP continuity, the DISARM cancel
+        of a held TAKEOFF, the twin overrides, the sideways-offset refusal and the gate's held OFF. Two more, done (tests;
+        gate --quick PASSED 2219 at 22:27, desk 13 OK 22:27): a pending FORCE DROP is cleared by DISARM itself (DISARM does
+        not change his phase); set_throttle_state_max keeps the solver's own state bounds and replaces only the throttle
+        entry (no change today: the state bounds are +-1 in every profile; his "oct14 +-3" are input bounds). His notes,
+        no change: the flown MPC has no immediate gain or mass reset when the object falls off (the attachment-based
+        schedule is ignored while thrust-ratio feedback is on), so adaptation lag is a plausible contributor to fm9c_6's
+        climb, not the whole explanation; battery compensation on the radio command only is a deliberate command-domain
+        choice. The tracking-validity (frozen pose) limitation stays explicit.
+DECIDED 2026-11-11 22:38  (Wesley, after R4269 / R4270: with the 0.08/0.10 bands and the 120 s give-up both moving cases at
+        0.2 m/s still missed the attach; QUAD4 trails the moving plate by 5-10 cm) Keep 0.2 m/s and raise his attach lead
+        time: contact_lead 0.4 s (his reference leads the moving target in ATTACH_READY, the bottom hold; our launch had
+        it at 0, his own default is 0.2). One circle and one figure-eight first (R4271, R4272). WAIT_WELD 280 s in both
+        configs so a failed run ends sooner. Every moving-ring attach that passed in the twin so far (R4228, R4231,
+        R4247) was at 0.125 m/s with the ring paused for the attach.
+FINDING 2026-11-11 23:05  Te-Jen's demo at 0.2 m/s: the attach onto the moving ring failed in every trial (R4255, R4258 bands
+        0.05; R4269, R4270 bands 0.08/0.10 and give-up 120 s; R4271, R4272 plus lead 0.4 s): QUAD4 trails the plate 5-10
+        cm and his descent loses alignment. The pickup and the drop into the moving basket worked in every one (ball
+        2.2-2.4 cm from the centre at 0.19 m/s). R4272 (figure-eight): after an aborted descent QUAD4 sat 0.84 m over the
+        ring at the figure-eight's crossing (the ring slowing to rest) and its tether struck the formation (ring 24-36
+        deg), later QUAD4 disarmed and the ring passed 55 deg: DROP AND LAND. A rig flight of this line would collide.
+DECIDED 2026-11-11 23:06  (Wesley) All 5 of each at 0.125 m/s overnight (one variable from R4271/R4272: the speed; bands
+        0.08/0.10, give-up 120 s, lead 0.4 s kept) plus the 2 hover repeats; send him the first circle and figure-eight
+        results (figures and videos) when they are back. Batch ~/mdc_overnight/tejen_app4.sh, started by
+        tejen_app4_after.sh when R4271's batch ends.
+DECIDED 2026-11-12 00:24  (overnight, under Wesley's 11 Nov 23:50 instruction "experiment with the best available option",
+        not his word on this choice) Te-Jen's three demos are flown on 0.55 m CABLES, October's m1c_orbit setup (QUAD4 from
+        the floor, his own descent defaults, lead 0, the ring at 1.0 m, circle 0.5 m at 0.125 m/s, figure-eight 1.0 m at
+        0.125 m/s, no pause), 5 trials each (configs tejen_app_{hover,circle,fig8}_L055_twin; R4288 = circle trial 1).
+        Why: on 1 m cables no setting tried tonight attached on a moving ring without a pause (R4255, R4258, R4269-R4274,
+        R4285-R4287, R4289: bands 0.05 and 0.08/0.10, give-up 30 and 120 s, lead 0 / 0.4 / 1.0 s, his defaults; at the
+        bottom hold the magnet trails plate 9 by 5-6 cm at 0.125 m/s, ~10 cm at 0.2, a ~0.9 s lag of QUAD4 and its
+        1 m tether); on 0.55 m R4288 attached on the moving ring on tonight's tree (as R1508, R1700 in October). The 1 m
+        hover set (5 of 5: R4254, R4257, R4260, R4275, R4276) stays as the 1 m result. For Wesley in the morning: the
+        cable length differs from the rig's 1 m; the alternative on 1 m is the attach with the ring paused (R4228,
+        R4231, R4247), which his brief excluded.
+DECIDED 2026-11-12 01:38  (overnight, under Wesley's "experiment with the best available option") Te-Jen's figure-eight case
+        flies at 0.08 m/s with the rig's looser descent limits (match 0.08 / 0.5 s / 0.20 m/s, abort 0.10 m and 0.35 m/s
+        held 1 s, descent hold) and the 120 s give-up, on 0.55 m cables (config tejen_app_fig8_L055_slow_twin): R4306
+        attached on the moving figure-eight (8th descent, ring at 0.071 m/s). At 0.125 m/s on 0.55 m it did not attach
+        with his defaults (R4290, R4293: descents aborted on the turns, 30 s give-up) nor with the looser limits and
+        120 s (R4305: every descent aborted on the tip's speed relative to the plate). Hover and circle keep October's
+        set (his defaults, 0.125 m/s): circle 5 of 5 (R4288, R4292, R4295, R4298, R4301), hover 4 of 4 so far. Trials 2-5
+        of the figure-eight: laptop R4307, lab PC after the batch.
+FACT    2026-11-12 09:01  Re-measured the object's seat before the next fm9 (Wesley: the object on the same floor; its marker read
+        60 mm against 41 mm last night, tilt 3 deg): magnet seated at +10.7 mm over body 6's marker (typed 11), sideways
+        (-4.5, -10.7) mm in its axes (typed the mean -9.0, -9.8; last night's second seat -4.9, -10.7). The relative
+        geometry holds, so the height did not stop RIG-1112-fm9_2's pickup. Scripts (repo + ~/rig_*.sh) now type
+        PX -0.0045, PY -0.0107. fm9_2: attempt 1 reached the seat height (+11.4 mm) with the coil ON but 1.8-3 cm off
+        and the object did not lift ("measured pickup proof separation"); attempt 2 stopped 4 cm up (the funnel's rim
+        height), "no progress for 10 s".
+DECIDED 2026-11-12 09:24  (Wesley, in the lab) The rig's position limit 1.75 -> 1.8 m (real.yaml pos_limit_m; tests and the
+        working rules updated; desk: the circle launch carries 1.8 on all 6 nodes). Freed or dropped drones still land
+        0.10 m inside it (1.7 m).
+FINDING 2026-11-12 09:24  QUAD4's magnet slides off plate 9 right after TAKEOFF in every flight today (fm9_2 16 mm at +3.0 s;
+        fm9_5 32 mm at +1.0 s, back to 12 mm; fm9c 23 mm at +1.4 s, stayed 21 mm off, Wesley LANDed): outward and ~1 cm
+        up (the funnel's slope). Our commands kept it ON throughout (/drone_3/magnet_coil ON at 2 Hz, the radio latched
+        ON from boot, no OFF anywhere); QUAD4's link and pack normal. Wesley: it looks like the magnet turns off briefly,
+        and its crimp was loose: being re-crimped now. Second suspect if it persists: the funnel holding the magnet off
+        the steel.
+FINDING 2026-11-12 09:46  Why the pickups "attached but did not confirm" (RIG-1112-fm9c_3 both attempts): his planner leaves
+        MAGNET_ATTACH_WAIT only while his IRL manager reports "attached" (inferred: magnet within attach_radius_m 0.12 of
+        the object's contact point, <0.25 m/s, 0.8 s). On the way down the swinging magnet met that 12 cm sphere for
+        0.8 s: ASSUMED ATTACHED ~19 s before contact; 0.5-1.1 s later it swung out for 0.2 s: ASSUMED ATTACHMENT LOST,
+        latched until a magnet OFF. Then the magnet seated (9 and 13 mm from the seat, 0 mm in height, object still),
+        but the latch held, "contact wait made no progress for 10 s", magnet OFF, the object dropped. Built (typed only,
+        default off, his gate threshold so Wesley's word): launch arg pickup_attach_radius -> his attach_radius_m; script
+        switch ARAD (ARAD=0.04: only a seated magnet reads attached). Test passes; desk: 0.04 typed, 0.12 untyped.
+BUILT   2026-11-12 10:12  The pickup press (Wesley ~10:00, after RIG-1112-fm9c_5: "once it was at the objects height if it went
+        very slightly lower before confirming the attach that would be better"). In fm9c_5 (ARAD=0.04) the attach was
+        confirmed with the magnet at the seat height but ~1.4 cm off-centre and it did not grip (the object never rose in
+        the lift). Built (typed only, default off): launch arg pickup_press -> his pickup_candidate_press_m (0-0.05 m): at
+        the early pickup contact the hold is that much below the last reference, so the cable slackens and the magnet
+        settles flat. Script switch PRESS (PRESS=0.02). Tests pass; desk: fm9c with PRESS=0.02 ARAD=0.04 OK (26 nodes).
+        Untested in flight and in simulation (this pickup path is rig only).
+DECIDED 2026-11-12 12:12  After Te-Jen's review of the 12 Nov logs (Wesley ~12:00, all four recommended): (1) his pickup
+        attach radius 4 cm is the DEFAULT in the pickup scripts (rig_fm9, rig_fm9c, rig_k1zo, rig_k1z; ARAD=0.12 = his);
+        the held-object starts (fm9h, fm9hc) and the re-attach-only scripts keep his 0.12 untyped. Te-Jen: keep the
+        loss latch and the proof; fm9c_5's two lifts were real non-lifts (QUAD4 up 8.9 / 8.7 cm, the object 0.3 / 1.3 mm,
+        checked from the 50 Hz extract). (2) The pickup press rebuilt as a ramp (0.02 m/s, at most PRESS, never below the
+        descent's own lowest contact target), still typed only; FIRST a props-off hand test by Wesley (coil ON, magnet
+        lowered through the object's funnel by hand, lift: does it grip?). (3) attach_twist: every rig script typed
+        zero (meant for a still plate); RIG-1112-nro flew it on the moving ring. rig_nro.sh PAUSE=off now gives his planner
+        the plate's measured twist; the paused flights keep zero. Simulation: 11 of the 12 scored moving 1 m runs also flew
+        zero (R4255, R4258, R4269-R4274, R4285, R4286, R4289; only R4287, his defaults, flew raw, no contact), so "1 m does
+        not attach while moving" is not shown yet: R4311/R4312 (lab PC) re-fly the 1 m circle at 0.125 m/s with the raw twist.
+        (4) A reply to Te-Jen emailed to Wesley to forward.
+DECIDED 2026-11-12 12:45  The 13 Nov rig trials (Wesley and Te-Jen ~12:30; card docs/experiments/2026-11-12_t13_trials.md):
+        hover, circle, figure-eight x 3 trials, QUAD4 starting off the ring holding the object at 9, 1 and 5 o'clock,
+        the ring stopping for his re-attach on 9 (moving re-attach not reliable). Order BY EXPERIMENT (hover x3, circle x3,
+        figure-eight x3); ONE COMMAND per experiment whatever the start ("it should be able to drop off and attach from
+        anywhere with obstacle avoidance"). Wesley ~12:45: (a) the figure-eight on the rig behind a typed switch
+        (contact_rig_fig8; it also lets traj_laps through: one 0.75 m lap is ~30 s) + a twin check, flies only if clean;
+        (b) all 9 trials simulated tonight (new worlds: QUAD4 1.9 m out at 9/1/5 o'clock, tools/make_held_start_worlds.py);
+        (c) a take-back on the figure-eight holds the path at rest until LAND (dissipative_node) -- WITHDRAWN ~14:00 (Wesley,
+        after the critic: its evidence R4305 was wrong; R4299 clean; the take-back frame assumes full speed): the
+        figure-eight's take-back is the circle's; sheet rule: anything but a weld on the figure-eight, LAND at once. OPEN for Te-Jen (message
+        emailed 12:56): his planner has no obstacle avoidance; our 4 Nov line-up from beyond 1.2 m sends QUAD4 to plate
+        9's line first, which from 1 or 5 o'clock passes ~9 cm (1.4 m start) to ~2 cm (2.1 m start, today's placement)
+        from the carrier on 11 or 7. Built behind line_up:=gap (script switch LINEUP=gap, default off): the drop transit
+        lines up on the NEAREST carrier gap (from 9/1/5 straight in, 0.64 m from every carrier). Until decided, a 1 or 5
+        o'clock start needs LINEUP=gap or QUAD4 within ~1.0 m of the ring centre.
+DECIDED 2026-11-12 14:00  After the critic of the 13 Nov card (GO WITH CHANGES; card ## Critic): the figure-eight hold
+        withdrawn (above); placement rules on the sheet (Wesley): QUAD4 1.9 m from the ring's rest point at every start
+        (2.1 m at 1/5 o'clock is past the 1.8 m limit in x), the ring's rest within |x| <= 0.3 m and y in [-0.6, +0.1] m,
+        1 and 5 o'clock only with LINEUP=gap (pending Te-Jen and the twin).
+CORRECTION 2026-11-12 14:05  (Te-Jen's reply, checked in src/tejen_mission/tejen_mission/ring_bridge.py:203-214, unchanged
+        since 284ffb4, 29 Oct) attach_twist:=zero zeroes the attachment twist only while the ring is NOT moving ("a
+        moving ring needs its velocity"). So RIG-1112-nro and every moving twin run of the Te-Jen demos (R4255-R4289)
+        published the plate's measured twist despite the typed zero; DECIDED 12:12 point (3) was wrong, and R4311/R4312
+        repeat R4285 (measured twist, lead 0). The PAUSE=off twist change to rig_nro.sh is reverted. The measured twist is
+        his base class's one-step 50 Hz finite difference of the plate position (fake_cooperative_transport_world.py:780,
+        unfiltered); Te-Jen sees the reference horizon jump between packets and will inspect it.
+FACT    2026-11-12 14:05  (Te-Jen) His stack has obstacle avoidance: the C++ planner (moving carriers through their advertised
+        trajectories; the carrier tethers with carrier_model:=tether). Our rig and twin scripts bypass it (cpp_authority:=false,
+        attach_cpp_transit:=false). Describe every combined trial as "the direct Python transfer, obstacle avoidance
+        bypassed"; the nearest-gap line-up is a prescribed routing heuristic, not a validation of his avoiding planner.
+        Te-Jen favours option A (line_up:=gap) for tomorrow's three starts, the gap kept for the whole approach (built).
+NOTE    2026-11-12 14:15  The placement rule tightened on the sheet (docs/rig/fri_2026-11-13.md): with QUAD4 1.9 m out at 1
+        or 5 o'clock its x is the ring's rest x +- 1.65 m, so the ring's rest x must be within +-0.1 m (not 0.3) or QUAD4
+        starts past the 1.8 m limit (the LAND at takeoff of RIG-1112-fm9c). Real clearances on 12 Nov (motion capture,
+        QUAD4's cable as body to tip marker): route in from 9 o'clock 0.13-0.34 m to a carrier's cable, drop to attach
+        0.15-0.20 m; the twin read 0.38-0.47 and 0.21-0.23 on the same legs (optimistic by ~0.1-0.25 m).
+OPEN    2026-11-12 14:58  Te-Jen (~14:45, and at the machine ~14:55): the 13 Nov experiments must use his C++ obstacle-avoiding
+        planner for the transit, above all carrying the object; he was not aware that every flight since RIG-1029-sq3/
+        -sq4_5 (29 Oct, Wesley ~10:20: his hand-over never granted, then his backend below its search floor) flew
+        cpp_authority:=false. The direct-route runs are "pickup/drop integration tests", not planner experiments. Wesley
+        to confirm tomorrow's plan. Built: CPP=on in rig_fm9h/fm9hc/fm9h8.sh (no cpp_authority:=false, no line-up;
+        carrier_model tether, the default; desk OK); his C++ re-attach transit (pickup_cpp_reattach) is wired only in his
+        launch's twin path, so on the rig the hop to plate 9 stays Python. Twin validation running (12 runs: C++ loaded
+        transit from 9/1/5 on hover/circle/figure-eight; 3 with the C++ re-attach), ownership read from his
+        "authority source switched ... -> C++ at TRANSIT_TO_DROP_POINT entry" line; backend diagnostics if it stalls.
+BUILT   2026-11-12 15:30  rig_q4d.sh (Wesley ~15:10: a one-quad test outside 08:00-11:00, "Quad4 pickup the object and dropoff
+        into the ring ... see if we can make it more accurate"): QUAD4 alone, his M1 ground-ring stack (6 Nov's
+        q4f_ground_ring.launch.py, src code, no overlay workspace), mission pickup_delivery: his pickup of body 6 (12 Nov's
+        seat with the funnel, ARAD 0.04, the rig's pickup values), the loaded transit on HIS C++ planner (c1f2b, as his stack
+        ships), the settle drop into ring 8 resting on the floor (gate DXY 0.05 = today's match band, release 0.03), then his
+        ground-ring re-attach to plate 9 (q4f's). LAND routes back to the pad only from TRANSIT_TO_REATTACH on; earlier it
+        lands straight down. No position limit in this stack. Desk OK (ids, radius, mission, C++ authority). Untested in
+        flight in this form.
+FACT    2026-11-12 15:49  Why q4d_3 hung 26 s over the ring (RIG-1112-q4d_3): his drop settle gate is Python's, not C++'s
+        (tip within drop_settle_xy_threshold, under match_xy_velocity_threshold, for 1 s). On the rig's direct route it
+        defaults to irl_commissioning's 0.18 m / 0.20 m/s and passed in 1.0-1.1 s with the carriers' wash and the tip
+        4-10 cm off (fm9hc_2/_4/_5). rig_q4d.sh had typed 0.05 (wrongly called "today's") and his ground-ring file 0.08 m/s:
+        the tip (2.9-15 cm, median 7.2) met it 18 % of the time. rig_q4d.sh now types the rig's 0.18 / 0.20 and the rig
+        path's hand-over bounds 0.30 m / 0.12 m/s (c1f2_prepare_*); the rig scripts with CPP=on already carry the same
+        (desk 15:49). The accuracy levers are the release (height DZ/RELEASE, and a release gate on the swing: not built).
+OPEN    2026-11-12 16:05  (Te-Jen, for Wesley to decide when he plans 13 Nov; nothing changed) Aim for ONE trial each tomorrow:
+        1 hover, 1 circle, 1 figure-eight. Hover and circle work with the direct route; tomorrow they swap it for his C++
+        planner (CPP=on). The figure-eight last, as the most uncertain. Wesley writes the plan Te-Jen follows while Wesley
+        is away.
+FACT    2026-11-12 16:37  His C++ planner flying the loaded transit with three live carriers, twin (R4338-R4349, the final
+        tree, CPP=on settings): C++ took the transit in 12 of 12, reached the drop in 0 of 12. Hover: stalled 0.66-0.89 m
+        from the ring centre (at the carriers). Circle and figure-eight: some passed over the centre at 3.1-3.6 m (rig cap
+        2.8) but never captured; R4339 (circle, 1 o'clock): QUAD4 tilt 40-43 deg x4, then 75 deg, envelope fault, disarmed.
+        Backend: LIVE_TARGET_UPDATE_PENDING / LIVE_TARGET_RETARGETED, local plans failing the padded final check
+        (LOCAL_PLAN_FAILED:PADDED_CLOSEST_PARTIAL_FINAL_CHECK_FAILED) against the carriers' attached tethers and bodies
+        vs QUAD4's cable, payload, magnet. The direct route passes at 0.2-0.4 m cable-to-cable (twin), 0.13-0.34 m (rig).
+        One quad on the rig today (no carriers, q4d_3/_4): his C++ loaded transit worked twice. Diagnostics for Te-Jen:
+        ~/Downloads/tejen_cpp_twin_2026-11-12.zip. For Wesley's 13 Nov plan (OPEN 16:05): C++ with carriers is not shown
+        to work in the twin.
+OPEN    2026-11-12 16:55  (Te-Jen, for Wesley) Tomorrow is C++ or nothing: "if we don't run C++ tomorrow, we are not running at
+        all ... the combined paper depends on c++ working" (the direct route = integration tests only). His values for the
+        twin batch: swing bound sweep 3, 5, 7 deg; spline_time_factor 4 (his 3.0 now); workspace limits x,y +-1.8 m, z 0-2.9
+        m (proposed by the lab chat). Needs two typed-only switches in partner_mission.launch.py (spline_time_factor,
+        workspace) plus max_swing_angle_rad (exists). Te-Jen: WAIT FOR WESLEY before building or running anything.
+FINDING 2026-11-12 17:04  Our copy of Te-Jen's code is his 21 Oct commit fd495db0 (sync 2, CHANGES_FROM_TEJEN.md); his branch
+        SwungPayload2026_ThesisCExperiments is 143 commits ahead (09fef0b7, 11 Nov; fetched read-only into
+        ~/tejen/drone_cage_control), ~20 in the C++ planner incl. convex swing bounds, stopped-partial soft goals, the
+        stationary-timeout deadlock, finish timing, ~200 lines in ego_collision_model. The twin C++ stalls (R4338-R4349)
+        are planner-side (backend healthy: goal right, inputs fresh 3/3, tracking ~1 cm, plans fail the padded check vs the
+        carriers' tethers), not an adapter freeze. Also: our rig overrides swing 15 deg (his 10), object box 0.043 half
+        (object 105 mm); his moving-target prediction horizon 0 s (config or our bridge); tether geometry vs mocap never
+        checked; his MPC "230 ms" loop in the twin is wall-clock vs sim time (RTF ~0.15), harmless. OPEN for Wesley (emailed):
+        sync 3 tonight, gate, re-fly the 12 C++ twin cases, then Te-Jen's sweep.
+DECIDED 2026-11-12 17:40  (Wesley, relayed by Te-Jen ~17:15: "Wesley approves the plan") Sync 3 done in place (his 09fef0b7;
+        CHANGES_FROM_TEJEN.md; backup ~/mdc_sync3_backup_*): gate 2225 passed. Twin batches on the lab PC: (1) the 12 C++
+        cases + 2 direct-route checks on the merged code, unchanged settings (17:38); (2) then the collision geometry
+        measured on the rig (tuned: swing 5 deg, spline_time_factor 4, carrier inflation 0.06 m, workspace +-1.8 m, z 0-2.9
+        m) on hover 9/1/5 and circle 9, and the swing sweep 3 / 7 deg on hover 9 and circle 9. New typed switches:
+        spline_time_factor, workspace_xy/_z_max; his backend's object box on the rig from the typed object sizes. Carrier
+        deviation from his rigid prediction, 25 rig flights 4-12 Nov: 95th percentile 3-6 cm horizontal (max 6-10; sq8_2
+        11/14), 2-7 cm vertical.
+FINDING 2026-11-12 20:27  His workspace bounds (workspace_bounds_enabled; our typed workspace_xy/_z_max) apply to the whole
+        assembly (body, cable swing envelope, object, tracking): at +-1.8 m the body is held to roughly +-1.6 m. R4366-R4373
+        (twin, QUAD4 starting 1.9 m out): 0 plans accepted, the hand-over never happened (VOID). On the rig, the 13 Nov
+        starts at 1 and 5 o'clock (x +-1.65 m) would be outside it too. Done: CPP=on in rig_fm9h/hc/h8.sh types the workspace
+        only with WSXY (opt-in); the rig's pos_limit_m 1.8 (body) stays the hard limit. The tuned set re-flown without the
+        workspace (R4374+). For Te-Jen/Wesley: start QUAD4 within ~1.4 m in x and y, or a workspace of ~2.0 m.
+FINDING 2026-11-12 21:45  His C++ transit with carriers, twin, sync-3 code, tuned geometry without the workspace: CIRCLE from 9
+        o'clock 2 of 2 (R4377, R4382: transit 86 / 76 s, max 3.5 / 3.9 m, QUAD4 cable 0.09-0.10 m and the object 0.07 m
+        from a carrier's cable, centre lines). HOVER 0 of 8 (R4374-R4376, R4378-R4381): QUAD4 stops 0.50-0.67 m from the ring
+        centre whatever the swing (3/5 deg), carrier inflation (0.04/0.06), body box (0.09/0.105) or spline time (4/6):
+        not the padding; it never enters his capture region over a still ring (backend LIVE_TARGET_UPDATE_PENDING; plans
+        still accepted). For Te-Jen (diagnostics package); for Wesley's 13 Nov plan.
+- FINDING 2026-11-12 22:26 (lab chat; corrects "not the padding" in the 21:45 entry): the cause of his C++ hover stall
+        is his collision shapes, not the padding we swept. His default `swing_envelope_shape: legacy_square` pairs every
+        carrier component with every ego component as axis-aligned boxes. A carrier's 1 m tether runs at a slant (body
+        r 0.73 m, z 2.12 to plate r 0.225, z 1.20), so its box is ~0.45 x 0.26 x 0.9 m. Those of carriers 7 and 11 overlap
+        over the ring once the ego cable/magnet/object boxes are added, so the drop point lies INSIDE his obstacle set. A
+        probe built on his own core (WorldSnapshot::timeIndexedObstacles + Separator) at R4374's stall puts the free edge
+        at x 0 at y 0.675-0.70; QUAD4 stopped at 0.668, and his replans fail PREFIX_CORRIDOR_INCOMPATIBLE 74-83 % (the
+        prefix on the hull's face). His convex mode `outer_octagon` keeps the real slanted prism: the route in and the drop
+        point are free at swing 5 deg, with a narrow band between carriers 7 and 11 (x +-0.05 m free, +-0.10 m blocked). At
+        10 deg even octagon closes it. Same with the rig's object and cable. Built: typed-only launch arg
+        `swing_envelope` (CHANGES_FROM_TEJEN.md). Twin R4383-R4387 (hover 9/1/5, circle 9, fig8 9; swing 5, spline 4,
+        inflation 0.06, no workspace, outer_octagon) running on the lab PC. Diagnostics for Te-Jen:
+        ~/Downloads/tejen_hover_stall_2026-11-12/ (README, probe).
+- DECIDED 2026-11-12 22:52 (supervisor, Teams chat with Wesley and Te-Jen 21:56-22:57, pasted by Wesley): the combined
+        paper's rig experiments, replacing the 9-trial plan (3 starts x hover/circle/fig8: "the exact same case", no
+        repeatability result). 1 or 3 IDENTICAL runs per case:
+        (1) Te-Jen's drop-off: QUAD4 starts holding the object, his planner flies in, drops into the moving ring, flies BACK
+            TO ITS START (start -> ring -> start), all while the ring moves; hover, circle, fig8; no pickup, no re-attach.
+            Metrics: path, distance to the other drones, drop position from the ring centre, time.
+        (2) Wesley's detach/re-attach: detach while moving (hover, circle, fig8), the ring hovers for the re-attach, same
+            plate. Metrics: time, re-attach accuracy, ring tilt, QUAD4's path from 3 to 4.
+        (3) 4 -> 2 -> 4 (one run each: two together or in succession, then back in succession); a limit test.
+        (4) Hero (video): detach, pickup (the object raised on Thomas' stand, about ring height), drop, re-attach; if not,
+            start with the object held. Pickup only in the hero.
+        Extra metric next week: current draw per drone with 4 and 3 carrying (Betaflight telemetry).
+        Order for Fri 13 Nov: fig8 drop-off and fig8 detach/re-attach first, then the hero; 4 -> 2 -> 4 next week.
+        Lab chat's check of what is flown on the rig (registry): detach/re-attach in hover yes (RIG-1111-nrtfc_2, _5);
+        the hero in hover yes once (RIG-1112-fm9_5, 3 pickup descents); detach/re-attach on the circle with the ring
+        stopped NOT caught yet (RIG-1105-nr9o_2, no funnel then); no drop-off flown by his C++ planner, and none flew back
+        to its start (fm9hc_2/_4/_5 used the direct Python route and re-attached).
+- DECIDED 2026-11-13 00:25 (Wesley, ~00:15: "this is bad, the stand is narrow and this could cause a crash"): for the hero with
+        the object on Thomas' stand, a take-back must never come down on the stand. Built (dissipative_node
+        `take_back_avoid_pickup_m`, default 0 = off; the hero's params file
+        `configs/rig/attach_m1_1m_m2a_drop55_det15_stand.yaml` sets 0.6; knob in common.yaml / real_mode PLANNER_OPTIONAL):
+        QUAD4's position is latched as his DESCEND_TO_PICKUP starts. A take-back (our LAND, his give-up) whose landing
+        point falls within 0.6 m of it first rises to that height (the magnet clear of the object), then moves sideways
+        to the nearest point 0.6 m away (inside the position limit's margin, clear of the ring), then comes down. His
+        own LAND still lands straight down: the sheet says our LAND only during the pickup. Unit tests in
+        test_partner_contact.py; twin check rig_fm9_stand115_landpick_twin queued. Critic not run (a take-back path
+        change, not a control law or gate); Wesley can ask for one.
+- FINDING 2026-11-13 01:15 (lab chat; twin): (1) The take-back's stand avoidance did not engage in R4410: with his ball on, the
+        take-back's ring clearance includes the rod, which rejected every point round the stand; fixed (the plain ring
+        clearance; test with the ball on), re-flown in batch 4. (2) The C++ return's hand-over in the CLEAR_DROP_ZONE hold sinks
+        ~0.3 m onto his 2.20 m search floor (R4406, R4407: WAITING_ABOVE_SEARCH_FLOOR); typed return_climb:=transit (climb back
+        to the approach height first, as his pickup_cpp_reattach) in batch 4; on the rig it needs max_body_z 3.0 (asked).
+        (3) His search box reaches 1 m above start/goal: he flew 2.9-3.6 m in the twin, which the rig's 2.8 m planned-height
+        check does not see, and his workspace box stalls his hand-overs (R4401, R4408). Built typed cpp_max_z (his
+        maximum_search_z_m); batch 4 flies the sheet's drop-offs with it at 2.9 m. Row 1 of the 13 Nov sheet flies
+        CPP=on RET=direct (Wesley ~00:55) unless the twin shows the C++ return working.
+- DONE 2026-11-13 01:15 (Wesley ~01:00, the laptop disk full): results/2026-11-01, -03, -04, -05, -06, -07 (simulation days)
+        moved to the lab PC, drones:~/mdc_archive/results/<day>/, each verified by a checksum dry run before the laptop copy was
+        deleted (in progress at 01:15: 2026-11-06 done). Registry run ids unchanged; the files live there now.
+- DONE 2026-11-13 01:40: the move above completed for all six days (2026-11-01, -03, -04, -05, -06, -07), each checksum-verified
+        on the lab PC (drones:~/mdc_archive/results/<day>/) before its laptop copy was deleted; the laptop has 30 GB free.
+- FINDING 2026-11-13 02:06 (agent; real-time open-loop replays of the 12 Nov flights into his backend on this laptop, outer_octagon,
+        tomorrow's settings): his planner reached the drop point in 0 of 4. Every carrier state / plate / ring pose message
+        changed his collision world (~214 versions/s; plate_from_body moves with the measured samples), and his 60-90 ms final
+        recheck near the tethers ended WORLD_CHANGED_DURING_FINAL_RECHECK. The twin hid this: it runs at 0.13-0.16 of real time.
+        With the refreshes coalesced to 0.1 or 0.2 s (new typed backend parameter cooperative_world_refresh_period_s; his Codex
+        entries 8-9: a non-default discriminator, not yet contract-preserving) he reached it in 4 of 4, but on the circle only
+        after the recorded ring had slowed; heights 3.0-3.5 m; and in fm9hc_4 at 0.2 s QUAD4 held still over the circle's path
+        while the carriers swept under it: the hanging line came within 0.05 m of a carrier body (his fallback brakes to a stop,
+        which does not leave a moving peer's path; the twin's R4388 again). The nro replay (95 s of circling) is next.
+        In the twin his search box capped at 2.9 m found no way in over the moving figure-eight or circle (R4411, R4412); the C++
+        return cannot start over a moving ring (R4413), and works over a hovering ring with return_climb transit (R4414).
+- DECIDED 2026-11-13 ~01:30 (Wesley, before bed): over a moving ring his planner is too high; lower it if at all possible
+        (edit his planner, consult his Codex), otherwise a hard cap at 3.8 m as long as he really approaches; he never wants to
+        see it fail to plan; a worst-case backup must be ready; the ring speed stays. Done so far: CPP=on in rig_fm9h/hc/h8 now
+        also types cpp_max_z 3.8 (TOP=) and cpp_world_refresh 0.2 (WREF=0 turns it off); RET now works without CPP (the
+        worst-case backup RET=direct bash ~/rig_fm9h8.sh: his Python transfer both ways, as 12 Nov). Desk checks OK.
+- FINDING 2026-11-13 02:22 (agent; real-time open-loop replays into his backend, binary v2, tomorrow's CPP=on line: outer_octagon,
+        swing 5, spline 4, tracking 0.06, 30 steps, refresh 0.2): over a STILL ring his planner reached the drop point in every
+        run: hover fm9_5 3/3 (15.5-17.6 s after authority, peak 3.10-3.20 m, no stranding) and the still-ring segments of
+        fm9hc_2/_4/_5 3/3 (13.2-17.2 s, peak <= 3.03 m). With his search box capped at 2.9 m it still captured (fm9_5 17.9 s,
+        fm9hc_4 still 15.6 s) at 2.85-2.86 m. Temporal refinement did not lower him and made hover worse (43 fallbacks, 24 s
+        beside a tether): dropped. Over a CONTINUOUSLY circling ring (nro, 90 s) he never captured, period 0 or 0.2. Basis for
+        the morning proposal: his drop-off over a ring paused at his TAKEOFF (PAUSE=takeoff, with attach_pause_through_landing
+        so his LAND cannot restart the ring over him; Te-Jen's Codex entry 11). Repeats of the 2.9 m cap and a CPU-load test
+        follow.
+- DECIDED 2026-11-13 02:29 (lab chat, within Wesley's ~01:30 instruction: as low as possible, never above 3.8 m): CPP=on now types
+        cpp_max_z 2.9 by default (TOP=3.8 for his ceiling): real-time replays over a still ring with the 2.9 line reached the
+        drop point 8 of 8 (4 hover, 4 still-ring segments), 12.9-21.5 s, QUAD4 never above 2.89 m (the 3.8 line: 6 of 6,
+        2.80-3.20 m). His replans run ~105 ms median against his 0.1 s splice (LATE 41-64 %); 4 and 8 busy cores did not
+        degrade the 3.8 line. RET=cpp types return_climb transit and max_body_z 3.0. Over a moving ring his planner is not
+        proposed at all (continuous-circle replay: no capture in 90 s).
+- FINDING 2026-11-13 02:39 (agent; real-time replays + the 12 Nov bags): a 3 deg swing bound let his planner in over the MOVING
+        figure-eight in the twin at 2.9 m (R4420, R4421), but not in real time (nro: one brief intercept after 85 s, after 8.5 s
+        parked 0.13 m from a tether; fm9hc: captures only once the ring stopped), and the real QUAD4 cable swing exceeds 3 deg
+        often (his C++ q4d_7: 60 % of the transit; Python transits after a lift up to 10 deg). The swing bound stays 5 deg;
+        tracking 0.04 touched a cable in the twin (R4419). CPU load: the cap-2.9 line stalled once under 8 busy cores (0.57 m
+        short) and its plan gaps grew to 7-11 s; the 3.8 line captured under 4 and 8 cores (one run each). The margin is his
+        replans (100-190 ms) against his 0.1 s splice lookahead; fixed_splice_lookahead_s 0.15/0.20 under load is being tested.
+- DECIDED 2026-11-13 02:54 (lab chat): CPP=on's splice lookahead default 0.20 s (SPLA=), not 0.15: both captured 2 of 2 at
+        8 busy cores (0-1 % LATE), and the agent's last runs showed his replan p95 rising to 161-208 ms. Evidence saved:
+        results/analysis/cpp_realtime_2026-11-13/ (README). The sheet (docs/rig/fri_2026-11-13.md, draft for Wesley) has row 1
+        as his C++ drop-off over the paused figure-eight (PAUSE=takeoff) and the moving drop-off on the direct route.
+- FINDING 2026-11-13 03:25 (lab chat; real-time replays of 12 Nov's circling flights, results/analysis/cpp_realtime_2026-11-13/
+        README "The moving ring at real time with splice 0.20"; exploratory, one replay per row): with his splice lookahead at
+        0.20 s his C++ planner CAN reach a ring circling at 0.125 m/s in real time (nro: 3 of 3 at spline 4, 25.8-40.8 s,
+        QUAD4 2.62-3.13 m; spline 3/2: 9-39 s at 2.58-2.66 m), where at 0.10 s it never did (LATE ~40 % -> 0-2 %). But when it
+        finds no plan it stops (no escape), and a stopped QUAD4 beside a moving ring gets swept: in 2 of 3 spline-3 continuous
+        circles a carrier tether crossed QUAD4's hanging cable (0.00 m, centre lines) after 10-11 s parked; fm9hc_4 parked
+        21.5 s at 0.12 m. Spline 4 parked under 0.5 s in 6 of 6 but in the 20-25 s moving windows of fm9hc caught the ring
+        only after it slowed. DECIDED (lab chat, for Wesley to confirm by 08:00): his C++ planner is not proposed into a
+        MOVING ring tomorrow (one park = a cable-on-cable contact with Te-Jen alone); row 1 stays his C++ drop-off over the
+        figure-eight paused at his TAKEOFF (twin R4423-R4427 5 of 5 incl. the circle and the C++ return; still-ring replays
+        8 of 8 under load); the moving drop-off flies the direct route (12 Nov 3 of 3; twin R4428). The twin batch 9
+        (rig line exactly: spline 4, splice 0.20, cap 2.9) repeats row 1 and tries the moving figure-eight/circle for the record.
+- FINDING 2026-11-13 03:40 (lab chat, correcting 03:25): the twin's "paused" drop-offs R4423-R4427 and R4429-R4433 never had a
+        moving ring: his twin supervisor's start gate opened in the ring's 5 s hover hold, so his TAKEOFF (and our pause at
+        it) came 4.7 s before the path started. They show the drop-off, the C++ return and the three LAND aborts over a still
+        ring with the pause held through his landing, not the stop of a moving ring. Built (twin only, typed): his
+        supervisor's start_gate_min_traj_t (the gate also waits for the path clock); make_t13_configs types 10 s for every
+        paused figure-eight/circle. Batch 9 (the rig line exactly, his TAKEOFF 10 s into the path) is the real test of row 1.
+        Registry R4423c.
+- FINDING 2026-11-13 04:39 (lab chat; twin batch 9, the rig line exactly: outer_octagon, swing 5, spline 4, tracking 0.06, 30
+        steps, refresh 0.2, cap 2.9, splice 0.20; his TAKEOFF 10 s into the running path; tools/pause_sequence.py): row 1 in
+        the rig's order passed 2 of 2 (R4435, R4436) and the circle from 9 and 5 o'clock 1 of 1 each (R4439, R4437): the ring
+        moving at 0.12 m/s before his TAKEOFF, at rest 2.9-3.0 s after it; his C++ transit from 10.8-11.6 s (>= 7.8 s after
+        rest; his bridge predicts the ring frozen during the 3 s ramp, Te-Jen's Codex entry 18, so this margin matters);
+        transit 16.5-25.6 s, QUAD4 <= 2.90 m, >= 0.29 m in his transit, >= 0.97 m in his climb; ball in the net 4 of 4;
+        the ring reference still (<= 0.001 m/s) from his transit to his LANDED_DISARMED; the path resumed only after it.
+        R4438 (our LAND in his transit): QUAD4 tipped > 60 deg on its loaded liftoff (the twin's rigid rod with the ball;
+        QUAD4 alone disarmed), so the abort was not reached (R4429 covers it over the still ring). R4440 (the rig line into
+        the MOVING figure-eight): see its row. Row 1 as on the sheet stands, for Wesley to confirm.
+- FINDING 2026-11-13 04:44 (lab chat, correcting the 04:39 line on R4438): QUAD4 did not tip at liftoff; in his loaded climb
+        (his MPC, before any C++) the twin's QUAD4 went into a growing pendulum swing (ball +-0.6 m) and fell from 2.1 m,
+        landing 1.6 m away, >= 0.8 m from every carrier; QUAD4 alone disarmed, the ring level. As R4339 (12 Nov). The
+        rig's loaded climbs from the mat on 12 Nov were 3 of 3 clean (fm9hc_2/_4/_5). R4440 (the rig line into the MOVING
+        figure-eight): no capture in 6 min and the object 0.04 m from a carrier cable: the refusal in the scripts stands.
+OPEN    2026-11-13 05:16 (lab chat, from Te-Jen's Codex entries 18-19; for Wesley and Te-Jen): during our attach pause's 3 s
+        slow-down (and the speed-up at the resume) /payload/trajectory_state already advertises the hold (hold_s 60) while the
+        path clock still slews, so his ring_bridge predicts the ring frozen ~0.19 m of path early (ring_bridge.
+        compute_payload_state). Row 1 relies on the OBSERVED separation, not a gate: from the mat his TAKEOFF climbs ~2.8 m
+        at 0.3 m/s and his C++ transit started 10.8-11.6 s after his TAKEOFF, >= 7.8 s after measured rest (R4435-R4439).
+        An airborne or shortened TAKEOFF, a faster climb or a longer ramp would remove it. Two possible fixes, each a contract
+        change to review (a gate needs Wesley's word and a critic): (a) an explicit admission condition before his C++
+        grant (measured ring at rest and the advertised future stopped, both fresh); (b) the trajectory state carrying the
+        clock rate so the bridge predicts the ramp. Not built before the 13 Nov flights.
+- FINDING 2026-11-13 05:32 (lab chat; Te-Jen's Codex entry 19: the abort in the rig's order was unverified after R4438): our
+        LAND during row 1 in the rig's order (figure-eight running, then his TAKEOFF; the rig line) passed 4 of 4: in his C++
+        transit x2 (R4441, R4442), as he cleared the drop zone (R4443), in his return (R4444): take-back at once, the ring
+        reference still (0.0000 m/s) through the LAND, everyone landed, no fleet abort. R4441: after the ball reached the
+        floor the twin's rigid rod held QUAD4 up and it toppled at its disarm, 0.6 m from the nearest landed carrier (twin
+        artefact).
+- NOTE 2026-11-13 05:34 (lab chat, Te-Jen's Codex entry 20): in the 05:32 line R4443 is a RETURN-phase abort (his phase was
+        already RETURN_TO_START when our LAND arrived), so batch 10 covers 2 transit + 2 return aborts; a LAND during
+        CLEAR_DROP_ZONE is covered only over a ring that never moved (R4430). The return in R4423-R4444 is his Python
+        transfer (return_after_drop:=direct in each run's LAUNCH line) except R4427/R4434 (cpp). R4441 counts as a toppled
+        touchdown in the twin, not an upright landing.
+- FINDING 2026-11-13 06:29 (lab chat, Wesley's question: what keeps the direct route clear of the carriers): nothing on the direct
+        route checks the carriers; the clearance comes from the sequence: the climb to 2.8 m at the mat, the line-up (from
+        beyond 1.2 m to plate 9's radial line, then straight in through the gap between plates 7 and 11, once per phase), and
+        the drop descent only within 5 cm of the drop point, velocity matched. Measured on 12 Nov's three direct drop-offs
+        into the CIRCLE (mocap 20 Hz, centre lines, his TAKEOFF to the drop; results/analysis/cpp_realtime_2026-11-13/
+        direct_clearance.py): QUAD4's body >= 0.73 m from every carrier body and cable; QUAD4's cable >= 0.39 m from carrier
+        bodies but 0.14-0.20 m from a carrier cable; the object's edge 0.09-0.15 m from a carrier cable, at the end of the
+        transit or in the descent. The FIGURE-EIGHT direct drop-off (the sheet's backup) has never flown on the rig: twin
+        R4428 only (0.27 m in transit, 0.14 m in the descent). The sheet's "as flown 3/3 on 12 Nov" meant the circle.
+- DECIDED 2026-11-13 06:31 (Wesley: "I dont think stopping for the dropoff is good"; the backup "Obviously figure-eight
+        but both should be possible"): row 1 of the 13 Nov sheet is the drop into the MOVING figure-eight on the direct route
+        (`RET=direct bash ~/rig_fm9h8.sh`, its first rig flight); the circle on the same route (12 Nov 3/3) is its backup;
+        the C++ drop-off over the stopped ring moves to Other options. Wesley asked whether the direct route can avoid the
+        carriers and their cables: answered in chat (not buildable and tested before 08:00).
+- DECIDED 2026-11-13 07:02 (Wesley, after the swing-3 replays: "can we run it right now for the figure 8 and circle
+        trajectories in the lab?"): rows 1a/1b on the 13 Nov sheet: Te-Jen's C++ planner into the MOVING circle and
+        figure-eight with his settings (swing 3 deg, spline 2; outer_octagon, tracking 0.06, 30 steps, refresh 0.2, splice
+        0.20, cap 2.9), `CPP=on CPPMOVING=1 SWING=3 SPLINE=2 RET=direct bash ~/rig_fm9hc.sh` / `~/rig_fm9h8.sh` (dry runs
+        checked). Evidence: real-time replays 11 of 11 reached the drop point, 9 while the ring circled, 6.8-17 s, <= 2.84 m,
+        >= 0.36 m from every carrier cable, never still > 0.2 s before (results/analysis/cpp_realtime_2026-11-13/full/runs/
+        *_tj_*). Pushed back once: open loop (no swing, perfect tracking), 3 deg below the real swing (4-10 deg), no
+        figure-eight recording to replay, the no-escape stop unchanged; the twin batch (R4445-R4450) still flying. Stop rule
+        on the sheet: QUAD4 still beside the moving ring ~2 s or its cable heading into a carrier's cable: our LAND.
+- FINDING 2026-11-13 07:09 (lab chat; rows 1a/1b, Te-Jen's settings swing 3 deg + spline 2 / 2.5): twin R4445-R4450 6 of 6
+        (moving figure-eight and circle 4 of 4: C++ transit 11.8-14.1 s with the ring at 0.12-0.15 m/s, <= 2.89 m, >= 0.31 m
+        in transit, ball in the net, back at the start; the stopped figure-eight 2 of 2); real-time replays 12 of 12 (10
+        while moving), under 8 busy CPU loops 2 of 2 (8.8 and 11.5 s, >= 0.34 m, no stop). Te-Jen's Codex (entry 24): the
+        replays have no swing, so they do not establish a 3 deg bound on the real cable; the operator LAND is not a
+        certified escape; the rows stay EXPERIMENTAL and operator-owned. Twin LAND tests during his transit into the moving
+        ring running (batch 12).
+- FINDING 2026-11-13 07:24 (lab chat; twin batch 12, Te-Jen's settings swing 3 + spline 2): our LAND during his C++ transit
+        into the MOVING figure-eight and circle 2 of 2 (R4451, R4452: the ring froze, everyone landed, >= 0.74 m after LAND;
+        QUAD4 toppled at touchdown on the twin's rigid cable). Repeats: figure-eight clean (R4453, 0.34 m); circle R4454:
+        his backend went to UNCERTIFIED_HARD_HOVER, QUAD4 stood still > 3 s and the circling ring brought a carrier cable
+        0.054 m from the object, then passed under it and he dropped. With these settings the moving runs are 5 of 6 clean
+        in the twin (figure-eight 3 of 3, circle 2 of 3) and 15 of 15 in the replays; the stop-in-path failure is reduced,
+        not gone. The sheet's rule (QUAD4 still ~2 s beside the moving ring: our LAND) covers it; in R4454 QUAD4 was still
+        ~3 s before the closest point.
+- DECIDED 2026-11-13 09:05 (Te-Jen at the rig: "recommend a fix and only implement it if you think it's really a nobrainer"):
+        the rig scripts' cpp_splice default 0.20 -> 0.30 s (SPLA=0.20 restores it): on the rig his replans ran median
+        127-218 ms, p95 283-296 ms (RIG-1113-fm9h8_5, -fm9hc), so 0.20 discarded a third to a half of them as late and the
+        incumbent then braked / hard-hovered between plans. Recommended only (not built): his hand-over settle speed bound
+        0.12 -> ~0.20 m/s (3 resets in -fm9hc) and a release gate on the object's distance from the drop point on the moving
+        circle (released 0.16 m off centre, the object bounced off the ring edge).
+- DECIDED 2026-11-13 09:09 (Te-Jen at the rig agreed both recommendations; "don't make it release too late, it has to
+        eventually release"): typed switches, defaults unchanged, the rig scripts type them: prepare_settle_speed 0.20 m/s
+        with CPP=on (PREPSPD), and drop_release_xy 0.06 m with drop_release_wait 3 s on every drop-off script (RELXY=0
+        off): the release waits for the magnet within 6 cm of the drop point, at most 3 s after the lowering, then releases
+        anyway. Not flown or simulated yet (unit tests only, 202 passed); first flight is the next 1a/1c.
+- DECIDED 2026-11-13 10:15 (Te-Jen at the rig; the supervisor: no tracking-error brakes): his execution tracking brakes OFF
+        (c1f6_moving_rendezvous.yaml), the hard hover latched once per fallback episode (his backend, rebuilt), and with
+        CPP=on the scripts type: his C++ goal over the drop point at 3.00 m (drop_height 0.72, max_body_z 3.0), search
+        ceiling 3.3 m, hand-over settle accel 0.8 m/s^2 (plus speed 0.20, splice 0.30, search 0.10 s, state timeout 1.0,
+        release gate 6 cm / 3 s from earlier). Basis: RIG-1113-fm9h8_7/_10, -fm9hc_5 (brakes from 6-8 cm tracking error,
+        hard-hover ratchet down into the cable zone). Not simulated; first flight is the next 1a.
+- DECIDED 2026-11-13 10:40 (Te-Jen at the rig: "freeze it there at 3.0"): his C++ drop-off settings FROZEN for the rest of
+        the session and the paper runs: CPP=on CPPMOVING=1 SWING=3 SPLINE=2 RET=direct with the scripts' defaults: goal over
+        the drop point 2.99 m (drop_height 0.71, max_body_z 3.0), search ceiling 3.3 m, outer_octagon, carrier padding
+        0.06, 30 rendezvous-time steps, world refresh 0.2 s, splice 0.30 s, search limit 0.10 s, cooperative state timeout
+        1.0 s, tracking brakes OFF, hard hover latched per episode, hand-over settle 0.20 m/s / 0.8 m/s^2, release gate 6 cm
+        / 3 s. Successes on this line: RIG-1113-fm9h8_13 (figure-eight); at 2.75 m fm9h8_14 passed (figure-eight) and
+        fm9hc_9 failed (circle: no route, hard hover in the path, a cable crossing).
+- FINDING 2026-11-13 ~12:00 (lab chat; the hero RIG-1113-fm9c_2, motion capture; results/analysis/hero_2026-11-13/): the
+        re-attach missed because the magnet never reached plate 9: our comotion contact fired with the tip 0.8 cm above the
+        plate (the window allows up to +4 cm, `comotion_normal_max` 0.04 typed by the scripts), his LIFT_PROOF began 0.1 s
+        after his descent profile ended (his reference 3.3 cm below the plate, QUAD4 ~4 cm behind it), the tip rose with
+        the reference (taut cable) and slid 7 cm sideways ("lost"). The 11 Nov catches read -2.7 to +0.4 mm at contact.
+        The pickup: the tip reached the object in all three tries; 1-3 mm above the calibrated contact on the two that
+        failed, 0 mm on the one that lifted; the reference went 2.3 / 3.6 / 3.6 cm below the surface, so more overtravel
+        does not separate them (the cable goes slack at the bottom).
+- OPEN    2026-11-13 ~12:00 (for Wesley and Te-Jen): the re-attach fix for 18 Nov, (a) our contact window
+        `comotion_normal_max` 0.04 -> 0.01 m (a gate: Wesley's word), (b) a ~1 s hold at the bottom of his attach descent
+        before LIFT_PROOF (his planner: Te-Jen's OK). Evidence pending: the replay of every real contact event
+        (results/analysis/reattach_contact_2026-11-13/).
+- DECIDED 2026-11-13 17:00 (Wesley, the supervisor's 4 -> 2 -> 4 of 12 Nov): on the real quads BOTH returning quads re-attach
+        with Te-Jen's attach (his stack, one instance per returning quad), "ideally both detach and attach are commands
+        simultaneously". Design study running (results/analysis/424_design_2026-11-13/: our stack, his stack as two
+        instances, rig layout / hardware / twin plan); build plan and the decisions it needs (layout, a second funnel and
+        magnet marker, Te-Jen's OK to run two instances) to Wesley before 18:00.
+- FINDING 2026-11-13 17:19 (lab chat; CORRECTS the FINDING ~12:00 above; results/analysis/pickup_seat_2026-11-13/, all 27 rig
+        lifts 14 Oct-13 Nov): the cable is NOT slack at the pickup seat. QUAD4's body stayed 5-45 mm ABOVE his reference in
+        every lift (fm9c_2: 24 / 37 / 36 mm) and the body-to-tip length stayed at its free hang (-0.4..+2.8 mm), so his
+        overtravel never reached the magnet: it hung on a taut cable at its swing tilt. The magnet's tilt on the object
+        separates held from failed lifts (26 of 27): held lay flat (0.5-2.5 deg), every failure was tilted 5.3-10.8 deg
+        (touching with an edge; the 1-3 mm seat gap is a side effect). So Te-Jen's reading ("not going low enough") holds:
+        the body does not follow the reference down (the same ~4 cm lag as at the re-attach). Fix candidates for him: a
+        deeper effective descent (overtravel that the body actually follows, or his z tracking offset removed) to give real
+        slack, or a check before the lift that the face is within ~3 deg of the object's up axis (a gate: his and Wesley's word).
+- FINDING 2026-11-13 17:23 (lab chat; evidence for the OPEN re-attach fix above; results/analysis/reattach_contact_2026-11-13/):
+        all 25 real contacts (4-13 Nov) replayed through our ComotionProof (logged contacts reproduced within 13 ms):
+        comotion_normal_max 0.01 blocks or delays all 7 high contacts (+8.5 mm or more, every one failed) and blocks none
+        of the 9 proven catches (two delayed 13 / 94 ms); 0.02 still fires on fm9c_2 and fm9_5 try 1. fm9c_2's contact read
+        +13.6 mm (the tip dipped to +1.8 mm on a ring bob and rebounded). At the bottom of his attach descent QUAD4's body
+        sat 33-47 mm ABOVE his reference and never closed it (the same offset as at the pickup), so his ~3.5 cm press ends
+        at plate level. Highest real catch +6.1 mm (nr1_2, 4 Nov): 0.01 keeps ~4 mm margin.
+- DECIDED 2026-11-13 17:37 (Wesley, on the replay of all 25 real contacts above): our contact window 4 cm -> 1 cm above the
+        plate on the rig: every re-attach script types comotion_normal_max ${CNMAX:-0.01} (CNMAX=0.04 restores it;
+        results/rig/2026-11-13/scripts/*.sh and the ~/ copies, dry run checked). Code default unchanged. The bottom hold
+        before his LIFT_PROOF stays Te-Jen's call (emailed him the finding, 13 Nov ~17:35).
+- DECIDED 2026-11-13 17:37 (Wesley): the FULL 4 -> 2 -> 4 for Wed 18 Nov (over the staged option; pushed back once: 60-80 h,
+        safety paths, the minimum items first). Square on plates 0/3/6/9: QUAD1 + QUAD2 the pair on 0/6, QUAD3 (drone_2) on
+        3 and QUAD4 (drone_3) on 9 detach on one command and both re-attach with Te-Jen's stack (a second instance for
+        QUAD3). Built behind a two-partner switch (default off: single-QUAD4 flights unchanged), twin + desk check before
+        it flies. Design: results/analysis/424_design_2026-11-13/ (ours.md, tejen_stack.md, rig_and_twin.md).
+- DECIDED 2026-11-13 18:40 (Wesley, on the critic of docs/experiments/2026-11-13_424.md, GO WITH CHANGES): (1) the second
+        fold-in happens AT ONCE (no queue; the critic's finding 1-2), its blend starting from the current references;
+        (2) the first rig 4 -> 2 -> 4 flies both of his TAKEOFFs TOGETHER (over the critic's and the design study's
+        "succession first", and the supervisor's "then back in succession": pushed back once in the question; his call);
+        (3) the ring-tilt drop stays 55 deg in configs/rig/attach_424_pair.yaml (over the locked chain-pair 45 and the
+        critic's recommendation; his word on the gate thresholds min_survivors 2, drop_gap_deg 200, int_k_xy 0, 55 deg).
+        Lab PC: twin T1 (pair hold) and T3 (set detach) started 18:40 (lab_batch, R4461/R4462 reserved).
+- DECIDED 2026-11-13 19:05 (Wesley, on builder P's finding): after both returners re-attach the planner's nominal split was
+        pair 4.87 N each, returners 0.1 N each (two slack riders; the least-squares over six rows with the measured catch
+        points); fix: in two-partner mode a fold-in shares the load with the lift and level-moment rows only (level=True),
+        keeping the measured catch points (~2.4 N each). Being built; twin re-fly of T4/T5 before the rig. Twin so far:
+        R4461 (sequential 4 -> 2, today's code) ring tilt peak 43.6 deg; R4462 (set detach) 0.24 deg, the ring dipped
+        10.5 cm for ~2 s at the release (sheet stop rule excludes the first ~3 s); the pair alone <= 0.24 deg, throttle
+        0.72-0.73.
+
+DECIDED 2026-11-13 19:05 (Wesley, thesis chat): the Results restructure. Results and Discussion 16-18 pages with at
+least 12 on the real world. Simulation in the main text keeps only robustness to the attachment-point error, scalability
+(incl. the relay) and the comparison with Quan et al.; fixed formation, detaching and attaching are shown with the real
+world; the simulated comparison with the no-resize method leaves the main text (its table goes to an appendix, the
+thesis chat's recommendation, unless Wesley says delete). The real world is told event by event up to the full mission;
+the drop shows disturbance rejection and recovery (the drop-off credited to the collaborator's controller, his C++
+planner included), the reattachment shows resizing (the attachment credited to his single-quadrotor controller). Setups
+1 and 2 are told in the Methodology as lessons (why the next setup was tried); Setup 3 is the main setup. Setup 1's
+material compressed (Fig 26, a two-row detection table; the rest to the appendix). Plan:
+~/.claude/plans/majestic-crafting-prism.md; lab request Q013.
+
+DECIDED 2026-11-13 19:50 (Wesley, thesis chat): the simulated resizing comparison (resizing at detection against the
+no-resize baseline: tab:res_x1, fig:res_x1, X1) is DELETED from the thesis, not moved to an appendix ("it wasn't very
+strong and doesn't read that well"). The thesis chat had recommended the appendix (the only comparison against not
+resizing); Wesley decided. Resizing is shown by the real-world detachments and reattachments.
+- NOTE    2026-11-13 19:51 (reviewer of F113-F115): the pickup FINDING above is refined for Setup 3: the magnet's tilt sorts 23
+        of 24 Setup 3 lifts (26 of 27 counted the 14 Oct lifts); QUAD4's body sat 0.5-4.1 cm (median 3.2) above its
+        reference at the seat; the cable stayed taut in 23 of 24 lifts (k1ob_2 7.7 mm slack). A correlate, not a tested cause.
+
+DECIDED 2026-11-14 (Wesley, thesis chat): in the thesis, cable tensions are always the MEASURED tension (the trackers'
+eq:meas_tension, Tpull; "the commanded is not reliable"), never the planner's commanded node-0 tension. The thesis chat
+said once that F122's reviewer advises against Tpull as a cable tension (sums 7.8-8.0 N where 9.7 N is needed on some
+flights, per-quad thrust-map bias, frozen while the collaborator's stream flies QUAD4); Wesley decided. In nrtfc_5 the
+four measured tensions sum to 9.5 N at the blend end (9.7 N needed). Also: no dates in the results ("on 4 November");
+the funnel is described as tried-without, not reliable, so used (no before/after comparison); the collaborator's
+controller is left unexplained (no C++/Python transfer detail, no pickup statistics): the thesis reports the ring's
+response and the resize.
+
+DECIDED 2026-11-14 (Wesley, thesis chat, after the supervisors' papers' usage): "experiments" / "experimentally" replace
+"in the real world" in the thesis; "real-world experiments" where it reads better, and 4.2 is titled "Real-World
+Experiments". "Payload" replaces "ring" in general statements and measures (payload tilt, payload height, the payload's
+centre; introduced once in 3.1 as the ring-shaped payload); "ring" stays only where its shape matters (plates around the
+ring, the net across the ring). Figure labels follow ("Payload tilt", "Payload").
+
+DECIDED 2026-11-14 (Wesley, thesis chat): "payload" also replaces "load" where it means the carried object (the
+Introduction and the literature review); "load--cable" stays as the formulation's name, and "load" stays where it means a
+force or a share of the weight ("redistribute the load", "load shares", "under load"). Figure 1: (a) the new agent
+reattaching (fm9hc_4 story frame 09), (b) the four steady after the reattachment (fm9_5 story frame 09), the new agent
+labelled in both (second from the left in (b), Wesley), no object label.
+
+DECIDED 2026-11-14 (Wesley, thesis chat agreed): Results and Discussion puts the real-world experiments first (4.1
+Real-World Experiments, event by event to the full mission) and simulation second (4.2: what the experiments could not
+test: the attachment-point error, scalability with the relay, the comparison with Quan et al.). Appendices reordered to
+stay cited in order: C Further Experimental Results, D Approaches Not Kept, E Further Simulation Results.
+- DECIDED 2026-11-14 13:40 (Wesley, next week's plan; CLAUDE.md updated): sessions 08:00-11:00 Mon 16, Thu 19, Fri 20 Nov
+        (Wesley), Tue 17 and Wed 18 (Te-Jen alone; with Wesley Fri). Mon: detach and re-attach x3 each in hover,
+        figure-eight, circle (nrtf / nr8 / nro: detach while flying, his TAKEOFF 5-10 s later stops the ring, re-attach,
+        fly on), then one 4 -> 2 -> 4 (setup in the battery breaks); the hero later in the week. Tue: Te-Jen's drop-off x3
+        each in hover, circle, figure-eight, then hero attempts. Wed/Thu/Fri: what is short, the best hero. The detach
+        keeps its 3 s unload path pause (Wesley over "unload while moving"). Thesis: real-world flights up to Thu 19 Nov;
+        Friday's for the combined paper; hand-in Fri 20 Nov 17:00.
+- FINDING 2026-11-14 14:32 (lab chat; the critic's finding 11, runtime desk check of rig_424.sh with real_io:=false, fake
+        mocap for the square, ROS domain 77; scratchpad desk424/report.txt): PASS on wiring.
+        - 25 nodes, both of Te-Jen's instances up, nothing crashed in ~8 min.
+        - All 92 of QUAD4's per-partner topics have a QUAD3 twin by the contract's rule, with identical publisher and
+          subscriber sets (0 differences); no cross-feeding.
+        - An injected /drone_2 weld flips only mux_2 (isolated muxes); on the live graph neither mux reacts at boot, by
+          design (both welded, ours).
+        - CPU 8.5 of 12 on the ground without radios, mocap, RViz or the bag: the card's risk 7 stands. Sheet: close RViz
+          for row 10, watch the carriers' radio rate.
+        - ~/rig_424.sh copied.
+- DECIDED 2026-11-14 14:51 (Wesley): Te-Jen is fine with a second instance of his stack on QUAD3 for 4 -> 2 -> 4 (Monday's row
+        10). Paper/thesis credit wording, no specifics: "a controller from a collaborating student, for a single
+        quadrotor with a swung payload, makes the attachment" (replaces the "C++ approach, Python return" detail as the
+        credit line; the drop-off and attachment are credited to that controller, the ring's response and resizing to the
+        proposed planner). His descent choice and the C++ line: waiting on his reply.

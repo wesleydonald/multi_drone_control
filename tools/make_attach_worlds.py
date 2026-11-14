@@ -51,6 +51,10 @@ the rig-matched twin instead of the legacy sim (Wesley, 8 Oct 2026; docs/decisio
                                            the full M1 world + the same tool (the tilt cut card's
                                            push on QUAD4)
 
+EXTRA_PARTNERS (empty here; make_attach_layout_worlds_L100.py 'pair2', the 4 -> 2 -> 4 square) adds
+further partners welded from spawn on rig plate 3 or 9, each QUAD4's model on its own airframe
+(models/x3_rig_drone<d>_magnet_welded*.sdf) with its own ring weld on /drone_<d>/payload/*.
+
 The carriers and ring are generate_rigid_world.py with make_carry_worlds.RIG_ARGS, i.e. the
 same twin as the carry worlds. Rig plate labels run clockwise from +x (plate 9 at 90 deg);
 the ring's plate_k_visual are numbered counter-clockwise (plate_3_visual at 90 deg).
@@ -91,6 +95,10 @@ ID = 3
 MODEL = 'x3_rig_drone3_magnet'
 CARRIER_AZIMUTHS = '270,30,150'   # drone_0/1/2 on rig plates 3/11/7 (decisions 8 Oct)
 WELD_Y = ATTACH_RADIUS            # rig plate 9 at 90 deg, (0, +0.225) (attach_y_offset)
+PLATE = 9                         # QUAD4's rig plate
+# further partners welded from spawn beside QUAD4, (drone id, rig plate 3 or 9), each its own model and ring weld
+# (the 4 -> 2 -> 4 square, make_attach_layout_worlds_L100.py 'pair2'); () = the one-partner worlds
+EXTRA_PARTNERS = ()
 FREE_XY = (0.0, 1.4)
 GROUND_Z = 0.10                   # every twin drone rests here (--ground-start)
 PLATE_Z = RING_THICKNESS          # plate top, ring on the floor (CoG t/2, plane t/2 up)
@@ -160,19 +168,27 @@ def _f(x):
     return f'{x + 0.0:.6f}'
 
 
-def spawn(start):
+def plate_side(plate):
+    """+1 for rig plate 9 (+y), -1 for plate 3 (-y): the plates a partner's arm reaches in its body y-z plane."""
+    if plate not in (3, 9):
+        raise SystemExit(f'partner plate {plate}: only rig plates 3 and 9 (the arm swings in the body y-z plane)')
+    return 1.0 if plate == 9 else -1.0
+
+
+def spawn(start, plate=PLATE):
     """(drone xyz, arm roll in base_link). The arm runs pivot -> tip in the body y-z plane:
     roll r turns its -z axis to (0, sin r, -cos r). Free: the magnet resting on the floor out
-    along +y. Welded: the tip on the plate top at (0, WELD_Y), the rod at the carriers'
-    ground-start elevation, so the drone sits on the carriers' circle."""
+    along +y. Welded: the tip on the plate top at (0, +-WELD_Y) (plate 9 / 3), the rod at the
+    carriers' ground-start elevation, so the drone sits on the carriers' circle."""
     pivot_z = GROUND_Z - PIVOT_DZ
     if start == 'free':
         dz = pivot_z - TIP_R
         h = math.sqrt(CABLE_LEN ** 2 - dz ** 2)
         return (FREE_XY[0], FREE_XY[1], GROUND_Z), math.atan2(h, dz)
+    side = plate_side(plate)
     dz = pivot_z - PLATE_Z
     h = math.sqrt(CABLE_LEN ** 2 - dz ** 2)
-    return (0.0, WELD_Y + h, GROUND_Z), -math.atan2(h, dz)
+    return (0.0, side * (WELD_Y + h), GROUND_Z), -side * math.atan2(h, dz)
 
 
 def _universal(name, parent, child, damping, pose=None, note=None):
@@ -256,6 +272,22 @@ TAIL = """        <!-- A top-level model: publish_model_pose adds the model's WO
 """
 
 
+def weld_prefix(drone):
+    """The ring weld's gz topics: QUAD4's /payload/*, another partner's /drone_<d>/payload/* (the contract's rule)."""
+    return '' if drone == ID else f'/drone_{drone}'
+
+
+def tail(drone=ID):
+    """TAIL for partner `drone`: its own model pose topic and ring-weld topics (QUAD4's text as it always was)."""
+    if drone == ID:
+        return TAIL
+    p = weld_prefix(drone)
+    text = TAIL.replace(f'/model/x3_drone{ID}/pose', f'/model/x3_drone{drone}/pose')
+    for old in ('/payload/attach', '/payload/detach', '/payload/detachable_joint_state'):
+        text = text.replace(f'>{old}<', f'>{p}{old}<').replace(f' {old} ', f' {p}{old} ')
+    return text
+
+
 def _replace_once(text, old, new, what):
     if text.count(old) != 1:
         raise SystemExit(f'x3_rig_drone{ID}: {what} not found exactly once; update '
@@ -263,18 +295,28 @@ def _replace_once(text, old, new, what):
     return text.replace(old, new, 1)
 
 
-def newcomer_model(start):
-    """x3_rig_drone3 (make_carry_worlds.rig_model) + skid + magnet arm, its pose publisher
-    swapped for the free drone's (model world pose) and the ring weld added."""
-    with open(os.path.join(ASSETS, 'models', f'x3_drone{ID}.sdf')) as f:
-        text = rig_model(f.read(), ID)
-    _, roll = spawn(start)
+def partner_model_name(drone, start='welded'):
+    """models/ file of partner `drone`: QUAD4's MODELS[start], or that name with the drone id swapped."""
+    return MODELS[start] if drone == ID else MODELS[start].replace(f'drone{ID}', f'drone{drone}')
+
+
+def newcomer_model(start, drone=ID, plate=PLATE):
+    """x3_rig_drone<drone> (make_carry_worlds.rig_model) + skid + magnet arm, its pose publisher
+    swapped for the free drone's (model world pose) and the ring weld added. QUAD4 by default;
+    another partner (EXTRA_PARTNERS) only welded, on rig plate 3 or 9."""
+    if drone != ID and start != 'welded':
+        raise SystemExit(f'partner drone {drone}: only QUAD4 has a free start')
+    with open(os.path.join(ASSETS, 'models', f'x3_drone{drone}.sdf')) as f:
+        text = rig_model(f.read(), drone)
+    _, roll = spawn(start, plate)
     hdr = '<sdf version="1.6">'
+    who = 'newcomer (QUAD4)' if drone == ID else f'partner QUAD{drone + 1} (drone_{drone}, rig plate {plate})'
+    toward = 'along body -y' if plate_side(plate) > 0 else 'along body +y'
     text = _replace_once(text, hdr, hdr + (
-        f'\n    <!-- Rig-twin attach newcomer (QUAD4), GENERATED by tools/make_attach_worlds.py: '
+        f'\n    <!-- Rig-twin attach {who}, GENERATED by tools/make_attach_worlds.py: '
         f'do not edit.\n         {start} start: the arm spawns '
         + ('laid out along body +y with the magnet on the floor. -->' if start == 'free' else
-           'along body -y at the carriers\' ground-start elevation, tip on the plate. -->')),
+           f'{toward} at the carriers\' ground-start elevation, tip on the plate. -->')),
         'header')
     box = '<collision name="base_link_inertia_collision">'
     end = text.index('</collision>\n', text.index(box)) + len('</collision>\n')
@@ -294,11 +336,11 @@ def newcomer_model(start):
            + _universal('base_to_magnet_arm', 'base_link', 'magnet_arm', BODY_DAMPING,
                         '0 0 0 0 0 0', note=f'the pivot: the arm origin, {PIVOT_DZ} m below '
                                             'the body centre')
-           + TAIL)
+           + tail(drone))
     close = '    </model>\n</sdf>'
     i = text.rfind(close)
     if i < 0:
-        raise SystemExit(f'x3_rig_drone{ID}: closing </model> not found')
+        raise SystemExit(f'x3_rig_drone{drone}: closing </model> not found')
     return text[:i] + arm + text[i:]
 
 
@@ -355,7 +397,38 @@ def attach_world(base, start):
       <pose>{_f(x)} {_f(y)} {_f(z)} 0 0 0</pose>
     </include>
 """
+    for d, plate in EXTRA_PARTNERS:
+        block += extra_partner_block(carrier, d, plate)
+    if EXTRA_PARTNERS:
+        who = ', '.join(f'x3_drone{d} (QUAD{d + 1}) on rig plate {p}' for d, p in EXTRA_PARTNERS)
+        text = _replace_once(text, XML_DECL + _header(start), XML_DECL + _header(start) + (
+            f'<!-- Further partners welded from spawn, each with its own ring weld: {who}. -->\n'), 'header')
     return _replace_once(text, '  </world>\n</sdf>', block + '  </world>\n</sdf>', 'world end')
+
+
+def extra_partner_block(carrier, d, plate):
+    """The world's include of a further partner: welded on its plate from spawn, on the carriers' ground-start circle."""
+    if d == ID or d < len(CARRIER_AZIMUTHS.split(',')) or [e[0] for e in EXTRA_PARTNERS].count(d) != 1:
+        raise SystemExit(f'partner drone {d}: one id after the carriers, not QUAD4\'s')
+    carriers_ccw = [float(a) % 360.0 for a in CARRIER_AZIMUTHS.split(',')]
+    if (plate == PLATE or [e[1] for e in EXTRA_PARTNERS].count(plate) != 1
+            or any(abs((-30.0 * plate) % 360.0 - a) < 1e-6 for a in carriers_ccw)):
+        raise SystemExit(f'partner drone {d}: plate {plate} is a carrier\'s, QUAD4\'s or another partner\'s')
+    (x, y, z), _ = spawn('welded', plate)
+    if (abs(math.hypot(float(carrier[1]), float(carrier[2])) - abs(y)) > 1e-5
+            or abs(float(carrier[3]) - z) > 1e-9):
+        raise SystemExit(f"partner drone {d} is off the carriers' ground-start circle")
+    p = weld_prefix(d)
+    return f"""    <!-- ===== PARTNER (QUAD{d + 1} = /drone_{d}): as QUAD4, welded on rig plate {plate} from spawn =====
+         Standalone, not in lift_system: its poses are on /model/x3_drone{d}/pose (the tip is entry 0, as QUAD4's).
+         Its own ring weld: {p}/payload/attach, {p}/payload/detach, {p}/payload/detachable_joint_state.
+         No pickup weld; the magnet manager starts it attached. -->
+    <include>
+      <uri>models/{partner_model_name(d)}</uri>
+      <name>x3_drone{d}</name>
+      <pose>{_f(x)} {_f(y)} {_f(z)} 0 0 0</pose>
+    </include>
+"""
 
 
 PICKUP_WELD = f"""
@@ -641,6 +714,8 @@ def generate(out_dir):
     os.makedirs(os.path.join(out_dir, 'models'), exist_ok=True)
     files = {os.path.join('models', name): newcomer_model(start)
              for start, name in MODELS.items()}
+    files.update({os.path.join('models', partner_model_name(d)): newcomer_model('welded', d, plate)
+                  for d, plate in EXTRA_PARTNERS})
     base = carrier_world()
     files.update({name: attach_world(base, start) for name, start in WORLDS.items()})
     obj = os.path.join('models', pickup_object()[0])

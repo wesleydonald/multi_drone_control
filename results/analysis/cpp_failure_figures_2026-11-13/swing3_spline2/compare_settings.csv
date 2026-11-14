@@ -1,0 +1,32 @@
+setting,run,captured,time_s,ring_speed_at_capture,z_max,closest_tether_before_capture_m,still_near_tether_before_capture_s,still_min_m,cpu_load
+"swing 5, spline 4, splice 0.10 (refresh 0.2)",nro_p02,False,87.8,nan,2.81,0.19,7.6,0.19,False
+"swing 5, spline 4, splice 0.10 (refresh 0.2)",fm9hc_2_r02,True,25.9,0.042,3.35,0.45,0.0,nan,False
+"swing 5, spline 4, splice 0.10 (refresh 0.2)",fm9hc_4_r02,True,38.7,0.052,3.31,0.12,9.2,0.05,False
+"swing 5, spline 4, splice 0.10 (refresh 0.2)",fm9hc_5_r02,True,37.0,0.035,3.03,0.43,0.0,nan,False
+"swing 5, spline 4, splice 0.20",nro_mv_z29s20,True,40.8,0.132,2.62,0.35,0.4,0.38,False
+"swing 5, spline 4, splice 0.20",nro_mv_z38s20,True,39.5,0.124,3.13,0.39,0.3,0.4,False
+"swing 5, spline 4, splice 0.20",nro_mv_z38s20_r2,True,30.2,0.133,2.77,0.35,0.4,0.43,False
+"swing 5, spline 4, splice 0.20",fm9hc_2_mv_z38s20,True,25.8,0.043,3.12,0.47,0.0,nan,False
+"swing 5, spline 4, splice 0.20",fm9hc_4_mv_z38s20,True,32.3,0.037,3.01,0.37,0.0,nan,False
+"swing 5, spline 4, splice 0.20",fm9hc_5_mv_z38s20,True,28.2,0.035,3.52,0.44,0.0,nan,False
+"swing 5, spline 3, splice 0.20",nro_mv_z29s20sp3,True,25.8,0.125,2.59,0.39,0.0,nan,False
+"swing 5, spline 3, splice 0.20",nro_mv_z29s20sp3_r2,True,38.9,0.13,2.6,0.0,10.5,0.0,False
+"swing 5, spline 3, splice 0.20",nro_mv_z29s20sp3_load8,True,40.6,0.134,2.58,0.0,10.9,0.0,True
+"swing 5, spline 3, splice 0.20",nro_mv_z38s20sp3,True,11.2,0.124,2.66,0.42,0.0,nan,False
+"swing 5, spline 3, splice 0.20",fm9hc_2_mv_z29s20sp3,True,22.9,0.051,2.77,0.37,0.0,nan,False
+"swing 5, spline 3, splice 0.20",fm9hc_4_mv_z29s20sp3,True,47.1,0.042,2.84,0.12,21.5,0.12,False
+"swing 5, spline 3, splice 0.20",fm9hc_5_mv_z29s20sp3,True,31.5,0.036,2.79,0.39,0.7,0.39,False
+"swing 5, spline 2, splice 0.20",nro_mv_z38s20sp2,True,9.2,0.13,2.58,0.38,0.1,0.36,False
+"swing 3, spline 2.5, splice 0.20 (Te-Jen)",nro_tj_sw3_sp25,True,9.6,0.136,2.57,0.38,0.0,nan,False
+"swing 3, spline 2.5, splice 0.20 (Te-Jen)",nro_tj_sw3_sp25_r2,True,9.7,0.137,2.56,0.38,0.0,nan,False
+"swing 3, spline 2.5, splice 0.20 (Te-Jen)",fm9hc_2_tj_sw3_sp25,True,9.1,0.134,2.81,0.38,0.0,nan,False
+"swing 3, spline 2.5, splice 0.20 (Te-Jen)",fm9hc_4_tj_sw3_sp25,True,16.9,0.136,2.77,0.36,0.0,nan,False
+"swing 3, spline 2.5, splice 0.20 (Te-Jen)",fm9hc_5_tj_sw3_sp25,True,14.3,0.13,2.78,0.38,0.0,nan,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",nro_tj_sw3_sp20,True,8.7,0.128,2.56,0.39,0.2,0.37,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",nro_tj_sw3_sp20_r2,True,8.6,0.13,2.58,0.38,0.1,0.37,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",fm9hc_2_tj_sw3_sp20,True,7.3,0.115,2.84,0.39,0.1,0.39,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",fm9hc_4_tj_sw3_sp20,True,8.1,0.133,2.79,0.39,0.0,nan,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",fm9hc_5_tj_sw3_sp20,True,6.8,0.109,2.79,0.38,0.0,nan,False
+"swing 3, spline 2, splice 0.20 (Te-Jen)",nro_tj_sw3_sp20_load8,True,8.8,0.126,2.55,0.37,0.1,0.38,True
+"swing 3, spline 2, splice 0.20 (Te-Jen)",fm9hc_4_tj_sw3_sp20_load8,True,11.5,0.115,2.81,0.34,0.0,nan,True
+"swing 3, spline 2, splice 0.20 (Te-Jen)",fm9hc_5_tj_sw3_sp20_load8,True,6.9,0.11,2.82,0.39,0.0,nan,True

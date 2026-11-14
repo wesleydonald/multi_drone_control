@@ -323,3 +323,17 @@ exceptions are the keys the new scorers add.
 Tests: `tools/test/test_claim_scorers.py` (names to cells, arms and cases; X3's comparator bars; X3b's filter read-back;
 X8's bars; on this laptop, R3592, R2596 and R3507 are reproduced read-only), and the bar tests added to
 `test_x1_metrics.py` and `test_x4_metrics.py`.
+
+## 11. The claims with returns on the earlier masses (Wesley 6 Nov ~10:30)
+After the reviewers of X3/X4 and the A/B R3907/R3908 (the frozen code returns in 37.0 s with the final quadrotor masses and
+16.6 s with the earlier ones), the claims with returns re-fly on the earlier masses (decisions.md DECIDED 2026-11-06):
+`configs/batches/oldlinks1106_{1_x4,2_x3,3_x3b_chains,5_x2,8c_rejoin}.txt` (55 runs; configs in
+`configs/experiments_oldlinks/`, worlds `simulation_assets/*_oldlinks.sdf`, `tools/make_oldlink_worlds.py --check`). They
+replace chunks 1, 2, 5 and 8c and X3b's chain cells; X3b's hover and figure-8 cells (R3809-R3818, final masses) stand.
+Script `~/mdc_overnight/claim1106_old.sh`: after X1's resumed chunk, one sync + build, the five old-mass sets, then chunks
+6, 7, 8a, 8b, 8d and 9 on the final masses. Scoring as section 10, with the new ids.
+- 6 Nov ~14:20 (Wesley): `tools/remote/lab_batch.py` no longer fetches `gz_record/` (disk). Chunks started after the edit
+  carry it in their recorded laptop diff, so their one-tree hash differs from the earlier chunks' by that file only; the
+  synced tree that flies on the lab PC is unchanged.
+- 6 Nov ~15:20: `tools/remote/lab_sync.sh` excludes `/.claude/` (agent worktrees with build outputs, 1.6-1.9 GB each, were
+  being copied to the lab PC; the lab never uses them). Orchestration only, as the gz_record exclude above.

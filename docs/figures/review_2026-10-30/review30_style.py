@@ -10,4 +10,4 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'review_2026-10-23'))
 import review_style as S  # noqa: E402,F401
 
 S.HERE = HERE                 # save() writes beside this module, not into the 23 Oct folder
-TEXT = '0.3'                  # labels in the data area: darker than S.GREY so they survive print (critic 30 Oct)
+TEXT = 'black'                # labels in the data area (Wesley 14 Nov: no grey text or arrows)

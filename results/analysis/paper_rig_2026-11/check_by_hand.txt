@@ -1,0 +1,58 @@
+== 2026-10-08/r303_4: the unannounced release in hover (0.55 m links)
+  the bag's first /drone_3/magnet OFF 1791435773.205; the planner's own OFF line 1791435773.714 (0.51 s later: the operator's OFF came first)
+  ring samples 5942 (90 Hz); window OFF .. LAND = 7.63 s
+  metric                      by hand  paper_rig
+  t_event_s                    22.245     22.250
+  detect_delay_s                0.418      0.418
+  resize_s                      0.420      0.420
+  tilt_pre_deg                  2.646      2.638
+  sigma_pre_deg                 1.189      1.186
+  swing_deg                     5.290      5.275
+  t_swing_peak_s                0.401      0.410
+  tilt_peak_deg                 6.507      6.507
+  settle_s                      6.029      6.030
+  settle_new_s                      -          -
+  tilt_after_deg                    -          -
+  dip_mm                       31.366     31.330
+  sp_pre_rms_cm                 5.918      5.912
+  sp_rms_cm                     6.270      6.273
+
+== 2026-11-05/sq8_2: the planned detach, then the re-attach caught on plate 8 (the square)
+  planned detach: UNLOAD 20.37 s, OFF 23.69 s after TAKEOFF; the 5 s before cut to 4.65 s (the set-point last moved then); window to his first descent, 11.83 s
+  metric                      by hand  paper_rig
+  t_event_s                    23.688     23.690
+  unload_s                      3.322      3.320
+  resize_s                     -0.108     -0.108
+  separation_s                  0.151      0.151
+  tilt_pre_deg                  1.194      1.201
+  sigma_pre_deg                 1.216      1.221
+  swing_deg                    23.764     23.759
+  t_swing_peak_s               11.646     11.647
+  tilt_peak_deg                24.516     24.516
+  settle_s                          -          -
+  settle_new_s                  8.903      8.907
+  tilt_after_deg               13.204     13.218
+  dip_mm                       39.179     39.090
+  sp_pre_rms_cm                 2.927      2.938
+  sp_rms_cm                     8.255      8.217
+  the attach:
+  metric                      by hand  paper_rig
+  t_event_s                    45.221     45.220
+  start_to_proven_s            14.311     14.300
+  start_to_foldin_s            14.373     14.400
+  contact_to_foldin_s           2.521      2.520
+  descents                      2.000          2
+  tilt_pre_deg                 26.675     26.670
+  sigma_pre_deg                 2.383      2.384
+  swing_deg                    25.205     25.186
+  t_swing_peak_s               13.596     13.594
+  tilt_peak_deg                30.688     30.688
+  settle_s                          -          -
+  settle_new_s                  6.692      6.694
+  tilt_after_deg                4.169      4.180
+  dip_mm                        3.976      3.988
+  sp_pre_rms_cm                 5.488      5.492
+  sp_rms_cm                     9.204      9.189
+  descents (F052's joins.csv | re-run): #1 lowest point 17.92 cm aborted | lowest point 17.92 cm aborted; #2 plate height 1.576 cm caught+proven | plate height 1.576 cm caught+proven
+
+largest difference by hand vs paper_rig: r303_4 0.036, sq8_2 0.089 (in each metric's unit)

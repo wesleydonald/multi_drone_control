@@ -1,0 +1,4065 @@
+{
+ "card": "docs/experiments/2026-10-23_scalability.md",
+ "n_bars": {
+  "from": [
+   "R3819",
+   "R3820"
+  ],
+  "rmse_mm": 5.158760154890263,
+  "tilt_deg": 1.4136141157244675
+ },
+ "p_bases": {
+  "fig8": {
+   "base_mm": 15.203006756413258,
+   "bar_mm": 19.00375844551657,
+   "base_tilt_deg": 1.254230363791157,
+   "bar_tilt_deg": 2.254230363791157
+  },
+  "fig8laps": {
+   "base_mm": 14.445415957343592,
+   "bar_mm": 18.056769946679488,
+   "base_tilt_deg": 1.371251897484138,
+   "bar_tilt_deg": 2.3712518974841377
+  },
+  "orbit": {
+   "base_mm": 17.024477876953554,
+   "bar_mm": 21.280597346191943,
+   "base_tilt_deg": 1.1543501737773778,
+   "bar_tilt_deg": 2.154350173777378
+  }
+ },
+ "claim_fold_mean_deg": 1.6205982823069114,
+ "runs": {
+  "R3785": {
+   "run": "R3785",
+   "case": "fig8laps",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3785_sim_gz_x3_s8_fig8laps_it5",
+   "v": {
+    "rtf": 0.2255743574694313,
+    "late_planner": 0.00041254125412541255,
+    "late_tracker": 8.41467519353753e-05,
+    "failed": 0,
+    "published": 2205,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 14.312522186011346,
+    "tilt_deg": 1.356003933923286
+   },
+   "box": [
+    1.483839754840759,
+    1.215669442710362
+   ]
+  },
+  "R3786": {
+   "run": "R3786",
+   "case": "fig8laps",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3786_sim_gz_x3_s8_fig8laps_it5",
+   "v": {
+    "rtf": 0.22680860930934893,
+    "late_planner": 0.0008257638315441783,
+    "late_tracker": 8.41609156707625e-05,
+    "failed": 0,
+    "published": 2205,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 14.578309728675835,
+    "tilt_deg": 1.3864998610449897
+   },
+   "box": [
+    1.4846184266970752,
+    1.216130836568367
+   ]
+  },
+  "R3799": {
+   "run": "R3799",
+   "case": "orbit",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3799_sim_gz_x3_s8_orbit_it5",
+   "v": {
+    "rtf": 0.23232380984159573,
+    "late_planner": 0.0,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 641,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 16.699720610326334,
+    "tilt_deg": 1.1327150520683045,
+    "in_band": true,
+    "box_ok": true
+   },
+   "box": [
+    1.2789358378853553,
+    1.5767642929954198
+   ]
+  },
+  "R3800": {
+   "run": "R3800",
+   "case": "orbit",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3800_sim_gz_x3_s8_orbit_it5",
+   "v": {
+    "rtf": 0.23074374712111195,
+    "late_planner": 0.0,
+    "late_tracker": 0.0002457606291472106,
+    "failed": 0,
+    "published": 641,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 17.34923514358077,
+    "tilt_deg": 1.175985295486451,
+    "in_band": true,
+    "box_ok": true
+   },
+   "box": [
+    1.2762892962739931,
+    1.5743810278807029
+   ]
+  },
+  "R3813": {
+   "run": "R3813",
+   "case": "hover",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3813_sim_gz_x3_s8_hover_it5",
+   "v": {
+    "rtf": 0.2318743149294586,
+    "late_planner": 0.0,
+    "late_tracker": 0.0005616399887672002,
+    "failed": 0,
+    "published": 541,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "n1": {
+    "rmse_mm": 1.0986507928482068,
+    "tilt_deg": 0.05212578662458107,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "lift": {
+    "tilt_peak_deg": 0.0839742798763446,
+    "rmse_mm": 24.503687461478822
+   },
+   "throttle": {
+    "p95": 0.5430000014603138,
+    "cap_frac": 0.0
+   }
+  },
+  "R3814": {
+   "run": "R3814",
+   "case": "hover",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3814_sim_gz_x3_s8_hover_it5",
+   "v": {
+    "rtf": 0.23284462784553758,
+    "late_planner": 0.0,
+    "late_tracker": 0.0002805836139169473,
+    "failed": 0,
+    "published": 542,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "n1": {
+    "rmse_mm": 1.1780440021826692,
+    "tilt_deg": 0.05948084051562763,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "lift": {
+    "tilt_peak_deg": 0.21496473733441596,
+    "rmse_mm": 23.267938846206352
+   },
+   "throttle": {
+    "p95": 0.5439999997615814,
+    "cap_frac": 0.0
+   }
+  },
+  "R3815": {
+   "run": "R3815",
+   "case": "fig8",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3815_sim_gz_x3_s8_fig8_it5",
+   "v": {
+    "rtf": 0.22681351993046117,
+    "late_planner": 0.0,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 993,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 15.35189328394222,
+    "tilt_deg": 1.3128598409233965
+   },
+   "box": [
+    1.4829231229543016,
+    1.2146740605898134
+   ]
+  },
+  "R3816": {
+   "run": "R3816",
+   "case": "fig8",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3816_sim_gz_x3_s8_fig8_it5",
+   "v": {
+    "rtf": 0.22665492919916824,
+    "late_planner": 0.0,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 993,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "path": {
+    "mm": 15.054120228884296,
+    "tilt_deg": 1.1956008866589172
+   },
+   "box": [
+    1.4832410157951867,
+    1.215009457031443
+   ]
+  },
+  "R3819": {
+   "run": "R3819",
+   "case": "s4_hover",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3819_sim_gz_x3_s4_hover_it5",
+   "v": {
+    "rtf": 0.7779383444856016,
+    "late_planner": 0.0,
+    "late_tracker": 0.00032754667540124465,
+    "failed": 0,
+    "published": 440,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": false
+   },
+   "n1": {
+    "rmse_mm": 1.0957725615329907,
+    "tilt_deg": 0.21614674548823648,
+    "n": 4,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "lift": {
+    "tilt_peak_deg": 1.681196990557361,
+    "rmse_mm": 19.196637073737033
+   },
+   "throttle": {
+    "p95": 0.6049999967217445,
+    "cap_frac": 0.0
+   }
+  },
+  "R3820": {
+   "run": "R3820",
+   "case": "s4_hover",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3820_sim_gz_x3_s4_hover_it5",
+   "v": {
+    "rtf": 0.8552039820448277,
+    "late_planner": 0.0,
+    "late_tracker": 0.00032754667540124465,
+    "failed": 0,
+    "published": 440,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": false
+   },
+   "n1": {
+    "rmse_mm": 1.0629875933572726,
+    "tilt_deg": 0.19746737023623107,
+    "n": 4,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "lift": {
+    "tilt_peak_deg": 1.7499948551562778,
+    "rmse_mm": 19.020929670633322
+   },
+   "throttle": {
+    "p95": 0.6054999977350235,
+    "cap_frac": 0.0
+   }
+  },
+  "R3805": {
+   "run": "R3805",
+   "case": "chain4back",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3805_sim_gz_x3_s8_chain4back_it5_tip",
+   "v": {
+    "rtf": 0.2205979246733983,
+    "late_planner": 0.0012654223347042075,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 2938,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.336,
+      "drones": [
+       1
+      ],
+      "t_last": 42.336,
+      "peak_deg": 1.6826095646017762,
+      "abs_deg": 1.6892309794339744,
+      "settled_deg": 0.8141396216421551,
+      "n_steps": [
+       0.3810000000000002
+      ],
+      "next": 57.335,
+      "miss": []
+     },
+     {
+      "t": 57.335,
+      "drones": [
+       5
+      ],
+      "t_last": 57.335,
+      "peak_deg": 1.7052411639720302,
+      "abs_deg": 2.087878695946308,
+      "settled_deg": 0.04371158042621107,
+      "n_steps": [
+       0.33200000000000074
+      ],
+      "next": 72.336,
+      "miss": []
+     },
+     {
+      "t": 72.336,
+      "drones": [
+       3
+      ],
+      "t_last": 72.336,
+      "peak_deg": 2.39933872342058,
+      "abs_deg": 2.3934961728851443,
+      "settled_deg": 0.9109010414076767,
+      "n_steps": [
+       0.2980000000000018
+      ],
+      "next": 87.334,
+      "miss": []
+     },
+     {
+      "t": 87.334,
+      "drones": [
+       7
+      ],
+      "t_last": 87.334,
+      "peak_deg": 2.491064362707141,
+      "abs_deg": 2.3080288708446504,
+      "settled_deg": 0.050184670711841635,
+      "n_steps": [
+       0.29999999999999716
+      ],
+      "next": 107.334,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.334,
+      "plate_s": 38.198999999999984,
+      "joint_s": 0.01500000000001478,
+      "bigger_s": 38.29900000000001,
+      "n_after": 5,
+      "fold_peak_deg": 1.0851316851078636,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.9833061155509893,
+      "blend_over": 155.735,
+      "peak_from_mean_deg": 1.0859192324604752,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 145.633,
+      "t_start": 107.334
+     },
+     {
+      "drone": 3,
+      "t_attach": 165.633,
+      "plate_s": 21.78,
+      "joint_s": 0.022999999999996135,
+      "bigger_s": 21.900000000000006,
+      "n_after": 6,
+      "fold_peak_deg": 2.8714884677283163,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.09288836556584534,
+      "blend_over": 197.633,
+      "peak_from_mean_deg": 3.112616116417898,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 187.533,
+      "t_start": 165.653
+     },
+     {
+      "drone": 5,
+      "t_attach": 207.533,
+      "plate_s": 21.87300000000002,
+      "joint_s": 0.020999999999986585,
+      "bigger_s": 22.00000000000003,
+      "n_after": 7,
+      "fold_peak_deg": 3.000952727172483,
+      "rod_end_cm": 1.2,
+      "settled_deg": 0.890961623593095,
+      "blend_over": 239.732,
+      "peak_from_mean_deg": 3.0225585228074556,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 229.533,
+      "t_start": 207.563
+     },
+     {
+      "drone": 1,
+      "t_attach": 249.534,
+      "plate_s": 22.656000000000006,
+      "joint_s": 0.03899999999998727,
+      "bigger_s": 22.798000000000002,
+      "n_after": 8,
+      "fold_peak_deg": 1.319926087220117,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.038183522233152946,
+      "blend_over": 282.534,
+      "peak_from_mean_deg": 1.0046952503101223,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 272.332,
+      "t_start": 249.577
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.964115124463016,
+    "tilt_deg": 0.7817290357554164,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   }
+  },
+  "R3806": {
+   "run": "R3806",
+   "case": "chain4back",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3806_sim_gz_x3_s8_chain4back_it5_tip",
+   "v": {
+    "rtf": 0.22101481240642948,
+    "late_planner": 0.0013114754098360656,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 2834,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.285,
+      "drones": [
+       1
+      ],
+      "t_last": 42.285,
+      "peak_deg": 1.6757575101536224,
+      "abs_deg": 1.6797586129388633,
+      "settled_deg": 0.804681975353244,
+      "n_steps": [
+       0.39100000000000534
+      ],
+      "next": 57.285,
+      "miss": []
+     },
+     {
+      "t": 57.285,
+      "drones": [
+       5
+      ],
+      "t_last": 57.285,
+      "peak_deg": 1.6469250412173522,
+      "abs_deg": 2.082220432746459,
+      "settled_deg": 0.045491116660017455,
+      "n_steps": [
+       0.32200000000000983
+      ],
+      "next": 72.285,
+      "miss": []
+     },
+     {
+      "t": 72.285,
+      "drones": [
+       3
+      ],
+      "t_last": 72.285,
+      "peak_deg": 2.4571889348591336,
+      "abs_deg": 2.4581586352518205,
+      "settled_deg": 0.9101766511538364,
+      "n_steps": [
+       0.2980000000000018
+      ],
+      "next": 87.285,
+      "miss": []
+     },
+     {
+      "t": 87.285,
+      "drones": [
+       7
+      ],
+      "t_last": 87.285,
+      "peak_deg": 2.346671921048632,
+      "abs_deg": 2.3418555702691926,
+      "settled_deg": 0.04768817121922793,
+      "n_steps": [
+       0.2890000000000157
+      ],
+      "next": 107.287,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.287,
+      "plate_s": 37.18699999999998,
+      "joint_s": 0.01500000000001478,
+      "bigger_s": 37.287000000000006,
+      "n_after": 5,
+      "fold_peak_deg": 1.1900605080437283,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.9777023201256774,
+      "blend_over": 154.674,
+      "peak_from_mean_deg": 1.1844173789874088,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 144.574,
+      "t_start": 107.287
+     },
+     {
+      "drone": 3,
+      "t_attach": 164.574,
+      "plate_s": 15.399000000000001,
+      "joint_s": 0.02400000000000091,
+      "bigger_s": 15.498999999999995,
+      "n_after": 6,
+      "fold_peak_deg": 1.3619059197037404,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.07321880149504045,
+      "blend_over": 190.174,
+      "peak_from_mean_deg": 1.1114695520400428,
+      "miss": [],
+      "t_weld": 180.073,
+      "t_start": 164.574
+     },
+     {
+      "drone": 5,
+      "t_attach": 200.073,
+      "plate_s": 18.903999999999996,
+      "joint_s": 0.030000000000001137,
+      "bigger_s": 19.0,
+      "n_after": 7,
+      "fold_peak_deg": 0.9007289355571869,
+      "rod_end_cm": 1.2,
+      "settled_deg": 0.9107361469288672,
+      "blend_over": 229.273,
+      "peak_from_mean_deg": 1.0021085640707164,
+      "miss": [],
+      "t_weld": 219.073,
+      "t_start": 200.073
+     },
+     {
+      "drone": 1,
+      "t_attach": 239.074,
+      "plate_s": 22.66300000000001,
+      "joint_s": 0.033999999999991815,
+      "bigger_s": 22.798999999999978,
+      "n_after": 8,
+      "fold_peak_deg": 1.2345919279218562,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.033722510624351165,
+      "blend_over": 272.075,
+      "peak_from_mean_deg": 1.083658278785385,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 261.875,
+      "t_start": 239.111
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.930222781993526,
+    "tilt_deg": 0.796670430090076,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   }
+  },
+  "R3779": {
+   "run": "R3779",
+   "case": "chain2back",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3779_sim_gz_x3_s8_chain2back_it5_tip_noxy",
+   "v": {
+    "rtf": 0.22767757432340638,
+    "late_planner": 0.0009168003667201467,
+    "late_tracker": 4.6319885126684886e-05,
+    "failed": 0,
+    "published": 4145,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.314,
+      "drones": [
+       1
+      ],
+      "t_last": 42.314,
+      "peak_deg": 1.633624227800233,
+      "abs_deg": 1.6321871893699382,
+      "settled_deg": 0.8565091763955053,
+      "n_steps": [
+       0.3960000000000008
+      ],
+      "next": 57.313,
+      "miss": []
+     },
+     {
+      "t": 57.313,
+      "drones": [
+       5
+      ],
+      "t_last": 57.313,
+      "peak_deg": 1.4065590249946913,
+      "abs_deg": 2.2627241984290527,
+      "settled_deg": 0.048127543537284295,
+      "n_steps": [
+       0.34499999999999886
+      ],
+      "next": 72.313,
+      "miss": []
+     },
+     {
+      "t": 72.313,
+      "drones": [
+       3
+      ],
+      "t_last": 72.313,
+      "peak_deg": 2.446913005273388,
+      "abs_deg": 2.4436893241008426,
+      "settled_deg": 0.765249234879759,
+      "n_steps": [
+       0.2950000000000017
+      ],
+      "next": 87.313,
+      "miss": []
+     },
+     {
+      "t": 87.313,
+      "drones": [
+       7
+      ],
+      "t_last": 87.313,
+      "peak_deg": 2.225665045311328,
+      "abs_deg": 2.9898811769417675,
+      "settled_deg": 0.047042095833534615,
+      "n_steps": [
+       0.2710000000000008
+      ],
+      "next": 107.313,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 6,
+      "t_attach": 152.312,
+      "plate_s": 34.071999999999974,
+      "joint_s": 0.0020000000000095497,
+      "bigger_s": 34.172,
+      "n_after": 3,
+      "fold_peak_deg": 7.335764123574408,
+      "rod_end_cm": 1.5,
+      "settled_deg": 5.062087376224544,
+      "blend_over": 196.583,
+      "peak_from_mean_deg": 7.317236153719007,
+      "miss": [
+       "plate",
+       "bigger",
+       "fold",
+       "settled"
+      ],
+      "t_weld": 186.484,
+      "t_start": 152.312
+     },
+     {
+      "drone": 2,
+      "t_attach": 206.484,
+      "plate_s": 23.400999999999982,
+      "joint_s": 0.009000000000014552,
+      "bigger_s": 23.498999999999995,
+      "n_after": 4,
+      "fold_peak_deg": 6.318827616102946,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.032193957660207245,
+      "blend_over": 240.083,
+      "peak_from_mean_deg": 5.1418362579520185,
+      "miss": [
+       "bigger",
+       "fold"
+      ],
+      "t_weld": 229.986,
+      "t_start": 206.484
+     },
+     {
+      "drone": 7,
+      "t_attach": 249.984,
+      "plate_s": 20.50199999999998,
+      "joint_s": 0.016999999999995907,
+      "bigger_s": 20.601000000000028,
+      "n_after": 5,
+      "fold_peak_deg": 1.2572171588661236,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.7237364406481482,
+      "blend_over": 280.683,
+      "peak_from_mean_deg": 1.263909778742335,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 270.585,
+      "t_start": 249.984
+     },
+     {
+      "drone": 3,
+      "t_attach": 290.585,
+      "plate_s": 22.180000000000007,
+      "joint_s": 0.016999999999995907,
+      "bigger_s": 22.300000000000068,
+      "n_after": 6,
+      "fold_peak_deg": 2.9962824746793384,
+      "rod_end_cm": 1.7,
+      "settled_deg": 0.04407529420366209,
+      "blend_over": 322.984,
+      "peak_from_mean_deg": 3.1381833500875183,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 312.885,
+      "t_start": 290.604
+     },
+     {
+      "drone": 5,
+      "t_attach": 332.885,
+      "plate_s": 22.67500000000001,
+      "joint_s": 0.026999999999986812,
+      "bigger_s": 22.79800000000006,
+      "n_after": 7,
+      "fold_peak_deg": 3.593926019803719,
+      "rod_end_cm": 1.7,
+      "settled_deg": 0.7977805859118445,
+      "blend_over": 365.885,
+      "peak_from_mean_deg": 3.5877156459543023,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 355.683,
+      "t_start": 332.912
+     },
+     {
+      "drone": 1,
+      "t_attach": 375.683,
+      "plate_s": 17.160000000000025,
+      "joint_s": 0.04399999999998272,
+      "bigger_s": 17.301000000000045,
+      "n_after": 8,
+      "fold_peak_deg": 0.9480623175640487,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.030143950497057783,
+      "blend_over": 403.183,
+      "peak_from_mean_deg": 0.8773950779226516,
+      "miss": [],
+      "t_weld": 392.984,
+      "t_start": 375.724
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 1.1219600695907173,
+    "tilt_deg": 0.08408406528823914,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "detaches": [
+    {
+     "drone": 2,
+     "t": 107.313,
+     "n_after": 3,
+     "resize_s": 3.0720000000000027,
+     "peak_deg": 31.796555569000898
+    },
+    {
+     "drone": 6,
+     "t": 127.312,
+     "n_after": 2,
+     "resize_s": 3.071000000000012,
+     "peak_deg": 7.2048669956412965
+    }
+   ],
+   "unload_cancelled": [],
+   "T_tilt": {
+    "mean_deg": 2.835192032349431,
+    "max_deg": 8.696265383646564,
+    "from": 115.385,
+    "to": 229.986
+   },
+   "n_min": 2,
+   "throttle_n34": [
+    [
+     4,
+     0.619999997317791,
+     0.0
+    ],
+    [
+     3,
+     0.7504999935626984,
+     0.0
+    ],
+    [
+     4,
+     0.7885000109672546,
+     0.0011092623405435386
+    ]
+   ],
+   "falsified": false
+  },
+  "R3780": {
+   "run": "R3780",
+   "case": "chain2back",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3780_sim_gz_x3_s8_chain2back_it5_tip_noxy",
+   "v": {
+    "rtf": 0.2230418873881113,
+    "late_planner": 0.0006749156355455568,
+    "late_tracker": 9.094629621208677e-05,
+    "failed": 0,
+    "published": 4227,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.268,
+      "drones": [
+       1
+      ],
+      "t_last": 42.268,
+      "peak_deg": 1.7435750006565065,
+      "abs_deg": 1.7446448053513137,
+      "settled_deg": 0.8612930850261813,
+      "n_steps": [
+       0.3689999999999998
+      ],
+      "next": 57.269,
+      "miss": []
+     },
+     {
+      "t": 57.269,
+      "drones": [
+       5
+      ],
+      "t_last": 57.269,
+      "peak_deg": 1.4713263441099296,
+      "abs_deg": 2.3325034546465764,
+      "settled_deg": 0.05228311699436328,
+      "n_steps": [
+       0.31800000000000495
+      ],
+      "next": 72.269,
+      "miss": []
+     },
+     {
+      "t": 72.269,
+      "drones": [
+       3
+      ],
+      "t_last": 72.269,
+      "peak_deg": 2.519458708457432,
+      "abs_deg": 2.5212625188903757,
+      "settled_deg": 0.7738809156297122,
+      "n_steps": [
+       0.2819999999999965
+      ],
+      "next": 87.269,
+      "miss": []
+     },
+     {
+      "t": 87.269,
+      "drones": [
+       7
+      ],
+      "t_last": 87.269,
+      "peak_deg": 2.3013240847973853,
+      "abs_deg": 3.074260431564738,
+      "settled_deg": 0.04604649297787121,
+      "n_steps": [
+       0.2819999999999965
+      ],
+      "next": 107.269,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 6,
+      "t_attach": 152.268,
+      "plate_s": 33.18199999999999,
+      "joint_s": 0.007000000000005002,
+      "bigger_s": 33.28399999999999,
+      "n_after": 3,
+      "fold_peak_deg": 7.534891501785644,
+      "rod_end_cm": 1.4,
+      "settled_deg": 5.0598957371746875,
+      "blend_over": 195.651,
+      "peak_from_mean_deg": 7.524890687249228,
+      "miss": [
+       "plate",
+       "bigger",
+       "fold",
+       "settled"
+      ],
+      "t_weld": 185.552,
+      "t_start": 152.27
+     },
+     {
+      "drone": 2,
+      "t_attach": 205.553,
+      "plate_s": 28.589,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 28.699000000000012,
+      "n_after": 4,
+      "fold_peak_deg": 5.541942314312561,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.057747169380117376,
+      "blend_over": 244.353,
+      "peak_from_mean_deg": 5.154304720809878,
+      "miss": [
+       "bigger",
+       "fold"
+      ],
+      "t_weld": 234.252,
+      "t_start": 205.562
+     },
+     {
+      "drone": 7,
+      "t_attach": 254.252,
+      "plate_s": 19.507000000000033,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 19.601,
+      "n_after": 5,
+      "fold_peak_deg": 0.8163305373015791,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.732730077857609,
+      "blend_over": 283.951,
+      "peak_from_mean_deg": 0.8360508584251617,
+      "miss": [],
+      "t_weld": 273.86,
+      "t_start": 254.254
+     },
+     {
+      "drone": 3,
+      "t_attach": 293.86,
+      "plate_s": 21.37700000000001,
+      "joint_s": 0.02400000000000091,
+      "bigger_s": 21.492999999999995,
+      "n_after": 6,
+      "fold_peak_deg": 0.7308638343089973,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.04279136787656365,
+      "blend_over": 325.451,
+      "peak_from_mean_deg": 0.8133258751185377,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 315.353,
+      "t_start": 293.877
+     },
+     {
+      "drone": 5,
+      "t_attach": 335.353,
+      "plate_s": 24.045000000000016,
+      "joint_s": 0.026999999999986812,
+      "bigger_s": 24.199000000000012,
+      "n_after": 7,
+      "fold_peak_deg": 2.8280720789055036,
+      "rod_end_cm": 1.2,
+      "settled_deg": 0.7745815725763957,
+      "blend_over": 369.752,
+      "peak_from_mean_deg": 2.835006868733941,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 359.552,
+      "t_start": 335.406
+     },
+     {
+      "drone": 1,
+      "t_attach": 379.552,
+      "plate_s": 21.399,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 21.500999999999976,
+      "n_after": 8,
+      "fold_peak_deg": 0.7749959363637239,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.028287455417297172,
+      "blend_over": 411.252,
+      "peak_from_mean_deg": 0.8386103336819284,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 401.053,
+      "t_start": 379.552
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 1.0867483710210613,
+    "tilt_deg": 0.07969965723097915,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "detaches": [
+    {
+     "drone": 2,
+     "t": 107.269,
+     "n_after": 3,
+     "resize_s": 3.0829999999999984,
+     "peak_deg": 28.848478252897113
+    },
+    {
+     "drone": 6,
+     "t": 127.269,
+     "n_after": 2,
+     "resize_s": 3.0819999999999936,
+     "peak_deg": 7.352892749487907
+    }
+   ],
+   "unload_cancelled": [],
+   "T_tilt": {
+    "mean_deg": 2.9720030199101095,
+    "max_deg": 7.576686287781981,
+    "from": 115.352,
+    "to": 234.252
+   },
+   "n_min": 2,
+   "throttle_n34": [
+    [
+     4,
+     0.62049999833107,
+     0.0
+    ],
+    [
+     3,
+     0.7504749938845634,
+     0.0
+    ],
+    [
+     3,
+     0.7899999916553497,
+     0.0011437908496732027
+    ]
+   ],
+   "falsified": false
+  },
+  "R3781": {
+   "run": "R3781",
+   "case": "chain4back_fig8laps",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3781_sim_gz_x3_s8_chain4back_fig8laps_it5_tip",
+   "v": {
+    "rtf": 0.22146947180943785,
+    "late_planner": 0.0009592326139088729,
+    "late_tracker": 4.8513074273516714e-05,
+    "failed": 0,
+    "published": 3952,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [
+     "LOG_TIMEOUT"
+    ],
+    "rejoin_refused": 0,
+    "rejoin_abort": 1,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 62.868,
+      "drones": [
+       1
+      ],
+      "t_last": 62.868,
+      "peak_deg": 2.3288312277230157,
+      "abs_deg": 2.3351939513650826,
+      "settled_deg": 0.8908775310865831,
+      "n_steps": [
+       0.39000000000000057
+      ],
+      "next": 86.669,
+      "miss": []
+     },
+     {
+      "t": 86.669,
+      "drones": [
+       5
+      ],
+      "t_last": 86.669,
+      "peak_deg": 1.9392421596232845,
+      "abs_deg": 2.5504094673699886,
+      "settled_deg": 0.577467969602066,
+      "n_steps": [
+       0.3780000000000001
+      ],
+      "next": 110.368,
+      "miss": []
+     },
+     {
+      "t": 110.368,
+      "drones": [
+       3
+      ],
+      "t_last": 110.368,
+      "peak_deg": 2.0759550377193015,
+      "abs_deg": 2.095964413315463,
+      "settled_deg": 0.5872837550794142,
+      "n_steps": [
+       0.30100000000001614
+      ],
+      "next": 134.069,
+      "miss": []
+     },
+     {
+      "t": 134.069,
+      "drones": [
+       7
+      ],
+      "t_last": 134.069,
+      "peak_deg": 2.8647353111165557,
+      "abs_deg": 3.2762243411657535,
+      "settled_deg": 0.3532641310265867,
+      "n_steps": [
+       0.30100000000001614
+      ],
+      "next": 145.787,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 145.787,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 0.41312638224444453,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.0501546464904696,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": 145.787
+     },
+     {
+      "drone": 3,
+      "t_attach": 213.686,
+      "plate_s": 33.28199999999998,
+      "joint_s": 0.01500000000001478,
+      "bigger_s": 33.38300000000001,
+      "n_after": 5,
+      "fold_peak_deg": 2.8911854921375753,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9969479058651991,
+      "blend_over": 257.172,
+      "peak_from_mean_deg": 2.7345631067110343,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 247.069,
+      "t_start": 213.686
+     },
+     {
+      "drone": 5,
+      "t_attach": 276.888,
+      "plate_s": 34.47300000000001,
+      "joint_s": 0.016999999999995907,
+      "bigger_s": 34.58000000000004,
+      "n_after": 6,
+      "fold_peak_deg": 4.516023616203621,
+      "rod_end_cm": 1.5,
+      "settled_deg": 1.3975132144098261,
+      "blend_over": 321.569,
+      "peak_from_mean_deg": 4.131160135240668,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 311.468,
+      "t_start": 276.896
+     },
+     {
+      "drone": 1,
+      "t_attach": 341.201,
+      "plate_s": 32.367999999999995,
+      "joint_s": 0.028999999999996362,
+      "bigger_s": 32.468999999999994,
+      "n_after": 7,
+      "fold_peak_deg": 1.5093236313052718,
+      "rod_end_cm": 1.5,
+      "settled_deg": 1.0360605058543857,
+      "blend_over": 383.869,
+      "peak_from_mean_deg": 1.7652093699007927,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 373.67,
+      "t_start": 341.201
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 35.608327458597266,
+    "tilt_deg": 1.726539755437137,
+    "n": 7,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "P": {
+    "mm": 19.571578217203175,
+    "tilt_deg": 4.5160236162036265,
+    "form": {
+     "base_mm": 14.445415957343592,
+     "bar_mm": 18.056769946679488,
+     "base_tilt_deg": 1.371251897484138,
+     "bar_tilt_deg": 2.3712518974841377
+    },
+    "holds": false,
+    "tilt_note": "not barred: the window holds the events"
+   },
+   "lap_clock": {
+    "stepped_back": false,
+    "lap_end_holds": 8
+   }
+  },
+  "R3782": {
+   "run": "R3782",
+   "case": "chain4back_fig8laps",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3782_sim_gz_x3_s8_chain4back_fig8laps_it5_tip",
+   "v": {
+    "rtf": 0.22208254931784144,
+    "late_planner": 0.0009272137227630969,
+    "late_tracker": 4.6844989928327164e-05,
+    "failed": 0,
+    "published": 4096,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 62.842,
+      "drones": [
+       1
+      ],
+      "t_last": 62.842,
+      "peak_deg": 2.3791865673405472,
+      "abs_deg": 2.3465527359205995,
+      "settled_deg": 0.8981807209939158,
+      "n_steps": [
+       0.3810000000000002
+      ],
+      "next": 86.643,
+      "miss": []
+     },
+     {
+      "t": 86.643,
+      "drones": [
+       5
+      ],
+      "t_last": 86.643,
+      "peak_deg": 1.928755009020113,
+      "abs_deg": 2.4978059514182367,
+      "settled_deg": 0.6015656936400181,
+      "n_steps": [
+       0.34199999999999875
+      ],
+      "next": 110.344,
+      "miss": []
+     },
+     {
+      "t": 110.344,
+      "drones": [
+       3
+      ],
+      "t_last": 110.344,
+      "peak_deg": 2.0376159323234417,
+      "abs_deg": 2.2527367137044676,
+      "settled_deg": 0.5841217450514115,
+      "n_steps": [
+       0.29999999999999716
+      ],
+      "next": 134.042,
+      "miss": []
+     },
+     {
+      "t": 134.042,
+      "drones": [
+       7
+      ],
+      "t_last": 134.042,
+      "peak_deg": 2.792285137125378,
+      "abs_deg": 3.2092041768521677,
+      "settled_deg": 0.3807203223213758,
+      "n_steps": [
+       0.30299999999999727
+      ],
+      "next": 145.756,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 145.756,
+      "plate_s": 40.385999999999996,
+      "joint_s": 0.01099999999999568,
+      "bigger_s": 40.486999999999995,
+      "n_after": 5,
+      "fold_peak_deg": 1.2537409641662625,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.6805424077237722,
+      "blend_over": 196.344,
+      "peak_from_mean_deg": 1.7437950469722687,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 186.245,
+      "t_start": 145.758
+     },
+     {
+      "drone": 3,
+      "t_attach": 215.969,
+      "plate_s": 37.47300000000001,
+      "joint_s": 0.020999999999986585,
+      "bigger_s": 37.57400000000001,
+      "n_after": 6,
+      "fold_peak_deg": 0.8182942948785215,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.385065059848008,
+      "blend_over": 263.644,
+      "peak_from_mean_deg": 1.480792470775155,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 253.545,
+      "t_start": 215.969
+     },
+     {
+      "drone": 5,
+      "t_attach": 283.379,
+      "plate_s": 35.363,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 35.464,
+      "n_after": 7,
+      "fold_peak_deg": 3.675260091333376,
+      "rod_end_cm": 2.0,
+      "settled_deg": 1.1093311827788173,
+      "blend_over": 329.144,
+      "peak_from_mean_deg": 3.8310575895981156,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 318.843,
+      "t_start": 283.379
+     },
+     {
+      "drone": 1,
+      "t_attach": 348.786,
+      "plate_s": 39.353999999999985,
+      "joint_s": 0.038000000000010914,
+      "bigger_s": 39.45600000000002,
+      "n_after": 8,
+      "fold_peak_deg": 1.698925209561186,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.3839652303610317,
+      "blend_over": 398.543,
+      "peak_from_mean_deg": 2.0571722373850605,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 388.242,
+      "t_start": 348.79
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 20.43025393280682,
+    "tilt_deg": 1.248118824957806,
+    "n": 8,
+    "pos_holds": false,
+    "tilt_holds": true
+   },
+   "P": {
+    "mm": 14.424957001447991,
+    "tilt_deg": 3.675260091333379,
+    "form": {
+     "base_mm": 14.445415957343592,
+     "bar_mm": 18.056769946679488,
+     "base_tilt_deg": 1.371251897484138,
+     "bar_tilt_deg": 2.3712518974841377
+    },
+    "holds": true,
+    "tilt_note": "not barred: the window holds the events"
+   },
+   "lap_clock": {
+    "stepped_back": false,
+    "lap_end_holds": 8
+   }
+  },
+  "R3783": {
+   "run": "R3783",
+   "case": "task",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3783_sim_gz_x3_s8_chain4task_it5_tip",
+   "v": {
+    "rtf": 0.22192595612764585,
+    "late_planner": 0.001212709192335678,
+    "late_tracker": 4.905567819475104e-05,
+    "failed": 0,
+    "published": 3903,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.341,
+      "drones": [
+       1
+      ],
+      "t_last": 42.341,
+      "peak_deg": 1.7688787447958902,
+      "abs_deg": 1.7656451683911896,
+      "settled_deg": 0.813906394861943,
+      "n_steps": [
+       0.3780000000000001
+      ],
+      "next": 57.341,
+      "miss": []
+     },
+     {
+      "t": 57.341,
+      "drones": [
+       5
+      ],
+      "t_last": 57.341,
+      "peak_deg": 1.6057814856775117,
+      "abs_deg": 2.085293974423078,
+      "settled_deg": 0.04521122540056963,
+      "n_steps": [
+       0.34600000000000364
+      ],
+      "next": 72.341,
+      "miss": []
+     },
+     {
+      "t": 72.341,
+      "drones": [
+       3
+      ],
+      "t_last": 72.341,
+      "peak_deg": 2.481965585097925,
+      "abs_deg": 2.4824251017898344,
+      "settled_deg": 0.8909299340979627,
+      "n_steps": [
+       0.291000000000011
+      ],
+      "next": 87.341,
+      "miss": []
+     },
+     {
+      "t": 87.341,
+      "drones": [
+       7
+      ],
+      "t_last": 87.341,
+      "peak_deg": 2.338891572157807,
+      "abs_deg": 2.3161559901260422,
+      "settled_deg": 0.04430793649061357,
+      "n_steps": [
+       0.2850000000000108
+      ],
+      "next": 123.724,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 123.724,
+      "plate_s": 36.80200000000001,
+      "joint_s": 0.009999999999990905,
+      "bigger_s": 36.903000000000006,
+      "n_after": 5,
+      "fold_peak_deg": 1.0900665488857098,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.9030496426116092,
+      "blend_over": 170.727,
+      "peak_from_mean_deg": 1.137976456174199,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 160.63,
+      "t_start": 123.724
+     },
+     {
+      "drone": 3,
+      "t_attach": 197.026,
+      "plate_s": 32.599999999999994,
+      "joint_s": 0.01999999999998181,
+      "bigger_s": 32.70099999999999,
+      "n_after": 6,
+      "fold_peak_deg": 4.024752701779149,
+      "rod_end_cm": 1.8,
+      "settled_deg": 0.0451828656773495,
+      "blend_over": 239.83,
+      "peak_from_mean_deg": 4.163321119657987,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 229.727,
+      "t_start": 197.026
+     },
+     {
+      "drone": 5,
+      "t_attach": 266.027,
+      "plate_s": 35.673,
+      "joint_s": 0.03300000000001546,
+      "bigger_s": 35.79899999999998,
+      "n_after": 7,
+      "fold_peak_deg": 2.1698468193888982,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.8272385042313045,
+      "blend_over": 312.027,
+      "peak_from_mean_deg": 2.1921706736878748,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 301.826,
+      "t_start": 266.053
+     },
+     {
+      "drone": 1,
+      "t_attach": 338.128,
+      "plate_s": 30.598000000000013,
+      "joint_s": 0.033999999999991815,
+      "bigger_s": 30.699000000000012,
+      "n_after": 8,
+      "fold_peak_deg": 1.322517218301567,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.0339814069644604,
+      "blend_over": 379.128,
+      "peak_from_mean_deg": 0.9295364926851226,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 368.827,
+      "t_start": 338.128
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 5.149922334155481,
+    "tilt_deg": 0.7915622655836018,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "tasks": [
+    {
+     "drone": 7,
+     "at_s": 4.684000000000012,
+     "done_s": 24.382000000000005,
+     "body_off_mm": 20.268908542591305,
+     "ref_off_mm": 17.317208515724012,
+     "closest_m": 0.9074496328361192,
+     "box_m": [
+      1.4645926047811817,
+      1.4640655442295705
+     ],
+     "ring_rmse_mm": 0.7645006497129768,
+     "n": 4,
+     "ring_in_n1": true,
+     "miss": []
+    },
+    {
+     "drone": 3,
+     "at_s": 4.682999999999993,
+     "done_s": 24.381,
+     "body_off_mm": 30.602134318337505,
+     "ref_off_mm": 20.250063201718458,
+     "closest_m": 0.8939144522959334,
+     "box_m": [
+      1.4715450958145295,
+      1.471583814642234
+     ],
+     "ring_rmse_mm": 10.58829013520191,
+     "n": 5,
+     "ring_in_n1": false,
+     "miss": [
+      "reference"
+     ]
+    },
+    {
+     "drone": 5,
+     "at_s": 4.599999999999994,
+     "done_s": 24.299999999999983,
+     "body_off_mm": 28.299143365044454,
+     "ref_off_mm": 17.245085288318926,
+     "closest_m": 0.8875543006628106,
+     "box_m": [
+      1.4696487867138273,
+      1.4701943252626086
+     ],
+     "ring_rmse_mm": 10.476312826016425,
+     "n": 6,
+     "ring_in_n1": false,
+     "miss": []
+    },
+    {
+     "drone": 1,
+     "at_s": 4.600999999999999,
+     "done_s": 24.302999999999997,
+     "body_off_mm": 33.288370780781946,
+     "ref_off_mm": 17.183516460356373,
+     "closest_m": 0.895196505183469,
+     "box_m": [
+      1.473162809848337,
+      1.473183385528748
+     ],
+     "ring_rmse_mm": 10.185189469649842,
+     "n": 7,
+     "ring_in_n1": false,
+     "miss": []
+    }
+   ]
+  },
+  "R3784": {
+   "run": "R3784",
+   "case": "task",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3784_sim_gz_x3_s8_chain4task_it5_tip",
+   "v": {
+    "rtf": 0.22114460635123676,
+    "late_planner": 0.0009557945041816009,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 3967,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.287,
+      "drones": [
+       1
+      ],
+      "t_last": 42.287,
+      "peak_deg": 1.5522912814666552,
+      "abs_deg": 1.5523658882712434,
+      "settled_deg": 0.8040853509079736,
+      "n_steps": [
+       0.3750000000000071
+      ],
+      "next": 57.287,
+      "miss": []
+     },
+     {
+      "t": 57.287,
+      "drones": [
+       5
+      ],
+      "t_last": 57.287,
+      "peak_deg": 1.6310124225585443,
+      "abs_deg": 2.0845407163009844,
+      "settled_deg": 0.051707901288220205,
+      "n_steps": [
+       0.3160000000000096
+      ],
+      "next": 72.29,
+      "miss": []
+     },
+     {
+      "t": 72.29,
+      "drones": [
+       3
+      ],
+      "t_last": 72.29,
+      "peak_deg": 2.4244961203317934,
+      "abs_deg": 2.4309930481530024,
+      "settled_deg": 0.9130088527002652,
+      "n_steps": [
+       0.277000000000001
+      ],
+      "next": 87.287,
+      "miss": []
+     },
+     {
+      "t": 87.287,
+      "drones": [
+       7
+      ],
+      "t_last": 87.287,
+      "peak_deg": 2.41430681437067,
+      "abs_deg": 2.3919560253282928,
+      "settled_deg": 0.04101874869752274,
+      "n_steps": [
+       0.28000000000000114
+      ],
+      "next": 123.667,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 123.667,
+      "plate_s": 37.80000000000001,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 37.900000000000006,
+      "n_after": 5,
+      "fold_peak_deg": 1.7717859660091035,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.8998130172660833,
+      "blend_over": 171.667,
+      "peak_from_mean_deg": 1.7781820429940316,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 161.57,
+      "t_start": 123.667
+     },
+     {
+      "drone": 3,
+      "t_attach": 197.965,
+      "plate_s": 36.80199999999999,
+      "joint_s": 0.02199999999999136,
+      "bigger_s": 36.90100000000001,
+      "n_after": 6,
+      "fold_peak_deg": 2.808770041434318,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.02730086550827622,
+      "blend_over": 244.967,
+      "peak_from_mean_deg": 2.343179410609678,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 234.866,
+      "t_start": 197.965
+     },
+     {
+      "drone": 5,
+      "t_attach": 271.166,
+      "plate_s": 33.56400000000002,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 33.69999999999999,
+      "n_after": 7,
+      "fold_peak_deg": 4.635695870246512,
+      "rod_end_cm": 2.2,
+      "settled_deg": 0.8120058541727646,
+      "blend_over": 315.068,
+      "peak_from_mean_deg": 4.627559078200005,
+      "miss": [
+       "plate",
+       "bigger",
+       "rod"
+      ],
+      "t_weld": 304.866,
+      "t_start": 271.203
+     },
+     {
+      "drone": 1,
+      "t_attach": 341.266,
+      "plate_s": 33.661,
+      "joint_s": 0.038000000000010914,
+      "bigger_s": 33.799999999999955,
+      "n_after": 8,
+      "fold_peak_deg": 1.2585410783769517,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.02440009645738728,
+      "blend_over": 385.267,
+      "peak_from_mean_deg": 0.9540541439746643,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 375.066,
+      "t_start": 341.306
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 5.0678650035593815,
+    "tilt_deg": 0.7744884060861903,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "tasks": [
+    {
+     "drone": 7,
+     "at_s": 4.675999999999988,
+     "done_s": 24.376999999999995,
+     "body_off_mm": 20.242156767137274,
+     "ref_off_mm": 17.336451173036277,
+     "closest_m": 0.9080052250691268,
+     "box_m": [
+      1.4644936339003856,
+      1.464112478822078
+     ],
+     "ring_rmse_mm": 0.8212393278512264,
+     "n": 4,
+     "ring_in_n1": true,
+     "miss": []
+    },
+    {
+     "drone": 3,
+     "at_s": 4.674999999999983,
+     "done_s": 24.373999999999995,
+     "body_off_mm": 27.239403329349944,
+     "ref_off_mm": 17.228553976321802,
+     "closest_m": 0.8969130365136095,
+     "box_m": [
+      1.4691651513344646,
+      1.469316891573648
+     ],
+     "ring_rmse_mm": 10.655862338132298,
+     "n": 5,
+     "ring_in_n1": false,
+     "miss": []
+    },
+    {
+     "drone": 5,
+     "at_s": 4.600999999999999,
+     "done_s": 24.299999999999983,
+     "body_off_mm": 29.413931372332517,
+     "ref_off_mm": 17.217394097157268,
+     "closest_m": 0.8930624549326139,
+     "box_m": [
+      1.4701303034521036,
+      1.4703891000442075
+     ],
+     "ring_rmse_mm": 10.234790374874432,
+     "n": 6,
+     "ring_in_n1": false,
+     "miss": []
+    },
+    {
+     "drone": 1,
+     "at_s": 4.649000000000001,
+     "done_s": 24.348000000000013,
+     "body_off_mm": 31.86757870157922,
+     "ref_off_mm": 17.16190961574047,
+     "closest_m": 0.8970686395027364,
+     "box_m": [
+      1.4721137887493958,
+      1.4723183507432622
+     ],
+     "ring_rmse_mm": 10.279561162170705,
+     "n": 7,
+     "ring_in_n1": false,
+     "miss": []
+    }
+   ]
+  },
+  "R3787": {
+   "run": "R3787",
+   "case": "relay",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3787_sim_gz_x3_s8_relay_it5_tip",
+   "v": {
+    "rtf": 0.21958109496898912,
+    "late_planner": 0.001684068710003368,
+    "late_tracker": 0.00013690190978164144,
+    "failed": 0,
+    "published": 2747,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.317,
+      "drones": [
+       1
+      ],
+      "t_last": 42.317,
+      "peak_deg": 1.7258595637118406,
+      "abs_deg": 1.723567094837513,
+      "settled_deg": 0.8187311334528116,
+      "n_steps": [
+       0.3569999999999993
+      ],
+      "next": 57.316,
+      "miss": []
+     },
+     {
+      "t": 57.316,
+      "drones": [
+       5
+      ],
+      "t_last": 57.316,
+      "peak_deg": 1.6138439170193362,
+      "abs_deg": 2.0801702943690596,
+      "settled_deg": 0.05350706433375155,
+      "n_steps": [
+       0.31799999999999784
+      ],
+      "next": 77.316,
+      "miss": []
+     },
+     {
+      "t": 110.804,
+      "drones": [
+       3
+      ],
+      "t_last": 110.804,
+      "peak_deg": 2.265368880625089,
+      "abs_deg": 2.61296838989362,
+      "settled_deg": 1.231468538753508,
+      "n_steps": [
+       0.3359999999999985
+      ],
+      "next": 130.805,
+      "miss": []
+     },
+     {
+      "t": 167.403,
+      "drones": [
+       7
+      ],
+      "t_last": 167.403,
+      "peak_deg": 1.8020722507265343,
+      "abs_deg": 2.028740516533304,
+      "settled_deg": 0.04061260080368974,
+      "n_steps": [
+       0.3269999999999982
+      ],
+      "next": 187.404,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 1,
+      "t_attach": 77.316,
+      "plate_s": 13.369,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 13.488,
+      "n_after": 7,
+      "fold_peak_deg": 1.0169633396993794,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9112230707527509,
+      "blend_over": 101.003,
+      "peak_from_mean_deg": 0.9841504640900693,
+      "miss": [],
+      "t_weld": 90.804,
+      "t_start": 77.334
+     },
+     {
+      "drone": 5,
+      "t_attach": 130.805,
+      "plate_s": 16.459000000000003,
+      "joint_s": 0.03499999999999659,
+      "bigger_s": 16.597999999999985,
+      "n_after": 7,
+      "fold_peak_deg": 1.5594671513010316,
+      "rod_end_cm": 1.7,
+      "settled_deg": 0.8380325262048195,
+      "blend_over": 157.505,
+      "peak_from_mean_deg": 0.998217846630181,
+      "miss": [],
+      "t_weld": 147.403,
+      "t_start": 130.844
+     },
+     {
+      "drone": 3,
+      "t_attach": 187.404,
+      "plate_s": 22.87700000000001,
+      "joint_s": 0.026999999999986812,
+      "bigger_s": 22.998999999999995,
+      "n_after": 7,
+      "fold_peak_deg": 0.9821562116592398,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.9050877773182149,
+      "blend_over": 220.505,
+      "peak_from_mean_deg": 1.0093169817601162,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 210.405,
+      "t_start": 187.428
+     },
+     {
+      "drone": 7,
+      "t_attach": 230.404,
+      "plate_s": 22.597999999999985,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 22.699000000000012,
+      "n_after": 8,
+      "fold_peak_deg": 1.2747488151321733,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.03306371495614542,
+      "blend_over": 263.305,
+      "peak_from_mean_deg": 1.014628144121937,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 253.103,
+      "t_start": 230.406
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.921935283684224,
+    "tilt_deg": 0.7515088549018928,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   }
+  },
+  "R3788": {
+   "run": "R3788",
+   "case": "relay",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3788_sim_gz_x3_s8_relay_it5_tip",
+   "v": {
+    "rtf": 0.22100690452286498,
+    "late_planner": 0.001968503937007874,
+    "late_tracker": 6.66000666000666e-05,
+    "failed": 0,
+    "published": 2827,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.34,
+      "drones": [
+       1
+      ],
+      "t_last": 42.34,
+      "peak_deg": 1.7639532897705095,
+      "abs_deg": 1.7640325261786354,
+      "settled_deg": 0.810299154971018,
+      "n_steps": [
+       0.38400000000000034
+      ],
+      "next": 57.34,
+      "miss": []
+     },
+     {
+      "t": 57.34,
+      "drones": [
+       5
+      ],
+      "t_last": 57.34,
+      "peak_deg": 1.7221154761661617,
+      "abs_deg": 2.0696025838848224,
+      "settled_deg": 0.035774734275473036,
+      "n_steps": [
+       0.32800000000000296
+      ],
+      "next": 77.34,
+      "miss": []
+     },
+     {
+      "t": 124.023,
+      "drones": [
+       3
+      ],
+      "t_last": 124.023,
+      "peak_deg": 2.278294527677971,
+      "abs_deg": 2.6298042023081476,
+      "settled_deg": 1.2087148775797247,
+      "n_steps": [
+       0.32200000000000273
+      ],
+      "next": 144.024,
+      "miss": []
+     },
+     {
+      "t": 180.924,
+      "drones": [
+       7
+      ],
+      "t_last": 180.924,
+      "peak_deg": 1.8561466820077694,
+      "abs_deg": 2.1494477883858756,
+      "settled_deg": 0.04490364860964894,
+      "n_steps": [
+       0.3640000000000043
+      ],
+      "next": 200.923,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 1,
+      "t_attach": 77.34,
+      "plate_s": 26.557000000000002,
+      "joint_s": 0.03299999999998704,
+      "bigger_s": 26.683999999999997,
+      "n_after": 7,
+      "fold_peak_deg": 0.9712140289583674,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.9333747441835689,
+      "blend_over": 114.224,
+      "peak_from_mean_deg": 1.0129656810364869,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 104.024,
+      "t_start": 77.367
+     },
+     {
+      "drone": 5,
+      "t_attach": 144.024,
+      "plate_s": 16.775999999999982,
+      "joint_s": 0.03900000000001569,
+      "bigger_s": 16.90100000000001,
+      "n_after": 7,
+      "fold_peak_deg": 3.374637763173648,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.824697910090253,
+      "blend_over": 171.125,
+      "peak_from_mean_deg": 2.403496344690178,
+      "miss": [],
+      "t_weld": 160.925,
+      "t_start": 144.05
+     },
+     {
+      "drone": 3,
+      "t_attach": 200.923,
+      "plate_s": 18.602000000000004,
+      "joint_s": 0.028999999999996362,
+      "bigger_s": 18.700999999999993,
+      "n_after": 7,
+      "fold_peak_deg": 1.199774485693723,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.8871420102104369,
+      "blend_over": 229.824,
+      "peak_from_mean_deg": 1.2074078958502896,
+      "miss": [],
+      "t_weld": 219.624,
+      "t_start": 200.923
+     },
+     {
+      "drone": 7,
+      "t_attach": 239.625,
+      "plate_s": 21.560000000000002,
+      "joint_s": 0.043000000000006366,
+      "bigger_s": 21.699000000000012,
+      "n_after": 8,
+      "fold_peak_deg": 1.266335138535497,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.03153147287479689,
+      "blend_over": 271.526,
+      "peak_from_mean_deg": 0.9801923006204223,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 261.324,
+      "t_start": 239.668
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.904530576524153,
+    "tilt_deg": 0.7459100521107175,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   }
+  },
+  "R3789": {
+   "run": "R3789",
+   "case": "pairs",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3789_sim_gz_x3_s8_chain4back_pairs_it5_tip",
+   "v": {
+    "rtf": 0.22102604749180435,
+    "late_planner": 0.0016056518946692357,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 2893,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 57.271,
+      "drones": [
+       1,
+       5
+      ],
+      "t_last": 57.271,
+      "peak_deg": 0.0879666475366871,
+      "abs_deg": 0.09755699082936152,
+      "settled_deg": 0.013377431386003655,
+      "n_steps": [
+       0.3689999999999998,
+       0.42600000000000193
+      ],
+      "next": 87.272,
+      "miss": []
+     },
+     {
+      "t": 87.272,
+      "drones": [
+       3,
+       7
+      ],
+      "t_last": 87.272,
+      "peak_deg": 0.08965917738226985,
+      "abs_deg": 0.08563717306691551,
+      "settled_deg": 0.014455132362018652,
+      "n_steps": [
+       0.29999999999999716,
+       0.3859999999999957
+      ],
+      "next": 107.272,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.272,
+      "plate_s": 39.283,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 39.38799999999999,
+      "n_after": 5,
+      "fold_peak_deg": 1.077510737993878,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.9768672882442283,
+      "blend_over": 156.758,
+      "peak_from_mean_deg": 1.0720898323412302,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 146.66,
+      "t_start": 107.277
+     },
+     {
+      "drone": 3,
+      "t_attach": 166.659,
+      "plate_s": 21.501000000000005,
+      "joint_s": 0.018000000000000682,
+      "bigger_s": 21.599000000000018,
+      "n_after": 6,
+      "fold_peak_deg": 3.7498108417368736,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.09769381518030701,
+      "blend_over": 198.358,
+      "peak_from_mean_deg": 3.8124224351704825,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 188.258,
+      "t_start": 166.659
+     },
+     {
+      "drone": 5,
+      "t_attach": 208.258,
+      "plate_s": 18.400999999999982,
+      "joint_s": 0.03100000000000591,
+      "bigger_s": 18.50199999999998,
+      "n_after": 7,
+      "fold_peak_deg": 4.162902803195544,
+      "rod_end_cm": 1.7,
+      "settled_deg": 0.9310981281311617,
+      "blend_over": 236.959,
+      "peak_from_mean_deg": 4.216835412330153,
+      "miss": [],
+      "t_weld": 226.762,
+      "t_start": 208.258
+     },
+     {
+      "drone": 1,
+      "t_attach": 246.763,
+      "plate_s": 20.75399999999999,
+      "joint_s": 0.04099999999999682,
+      "bigger_s": 20.896000000000043,
+      "n_after": 8,
+      "fold_peak_deg": 1.4697696640563778,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.021178702190887348,
+      "blend_over": 277.861,
+      "peak_from_mean_deg": 1.0784307575598093,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 267.659,
+      "t_start": 246.804
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.993379738155921,
+    "tilt_deg": 0.7590956418179742,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "throttle": {
+    "6": [
+     0.5724999979138374,
+     0.0
+    ],
+    "4": [
+     0.619999997317791,
+     0.0
+    ]
+   }
+  },
+  "R3790": {
+   "run": "R3790",
+   "case": "pairs",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3790_sim_gz_x3_s8_chain4back_pairs_it5_tip",
+   "v": {
+    "rtf": 0.22193314366055822,
+    "late_planner": 0.0013029315960912053,
+    "late_tracker": 6.6124446207763e-05,
+    "failed": 0,
+    "published": 2849,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 57.307,
+      "drones": [
+       1,
+       5
+      ],
+      "t_last": 57.307,
+      "peak_deg": 0.08720089227195084,
+      "abs_deg": 0.08252393479835478,
+      "settled_deg": 0.03893019279054998,
+      "n_steps": [
+       0.38700000000000045,
+       0.5060000000000002
+      ],
+      "next": 87.307,
+      "miss": []
+     },
+     {
+      "t": 87.307,
+      "drones": [
+       3,
+       7
+      ],
+      "t_last": 87.307,
+      "peak_deg": 0.11054811778373702,
+      "abs_deg": 0.12034466180817338,
+      "settled_deg": 0.027748531741112987,
+      "n_steps": [
+       0.29399999999999693,
+       0.38700000000000045
+      ],
+      "next": 107.307,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.307,
+      "plate_s": 38.17899999999999,
+      "joint_s": 0.01300000000000523,
+      "bigger_s": 38.27999999999999,
+      "n_after": 5,
+      "fold_peak_deg": 1.0822694926538585,
+      "rod_end_cm": 1.4,
+      "settled_deg": 0.9678568802043579,
+      "blend_over": 155.688,
+      "peak_from_mean_deg": 1.0858886869108069,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 145.587,
+      "t_start": 107.307
+     },
+     {
+      "drone": 3,
+      "t_attach": 165.587,
+      "plate_s": 16.476,
+      "joint_s": 0.025000000000005684,
+      "bigger_s": 16.599000000000018,
+      "n_after": 6,
+      "fold_peak_deg": 2.2192328554063954,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.08228367886818184,
+      "blend_over": 192.286,
+      "peak_from_mean_deg": 1.55613069452824,
+      "miss": [],
+      "t_weld": 182.186,
+      "t_start": 165.611
+     },
+     {
+      "drone": 5,
+      "t_attach": 202.186,
+      "plate_s": 19.5,
+      "joint_s": 0.030000000000001137,
+      "bigger_s": 19.599999999999994,
+      "n_after": 7,
+      "fold_peak_deg": 0.963193238857785,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9189005235603322,
+      "blend_over": 231.987,
+      "peak_from_mean_deg": 1.0002058888995187,
+      "miss": [],
+      "t_weld": 221.786,
+      "t_start": 202.186
+     },
+     {
+      "drone": 1,
+      "t_attach": 241.787,
+      "plate_s": 21.45599999999999,
+      "joint_s": 0.038000000000010914,
+      "bigger_s": 21.601000000000028,
+      "n_after": 8,
+      "fold_peak_deg": 1.2828973249538078,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.03224525108183783,
+      "blend_over": 273.587,
+      "peak_from_mean_deg": 1.060555065980692,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 263.388,
+      "t_start": 241.831
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 4.916034325631567,
+    "tilt_deg": 0.7507672498990965,
+    "n": 8,
+    "pos_holds": true,
+    "tilt_holds": true
+   },
+   "throttle": {
+    "6": [
+     0.5719999969005585,
+     0.0
+    ],
+    "4": [
+     0.619999997317791,
+     0.0
+    ]
+   }
+  },
+  "R3791": {
+   "run": "R3791",
+   "case": "relblend",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3791_sim_gz_x3_s8_chain4back_relblend_it5_tip",
+   "v": {
+    "rtf": 0.22189430995270823,
+    "late_planner": 0.0019582245430809398,
+    "late_tracker": 0.00013257324671881213,
+    "failed": 0,
+    "published": 2843,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.259,
+      "drones": [
+       1
+      ],
+      "t_last": 42.259,
+      "peak_deg": 1.6956584446464615,
+      "abs_deg": 1.6900058424501834,
+      "settled_deg": 0.8046360331797949,
+      "n_steps": [
+       0.3689999999999998
+      ],
+      "next": 57.26,
+      "miss": []
+     },
+     {
+      "t": 57.26,
+      "drones": [
+       5
+      ],
+      "t_last": 57.26,
+      "peak_deg": 1.7313411092737503,
+      "abs_deg": 2.0912041093380225,
+      "settled_deg": 0.02553414371104498,
+      "n_steps": [
+       0.3510000000000062
+      ],
+      "next": 72.26,
+      "miss": []
+     },
+     {
+      "t": 72.26,
+      "drones": [
+       3
+      ],
+      "t_last": 72.26,
+      "peak_deg": 2.458494621630486,
+      "abs_deg": 2.4600201039623153,
+      "settled_deg": 0.9183036899971845,
+      "n_steps": [
+       0.29699999999999704
+      ],
+      "next": 87.26,
+      "miss": []
+     },
+     {
+      "t": 87.26,
+      "drones": [
+       7
+      ],
+      "t_last": 87.26,
+      "peak_deg": 2.4130727822937805,
+      "abs_deg": 2.3336510156876695,
+      "settled_deg": 0.04851443812947773,
+      "n_steps": [
+       0.2879999999999967
+      ],
+      "next": 107.26,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.26,
+      "plate_s": 38.185,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 38.28599999999999,
+      "n_after": 5,
+      "fold_peak_deg": 1.062688589538279,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.9934448985575955,
+      "blend_over": 155.647,
+      "peak_from_mean_deg": 1.0922241493084068,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 145.546,
+      "t_start": 107.262
+     },
+     {
+      "drone": 3,
+      "t_attach": 165.546,
+      "plate_s": 21.685000000000002,
+      "joint_s": 0.02400000000000091,
+      "bigger_s": 21.80000000000001,
+      "n_after": 6,
+      "fold_peak_deg": 3.544727937753451,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.08077836306240921,
+      "blend_over": 197.446,
+      "peak_from_mean_deg": 3.296233390385028,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 187.346,
+      "t_start": 165.565
+     },
+     {
+      "drone": 5,
+      "t_attach": 207.345,
+      "plate_s": 18.50200000000001,
+      "joint_s": 0.028999999999996362,
+      "bigger_s": 18.602000000000004,
+      "n_after": 7,
+      "fold_peak_deg": 2.49266959690247,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9291638502453125,
+      "blend_over": 236.148,
+      "peak_from_mean_deg": 2.4615213969983816,
+      "miss": [],
+      "t_weld": 225.947,
+      "t_start": 207.345
+     },
+     {
+      "drone": 1,
+      "t_attach": 245.948,
+      "plate_s": 16.662999999999982,
+      "joint_s": 0.04200000000003001,
+      "bigger_s": 16.79800000000003,
+      "n_after": 8,
+      "fold_peak_deg": 2.202208203120236,
+      "rod_end_cm": 2.2,
+      "settled_deg": 0.6469381353852682,
+      "blend_over": 266.118,
+      "peak_from_mean_deg": 0.6058950922663652,
+      "miss": [
+       "rod"
+      ],
+      "t_weld": 262.746,
+      "t_start": 245.984
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 6.605909387714802,
+    "tilt_deg": 1.467058329866276,
+    "n": 7,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "added": {
+    "drone": 2,
+    "t_after_weld_s": 3.001000000000033,
+    "planner_at_7_s": 0.37100000000003774,
+    "rejoiner_kept": true,
+    "abs_15s_deg": 2.202208203120236,
+    "peak_deg": 2.157072083016921,
+    "settled_deg": 0.8118044624994138,
+    "all_landed": true,
+    "rejoiner": 1,
+    "rejoiner_tension_before_N": 0.464,
+    "rejoiner_tension_after_N": 1.945,
+    "rejoiner_tension_after_low_N": 1.925,
+    "rejoiner_rod_end_cm": 2.2,
+    "holds": true
+   }
+  },
+  "R3792": {
+   "run": "R3792",
+   "case": "relblend",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3792_sim_gz_x3_s8_chain4back_relblend_it5_tip",
+   "v": {
+    "rtf": 0.22263432202751152,
+    "late_planner": 0.001621271076523995,
+    "late_tracker": 6.700616456714018e-05,
+    "failed": 0,
+    "published": 2863,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.338,
+      "drones": [
+       1
+      ],
+      "t_last": 42.338,
+      "peak_deg": 1.658410998872039,
+      "abs_deg": 1.653136219513648,
+      "settled_deg": 0.7866153212128405,
+      "n_steps": [
+       0.35900000000000176
+      ],
+      "next": 57.339,
+      "miss": []
+     },
+     {
+      "t": 57.339,
+      "drones": [
+       5
+      ],
+      "t_last": 57.339,
+      "peak_deg": 1.7675788303705415,
+      "abs_deg": 2.047834528869461,
+      "settled_deg": 0.0451904945965692,
+      "n_steps": [
+       0.3480000000000061
+      ],
+      "next": 72.339,
+      "miss": []
+     },
+     {
+      "t": 72.339,
+      "drones": [
+       3
+      ],
+      "t_last": 72.339,
+      "peak_deg": 2.473111968135778,
+      "abs_deg": 2.4780794527330445,
+      "settled_deg": 0.8991540552668222,
+      "n_steps": [
+       0.2850000000000108
+      ],
+      "next": 87.339,
+      "miss": []
+     },
+     {
+      "t": 87.339,
+      "drones": [
+       7
+      ],
+      "t_last": 87.339,
+      "peak_deg": 2.4568690382084744,
+      "abs_deg": 2.267340446542616,
+      "settled_deg": 0.03859809665050908,
+      "n_steps": [
+       0.2850000000000108
+      ],
+      "next": 107.339,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 7,
+      "t_attach": 107.339,
+      "plate_s": 38.08600000000001,
+      "joint_s": 0.009999999999990905,
+      "bigger_s": 38.185,
+      "n_after": 5,
+      "fold_peak_deg": 1.2601685141434062,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9915153388633285,
+      "blend_over": 155.626,
+      "peak_from_mean_deg": 1.253524624367017,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 145.524,
+      "t_start": 107.339
+     },
+     {
+      "drone": 3,
+      "t_attach": 165.525,
+      "plate_s": 17.78400000000002,
+      "joint_s": 0.018999999999977035,
+      "bigger_s": 17.900000000000006,
+      "n_after": 6,
+      "fold_peak_deg": 3.380493440038997,
+      "rod_end_cm": 1.5,
+      "settled_deg": 0.09156104549222359,
+      "blend_over": 193.524,
+      "peak_from_mean_deg": 3.1816074574880484,
+      "miss": [],
+      "t_weld": 183.425,
+      "t_start": 165.54
+     },
+     {
+      "drone": 5,
+      "t_attach": 203.423,
+      "plate_s": 17.502999999999986,
+      "joint_s": 0.034000000000020236,
+      "bigger_s": 17.602000000000004,
+      "n_after": 7,
+      "fold_peak_deg": 2.399055490417226,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.9299878600483635,
+      "blend_over": 231.226,
+      "peak_from_mean_deg": 2.424569425478353,
+      "miss": [],
+      "t_weld": 221.025,
+      "t_start": 203.423
+     },
+     {
+      "drone": 1,
+      "t_attach": 241.026,
+      "plate_s": 23.55000000000001,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 23.69799999999998,
+      "n_after": 8,
+      "fold_peak_deg": 2.2054930586815935,
+      "rod_end_cm": 2.5,
+      "settled_deg": 0.6559479024780671,
+      "blend_over": 268.118,
+      "peak_from_mean_deg": 0.5875187571700473,
+      "miss": [
+       "bigger",
+       "rod"
+      ],
+      "t_weld": 264.726,
+      "t_start": 241.075
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 6.495605522826738,
+    "tilt_deg": 1.52042986455599,
+    "n": 7,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "added": {
+    "drone": 2,
+    "t_after_weld_s": 3.0,
+    "planner_at_7_s": 0.38999999999998636,
+    "rejoiner_kept": true,
+    "abs_15s_deg": 2.2054930586815935,
+    "peak_deg": 2.146147395085793,
+    "settled_deg": 0.8167840972104485,
+    "all_landed": true,
+    "rejoiner": 1,
+    "rejoiner_tension_before_N": 0.474,
+    "rejoiner_tension_after_N": 1.94,
+    "rejoiner_tension_after_low_N": 1.917,
+    "rejoiner_rod_end_cm": 2.5,
+    "holds": true
+   }
+  },
+  "R3794": {
+   "run": "R3794",
+   "case": "chain4b2b",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3794_sim_gz_x3_s8_chain4b2b_it5_tip",
+   "v": {
+    "rtf": 0.22725499948886294,
+    "late_planner": 0.0012043356081894822,
+    "late_tracker": 0.00024541884816753925,
+    "failed": 0,
+    "published": 2270,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.324,
+      "drones": [
+       1
+      ],
+      "t_last": 42.324,
+      "peak_deg": 1.5438732823838066,
+      "abs_deg": 1.5384931671248232,
+      "settled_deg": 0.8111331944973759,
+      "n_steps": [
+       0.3500000000000085
+      ],
+      "next": 57.325,
+      "miss": []
+     },
+     {
+      "t": 57.325,
+      "drones": [
+       5
+      ],
+      "t_last": 57.325,
+      "peak_deg": 1.6325317082364816,
+      "abs_deg": 2.056207095817042,
+      "settled_deg": 0.04646051256766295,
+      "n_steps": [
+       0.3259999999999934
+      ],
+      "next": 72.325,
+      "miss": []
+     },
+     {
+      "t": 72.325,
+      "drones": [
+       3
+      ],
+      "t_last": 72.325,
+      "peak_deg": 2.5143959934662874,
+      "abs_deg": 2.5163837504271065,
+      "settled_deg": 0.8966967466158362,
+      "n_steps": [
+       0.2849999999999966
+      ],
+      "next": 87.325,
+      "miss": []
+     },
+     {
+      "t": 87.325,
+      "drones": [
+       7
+      ],
+      "t_last": 87.325,
+      "peak_deg": 2.4002591156533177,
+      "abs_deg": 1.5042132086140163,
+      "settled_deg": 0.8862256314613234,
+      "n_steps": [
+       0.2819999999999965
+      ],
+      "next": 88.087,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 1,
+      "t_attach": 88.087,
+      "plate_s": 10.421999999999997,
+      "joint_s": 0.012000000000000455,
+      "bigger_s": 10.519999999999996,
+      "n_after": 5,
+      "fold_peak_deg": 2.139494872544886,
+      "rod_end_cm": 1.4,
+      "settled_deg": 1.779577185997418,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.6310599482598251,
+      "miss": [],
+      "t_weld": 98.607,
+      "t_start": 88.087
+     },
+     {
+      "drone": 5,
+      "t_attach": 99.608,
+      "plate_s": 30.401999999999987,
+      "joint_s": 0.01500000000001478,
+      "bigger_s": 30.501000000000005,
+      "n_after": 6,
+      "fold_peak_deg": 3.1018967003555296,
+      "rod_end_cm": 1.4,
+      "settled_deg": 2.0107915292449228,
+      "blend_over": null,
+      "peak_from_mean_deg": 2.7175175413974753,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 130.109,
+      "t_start": 99.608
+     },
+     {
+      "drone": 3,
+      "t_attach": 131.107,
+      "plate_s": 35.474999999999994,
+      "joint_s": 0.036000000000001364,
+      "bigger_s": 35.602000000000004,
+      "n_after": 7,
+      "fold_peak_deg": 2.5968888909934384,
+      "rod_end_cm": 1.6,
+      "settled_deg": 1.8006639697652462,
+      "blend_over": null,
+      "peak_from_mean_deg": 2.8208747779629513,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 166.709,
+      "t_start": 131.133
+     },
+     {
+      "drone": 7,
+      "t_attach": 167.709,
+      "plate_s": 37.69800000000001,
+      "joint_s": 0.042999999999977945,
+      "bigger_s": 37.798,
+      "n_after": 8,
+      "fold_peak_deg": 2.5356241097076935,
+      "rod_end_cm": 1.6,
+      "settled_deg": 0.02573273017580927,
+      "blend_over": 215.808,
+      "peak_from_mean_deg": 1.9172634518144012,
+      "miss": [
+       "plate",
+       "bigger"
+      ],
+      "t_weld": 205.507,
+      "t_start": 167.709
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 5.5048288520425155,
+    "tilt_deg": 0.7658525564064136,
+    "n": 8,
+    "pos_holds": false,
+    "tilt_holds": true
+   },
+   "overlap": {
+    "bar_deg": 2.6205982823069114,
+    "missed": [
+     5
+    ],
+    "return_s": 128.483,
+    "closest_m": [
+     1.3138298161802124,
+     0.988204895371431,
+     1.318496482526459
+    ]
+   },
+   "walk": {
+    "walked_m": 0.18059538135943184,
+    "to": [
+     -0.1003069555485682,
+     0.1501771183118191
+    ]
+   }
+  },
+  "R3795": {
+   "run": "R3795",
+   "case": "chain4b2b_orbit",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3795_sim_gz_x3_s8_chain4b2b_orbit_it5_tip",
+   "v": {
+    "rtf": 0.25095272307052785,
+    "late_planner": 0.00097815454841865,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 2846,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [
+     "LOG_TIMEOUT"
+    ],
+    "rejoin_refused": 2,
+    "rejoin_abort": 1,
+    "low_rtf_flag": false
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.265,
+      "drones": [
+       1
+      ],
+      "t_last": 42.265,
+      "peak_deg": 2.413512127018655,
+      "abs_deg": 2.194494649163782,
+      "settled_deg": 1.2587388631469258,
+      "n_steps": [
+       0.3960000000000008
+      ],
+      "next": 57.266,
+      "miss": []
+     },
+     {
+      "t": 57.266,
+      "drones": [
+       5
+      ],
+      "t_last": 57.266,
+      "peak_deg": 1.9556864092388309,
+      "abs_deg": 2.8442673938383565,
+      "settled_deg": 0.6576425343420867,
+      "n_steps": [
+       0.36000000000000654
+      ],
+      "next": 72.266,
+      "miss": []
+     },
+     {
+      "t": 72.266,
+      "drones": [
+       3
+      ],
+      "t_last": 72.266,
+      "peak_deg": 3.374765438721936,
+      "abs_deg": 3.0679466783136915,
+      "settled_deg": 0.684869220194394,
+      "n_steps": [
+       0.3059999999999974
+      ],
+      "next": 87.266,
+      "miss": []
+     },
+     {
+      "t": 87.266,
+      "drones": [
+       7
+      ],
+      "t_last": 87.266,
+      "peak_deg": 2.7079570059829567,
+      "abs_deg": 3.107866550750975,
+      "settled_deg": 2.1392436496706013,
+      "n_steps": [
+       0.27899999999999636
+      ],
+      "next": 88.042,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 1,
+      "t_attach": 88.042,
+      "plate_s": 21.405,
+      "joint_s": 0.015000000000000568,
+      "bigger_s": 21.503,
+      "n_after": 5,
+      "fold_peak_deg": 2.718406247909774,
+      "rod_end_cm": 1.3,
+      "settled_deg": 1.7708147910737215,
+      "blend_over": null,
+      "peak_from_mean_deg": 3.021656092724599,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 109.545,
+      "t_start": 88.042
+     },
+     {
+      "drone": 5,
+      "t_attach": 110.545,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 1.2196482313776842,
+      "blend_over": null,
+      "peak_from_mean_deg": 2.6994398376361164,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": 110.545
+     },
+     {
+      "drone": 3,
+      "t_attach": 161.647,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 1.1896770339216043,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.9417236538553369,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": null
+     },
+     {
+      "drone": 7,
+      "t_attach": 212.749,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 0.6422937453832446,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.2575994870863563,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": null
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 38.35131679490453,
+    "tilt_deg": 1.5461616852461701,
+    "n": 5,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "overlap": {
+    "bar_deg": 2.6205982823069114,
+    "missed": [
+     1,
+     5,
+     3,
+     7
+    ],
+    "return_s": 32.381,
+    "closest_m": [
+     1.364543412547157,
+     null,
+     null
+    ]
+   },
+   "walk": {
+    "walked_m": 0.8218631225366725,
+    "to": [
+     -0.1768523891013534,
+     0.802609590575746
+    ]
+   },
+   "P": {
+    "mm": 28.384915223986926,
+    "tilt_deg": 1.7791528526827345,
+    "form": {
+     "base_mm": 17.024477876953554,
+     "bar_mm": 21.280597346191943,
+     "base_tilt_deg": 1.1543501737773778,
+     "bar_tilt_deg": 2.154350173777378
+    },
+    "holds": false
+   },
+   "box_ring": [
+    0.4173466465405704,
+    0.8336204034778096
+   ],
+   "box": [
+    1.430861120187478,
+    1.8286238382873352
+   ]
+  },
+  "R3796": {
+   "run": "R3796",
+   "case": "chain4b2b_orbit",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3796_sim_gz_x3_s8_chain4b2b_orbit_it5_tip",
+   "v": {
+    "rtf": 0.22928744175343188,
+    "late_planner": 0.0006455777921239509,
+    "late_tracker": 0.0001332800213248034,
+    "failed": 0,
+    "published": 2875,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [
+     "LOG_TIMEOUT"
+    ],
+    "rejoin_refused": 2,
+    "rejoin_abort": 1,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.356,
+      "drones": [
+       1
+      ],
+      "t_last": 42.356,
+      "peak_deg": 2.3910039126689826,
+      "abs_deg": 2.1590289137355105,
+      "settled_deg": 1.3104038183614497,
+      "n_steps": [
+       0.3780000000000001
+      ],
+      "next": 57.354,
+      "miss": []
+     },
+     {
+      "t": 57.354,
+      "drones": [
+       5
+      ],
+      "t_last": 57.354,
+      "peak_deg": 1.900675958075434,
+      "abs_deg": 2.7916855551213593,
+      "settled_deg": 0.6360892889720458,
+      "n_steps": [
+       0.33200000000000074
+      ],
+      "next": 72.354,
+      "miss": []
+     },
+     {
+      "t": 72.354,
+      "drones": [
+       3
+      ],
+      "t_last": 72.354,
+      "peak_deg": 3.393140066755915,
+      "abs_deg": 2.9961957941520114,
+      "settled_deg": 0.6565596927215833,
+      "n_steps": [
+       0.291000000000011
+      ],
+      "next": 87.355,
+      "miss": []
+     },
+     {
+      "t": 87.355,
+      "drones": [
+       7
+      ],
+      "t_last": 87.355,
+      "peak_deg": 2.711342206022341,
+      "abs_deg": 3.0974411017973407,
+      "settled_deg": 2.194485949927929,
+      "n_steps": [
+       0.26899999999999125
+      ],
+      "next": 88.113,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [
+     {
+      "drone": 1,
+      "t_attach": 88.113,
+      "plate_s": 24.418000000000006,
+      "joint_s": 0.015000000000000568,
+      "bigger_s": 24.510999999999996,
+      "n_after": 5,
+      "fold_peak_deg": 2.7001772113191325,
+      "rod_end_cm": 1.4,
+      "settled_deg": 1.76514313983051,
+      "blend_over": null,
+      "peak_from_mean_deg": 3.0312912231236817,
+      "miss": [
+       "bigger"
+      ],
+      "t_weld": 112.624,
+      "t_start": 88.113
+     },
+     {
+      "drone": 5,
+      "t_attach": 113.624,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 1.2555937650745024,
+      "blend_over": null,
+      "peak_from_mean_deg": 2.6120630149552433,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": 113.627
+     },
+     {
+      "drone": 3,
+      "t_attach": 164.722,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 1.1647699901948145,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.8889914569200292,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": null
+     },
+     {
+      "drone": 7,
+      "t_attach": 215.822,
+      "plate_s": null,
+      "joint_s": null,
+      "bigger_s": null,
+      "n_after": null,
+      "fold_peak_deg": null,
+      "rod_end_cm": null,
+      "settled_deg": 0.6249700564864231,
+      "blend_over": null,
+      "peak_from_mean_deg": 1.1977628284218491,
+      "miss": [
+       "plate",
+       "joint",
+       "bigger",
+       "fold",
+       "rod"
+      ],
+      "t_weld": null,
+      "t_start": null
+     }
+    ],
+    "holds": false
+   },
+   "n4": {
+    "rmse_mm": 37.95511875725107,
+    "tilt_deg": 1.474256514739108,
+    "n": 5,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "overlap": {
+    "bar_deg": 2.6205982823069114,
+    "missed": [
+     1,
+     5,
+     3,
+     7
+    ],
+    "return_s": 35.369,
+    "closest_m": [
+     1.3583574500845739,
+     null,
+     null
+    ]
+   },
+   "walk": {
+    "walked_m": 0.8222812013562621,
+    "to": [
+     -0.1779386669365819,
+     0.8027976922696478
+    ]
+   },
+   "P": {
+    "mm": 27.98618540279238,
+    "tilt_deg": 1.8661270670291803,
+    "form": {
+     "base_mm": 17.024477876953554,
+     "bar_mm": 21.280597346191943,
+     "base_tilt_deg": 1.1543501737773778,
+     "bar_tilt_deg": 2.154350173777378
+    },
+    "holds": false
+   },
+   "box_ring": [
+    0.4194090615889001,
+    0.8341871386995079
+   ],
+   "box": [
+    1.430958996260328,
+    1.8288102936875337
+   ]
+  },
+  "R3797": {
+   "run": "R3797",
+   "case": "fig8rel2",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3797_sim_gz_x3_s8_fig8rel2_it5_tip",
+   "v": {
+    "rtf": 0.21627364825181197,
+    "late_planner": 0.0016501650165016502,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 990,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 36.751,
+      "drones": [
+       1
+      ],
+      "t_last": 36.751,
+      "peak_deg": 3.300770106610066,
+      "abs_deg": 3.746215364727744,
+      "settled_deg": 0.9847096082547444,
+      "n_steps": [
+       0.3610000000000042
+      ],
+      "next": 45.871,
+      "miss": []
+     },
+     {
+      "t": 45.871,
+      "drones": [
+       5
+      ],
+      "t_last": 45.871,
+      "peak_deg": 2.6823392266042103,
+      "abs_deg": 2.5937794577794704,
+      "settled_deg": 0.6104935646108911,
+      "n_steps": [
+       0.3299999999999983
+      ],
+      "next": 53.24,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [],
+    "holds": null
+   },
+   "n4": {
+    "rmse_mm": 11.916408434138448,
+    "tilt_deg": 2.00342901415547,
+    "n": 6,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "P": {
+    "mm": 21.530866305315307,
+    "tilt_deg": 3.746215364727702,
+    "form": {
+     "base_mm": 15.203006756413258,
+     "bar_mm": 19.00375844551657,
+     "base_tilt_deg": 1.254230363791157,
+     "bar_tilt_deg": 2.254230363791157
+    },
+    "holds": false,
+    "tilt_note": "not barred: the window holds the events"
+   },
+   "staged": {
+    "1": {
+     "box_x_m": 1.3823331830799808,
+     "box_y_m": 1.2167142786776526,
+     "carrier_min_m": 0.7648816648359162
+    },
+    "5": {
+     "box_x_m": 1.4452465241272543,
+     "box_y_m": 1.2874095451663727,
+     "carrier_min_m": 0.6931916613590837
+    }
+   },
+   "staged_from_5s": {
+    "1": {
+     "box_x_m": 0.9772142364675042,
+     "box_y_m": 1.2167142786776526,
+     "carrier_min_m": 0.7648816648359162
+    },
+    "5": {
+     "box_x_m": 0.9859252705009376,
+     "box_y_m": 1.160684561097453,
+     "carrier_min_m": 0.8669302788012129
+    }
+   },
+   "box": [
+    1.495816137710133,
+    1.2874095451663727
+   ]
+  },
+  "R3798": {
+   "run": "R3798",
+   "case": "fig8rel2",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3798_sim_gz_x3_s8_fig8rel2_it5_tip",
+   "v": {
+    "rtf": 0.22148540892892804,
+    "late_planner": 0.0016515276630883566,
+    "late_tracker": 0.00017205781142463867,
+    "failed": 0,
+    "published": 989,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 36.776,
+      "drones": [
+       1
+      ],
+      "t_last": 36.776,
+      "peak_deg": 3.37130651108018,
+      "abs_deg": 3.8153553586679005,
+      "settled_deg": 1.0077174270045395,
+      "n_steps": [
+       0.3680000000000021
+      ],
+      "next": 45.899,
+      "miss": []
+     },
+     {
+      "t": 45.899,
+      "drones": [
+       5
+      ],
+      "t_last": 45.899,
+      "peak_deg": 2.7339852196462204,
+      "abs_deg": 2.5849017902882507,
+      "settled_deg": 0.6166502338217359,
+      "n_steps": [
+       0.32200000000000273
+      ],
+      "next": 53.266000000000005,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [],
+    "holds": null
+   },
+   "n4": {
+    "rmse_mm": 11.99461967699004,
+    "tilt_deg": 2.000160419777533,
+    "n": 6,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "P": {
+    "mm": 21.29936574877738,
+    "tilt_deg": 3.8153553586679214,
+    "form": {
+     "base_mm": 15.203006756413258,
+     "bar_mm": 19.00375844551657,
+     "base_tilt_deg": 1.254230363791157,
+     "bar_tilt_deg": 2.254230363791157
+    },
+    "holds": false,
+    "tilt_note": "not barred: the window holds the events"
+   },
+   "staged": {
+    "1": {
+     "box_x_m": 1.384534312763952,
+     "box_y_m": 1.2158636962963447,
+     "carrier_min_m": 0.7656194973087561
+    },
+    "5": {
+     "box_x_m": 1.4476499221124792,
+     "box_y_m": 1.2874914554016763,
+     "carrier_min_m": 0.6915136461509522
+    }
+   },
+   "staged_from_5s": {
+    "1": {
+     "box_x_m": 0.973861275959792,
+     "box_y_m": 1.2158636962963447,
+     "carrier_min_m": 0.7656194973087561
+    },
+    "5": {
+     "box_x_m": 0.9842470479460376,
+     "box_y_m": 1.1630245892172,
+     "carrier_min_m": 0.8702551189908017
+    }
+   },
+   "box": [
+    1.494203123871835,
+    1.2874914554016763
+   ]
+  },
+  "R3801": {
+   "run": "R3801",
+   "case": "adjpair",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3801_sim_gz_x3_s8_adjpair_it5_tip",
+   "v": {
+    "rtf": 0.23021681676248992,
+    "late_planner": 0.001314060446780552,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 541,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.277,
+      "drones": [
+       1,
+       2
+      ],
+      "t_last": 42.277,
+      "peak_deg": 7.5737565862661755,
+      "abs_deg": 7.581340108327908,
+      "settled_deg": 1.340441589619657,
+      "n_steps": [
+       0.2819999999999965,
+       0.5
+      ],
+      "next": 62.279,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [],
+    "holds": null
+   },
+   "n4": {
+    "rmse_mm": 20.2428506603019,
+    "tilt_deg": 3.4774970121215376,
+    "n": 6,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "pair": {
+    "n_steps": [
+     0.2819999999999965,
+     0.5
+    ],
+    "peak_deg": 7.5737565862661755,
+    "abs_deg": 7.581340108327908,
+    "settled_deg": 1.340441589619657,
+    "resize_events_s": [
+     0.4209999999999994,
+     0.597999999999999
+    ],
+    "six_rmse_mm": 20.2428506603019,
+    "six_tilt_deg": 3.4774970121215376,
+    "thr_p95": 0.6254999935626984,
+    "thr_cap_frac": 0.0,
+    "falsified": false
+   }
+  },
+  "R3802": {
+   "run": "R3802",
+   "case": "adjpair",
+   "dir": "/home/wesley/multi_drone_control/results/2026-11-06/R3802_sim_gz_x3_s8_adjpair_it5_tip",
+   "v": {
+    "rtf": 0.22868983983145405,
+    "late_planner": 0.001314060446780552,
+    "late_tracker": 0.0,
+    "failed": 0,
+    "published": 541,
+    "published_res_over": 0,
+    "published_res_missing": 0,
+    "void": false,
+    "dropped": false,
+    "aborts": [],
+    "timeouts": [],
+    "rejoin_refused": 0,
+    "rejoin_abort": 0,
+    "low_rtf_flag": true
+   },
+   "L": {
+    "items": [
+     {
+      "t": 42.256,
+      "drones": [
+       1,
+       2
+      ],
+      "t_last": 42.256,
+      "peak_deg": 7.451047482143266,
+      "abs_deg": 7.450965071122743,
+      "settled_deg": 1.351289198510891,
+      "n_steps": [
+       0.2879999999999967,
+       0.4969999999999999
+      ],
+      "next": 62.257,
+      "miss": []
+     }
+    ],
+    "holds": true
+   },
+   "J": {
+    "items": [],
+    "holds": null
+   },
+   "n4": {
+    "rmse_mm": 20.431648434103476,
+    "tilt_deg": 3.2985791649066423,
+    "n": 6,
+    "pos_holds": false,
+    "tilt_holds": false
+   },
+   "pair": {
+    "n_steps": [
+     0.2879999999999967,
+     0.4969999999999999
+    ],
+    "peak_deg": 7.451047482143266,
+    "abs_deg": 7.450965071122743,
+    "settled_deg": 1.351289198510891,
+    "resize_events_s": [
+     0.41199999999999903,
+     0.588000000000001
+    ],
+    "six_rmse_mm": 20.431648434103476,
+    "six_tilt_deg": 3.2985791649066423,
+    "thr_p95": 0.6260000020265579,
+    "thr_cap_frac": 0.0,
+    "falsified": false
+   }
+  }
+ }
+}

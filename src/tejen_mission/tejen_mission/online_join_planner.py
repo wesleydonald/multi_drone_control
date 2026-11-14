@@ -133,6 +133,29 @@ from .c1f2_handoff import (
 
 # Backwards-compatible string aliases for scripts that imported the old module.
 WAIT_FOR_TAKEOFF = MissionPhase.WAIT_FOR_TAKEOFF.value
+
+
+PRESS_MAX_STEP_S = 0.05     # s: the press ramp's progress per update at most (Te-Jen 12 Nov: no catch-up step after a gap)
+
+
+def pressed_candidate_hold(base, press_m, rate_mps, elapsed_s, floor_z):
+    """multi_drone_control 12 Nov (Wesley, RIG-1112-fm9c_5; a ramp after Te-Jen's review): the early pickup contact's
+    hold, lowered from base at rate_mps for at most press_m, so the tether slackens and the magnet can settle flat. Never
+    below floor_z, the body height of the descent's own lowest contact target (inside the overtravel the pickup already
+    allows), and never above base."""
+    hold = np.asarray(base, dtype=float).copy()
+    drop = min(max(0.0, float(press_m)), max(0.0, float(rate_mps)) * max(0.0, float(elapsed_s)))
+    hold[2] = min(hold[2], max(hold[2] - drop, float(floor_z)))
+    return hold
+
+
+# the phases the operator's FORCE DROP acts in (multi_drone_control 11 Nov)
+FORCE_DROP_PHASES = (MissionPhase.TRANSIT_TO_DROP_POINT, MissionPhase.SETTLE_ABOVE_DROP_POINT,
+                     MissionPhase.DESCEND_TO_DROP_HEIGHT)
+# multi_drone_control 11 Nov: the phases that fly to wherever the object lies (the pickup box, pickup_box_m)
+PICKUP_BOX_PHASES = (MissionPhase.APPROACH_ABOVE_PICKUP, MissionPhase.SETTLE_ABOVE_PICKUP,
+                     MissionPhase.DESCEND_TO_PICKUP)
+PICKUP_BOX_DWELL_S = 0.3
 TAKEOFF = MissionPhase.TAKEOFF.value
 APPROACH_ABOVE_PICKUP = MissionPhase.APPROACH_ABOVE_PICKUP.value
 SETTLE_ABOVE_PICKUP = MissionPhase.SETTLE_ABOVE_PICKUP.value
@@ -149,6 +172,9 @@ TAKEOFF_FROM_AIR_CLIMB_M = 0.05   # m: its least climb, to the approach height
 # drop point, so the transit's 0.18 m held 0.5 s never passed; drop_on_arrival releases at the transit height as soon as
 # the magnet is inside drop_on_arrival_xy_m for this long
 DROP_ON_ARRIVAL_DWELL_S = 0.10
+# multi_drone_control 12 Nov (the object raised on a stand, 13 Nov): under pickup_lift_max_tip_z the loaded lift still
+# climbs at least this far, so the object leaves its support
+PICKUP_LIFT_MIN_M = 0.10
 
 
 def line_up_stage(ring_xy, plate_xy, quad_xy, radius, lateral):
@@ -167,6 +193,19 @@ def line_up_stage(ring_xy, plate_xy, quad_xy, radius, lateral):
     if along > 0.0 and off <= lateral:
         return None
     return ring_xy + radius * u
+
+def line_up_gap_point(ring_xy, plate_xy, quad_xy, offsets_cw_deg):
+    """multi_drone_control 12 Nov (Wesley and Te-Jen's 13 Nov trials, starts at 9, 1 and 5 o'clock): a point on the
+    radial line of the carrier gap nearest the quad's bearing, the gaps given as clockwise offsets from the plate's line
+    ([0] = the plate's line only, as before). None when the plate sits on the ring centre."""
+    u = np.asarray(plate_xy, float) - np.asarray(ring_xy, float)
+    if float(np.linalg.norm(u)) < 1e-6:
+        return None
+    a = math.atan2(u[1], u[0])
+    rel = np.asarray(quad_xy, float) - np.asarray(ring_xy, float)
+    dirs = [np.array([math.cos(a - math.radians(o)), math.sin(a - math.radians(o))]) for o in offsets_cw_deg]
+    return np.asarray(ring_xy, float) + max(dirs, key=lambda d: float(d @ rel))
+
 
 TAKEOFF_LIFT_BY_FLOOR_M = 0.10  # m: min_reference_z this far above the start lifts the vehicle before the climb
 SETTLE_ABOVE_DROP_POINT = MissionPhase.SETTLE_ABOVE_DROP_POINT.value
@@ -535,6 +574,14 @@ class OnlineJoinPlanner(Node):
                 ).value
             ),
         )
+        self.c1f2_prepare_revoke_speed_mps = float(
+            self.declare_parameter(
+                "c1f2_prepare_revoke_speed_mps", self.c1f2_prepare_settle_speed_mps
+            ).value
+        )
+        if (not np.isfinite(self.c1f2_prepare_revoke_speed_mps)
+                or self.c1f2_prepare_revoke_speed_mps < self.c1f2_prepare_settle_speed_mps):
+            raise ValueError("prepare revoke speed must be finite and >= settle speed")
         self.c1f2_prepare_settle_acceleration_mps2 = max(
             0.0,
             float(
@@ -603,8 +650,23 @@ class OnlineJoinPlanner(Node):
         # multi_drone_control, Wesley 28 Oct: "we need to fix the avoidance"): a fresh C1F.2b hand-over at the end of
         # CLEAR_DROP_ZONE, then TRANSIT_TO_REATTACH avoiding the carriers, as floor_join's attach transit
         self.pickup_cpp_reattach = bool(self.declare_parameter("pickup_cpp_reattach", False).value)
+        # return_after_drop (multi_drone_control 12 Nov): its two phases join the mission only when typed
+        self.return_after_drop = str(self.declare_parameter('return_after_drop', '').value).strip().lower()
+        # cpp_python_fallback_s (multi_drone_control 13 Nov, Te-Jen at the rig, RIG-1113-fm9h8_3): his C++ transfer lost
+        # authority 0.9 s into the drop transit (stale carrier inputs) and the recovery held QUAD4 still in the moving
+        # ring's path for 30 s. Typed > 0: lost for that long in TRANSIT_TO_DROP_POINT -> his Python transfer flies on.
+        self.cpp_python_fallback_s = max(0.0, float(self.declare_parameter('cpp_python_fallback_s', 0.0).value))
+        self.c1f2_python_fallback_active = False
+        # drop_release_xy_m (13 Nov, Te-Jen at the rig, RIG-1113-fm9hc: released 0.16 m off centre on the moving circle, the
+        # object bounced off the ring edge): typed > 0, the release waits for the magnet within it of the drop point, but
+        # never longer than drop_release_wait_s after the lowering ends (it always releases)
+        self.drop_release_xy_m = max(0.0, float(self.declare_parameter('drop_release_xy_m', 0.0).value))
+        self.drop_release_wait_s = max(0.0, float(self.declare_parameter('drop_release_wait_s', 3.0).value))
+        self.drop_release_wait_start = None
+        self.c1f2_lost_since = None
         self.mission = mission_for_mode(self.mission_mode, attachment_policy=POLICY if self.m2b_progressive else "legacy",
-                                        contact_attach=self.contact_attach, attach_cpp_transit=self.attach_cpp_transit)
+                                        contact_attach=self.contact_attach, attach_cpp_transit=self.attach_cpp_transit,
+                                        return_to_start=bool(self.return_after_drop))
         self.phase = self.mission.initial_phase
         self.phase_entry_time = self._physical_now_s()
         self.condition_start_time: Optional[float] = None
@@ -630,19 +692,42 @@ class OnlineJoinPlanner(Node):
         self.takeoff_climb_height: Optional[float] = None
         self.delivery_object_start_z: Optional[float] = None
         self.preloaded_navigation = self.mission.name == "preloaded_navigation"
+        self.navigation_body_goal_radius_m = float(
+            self.declare_parameter("navigation_body_goal_radius_m", 0.0).value)
+        if not math.isfinite(self.navigation_body_goal_radius_m) or self.navigation_body_goal_radius_m < 0.:
+            raise ValueError("navigation_body_goal_radius_m must be finite and nonnegative")
         self.experiment_start_requested = False
         self.experiment_navigation_z = float(self.declare_parameter(
             'experiment_navigation_z', 1.35).value)
         self.end_after_drop = bool(self.declare_parameter('end_after_drop', False).value)
+        # multi_drone_control 12 Nov (the supervisor's drop-off, start -> ring -> start): after the drop zone is clear,
+        # fly back to the start hover (TAKEOFF's start xy at the clearance height) and hold there (AT_START) until LAND;
+        # 'cpp' on the C++ planner after a fresh hand-over (as pickup_cpp_reattach's), 'direct' on the Python transfer
+        if self.return_after_drop not in ('', 'cpp', 'direct'):
+            raise ValueError("return_after_drop must be '', 'cpp' or 'direct'")
+        if self.return_after_drop and (self.end_after_drop or self.pickup_cpp_reattach_active):
+            raise ValueError("return_after_drop excludes end_after_drop and pickup_cpp_reattach")
+        if self.return_after_drop == 'cpp' and not (self.c1f1_shadow_transfer_enabled
+                                                    and self.c1f2_cpp_authority_enabled):
+            raise ValueError("return_after_drop 'cpp' needs c1f1_shadow_transfer_enabled and c1f2_cpp_authority_enabled")
+        self.return_prepare_started = False
+        self.return_hover: Optional[np.ndarray] = None
         self.drop_on_arrival = bool(self.declare_parameter('drop_on_arrival', False).value)
         self.drop_on_arrival_xy_m = float(self.declare_parameter('drop_on_arrival_xy_m', 0.12).value)
         # multi_drone_control 4 Nov (Wesley's supervisor; RIG-1104-k1m_2-4: the magnet swung into the carriers' cables):
         # the lift ends only at its full height, so the transit to the ring is level (up, then over)
         self.lift_full_before_transit = bool(self.declare_parameter('lift_full_before_transit', False).value)
+        # multi_drone_control 12 Nov (13 Nov: the object raised on a stand): pickup_lift_height counts from the object, so
+        # the loaded lift's tip ends no higher than this world z (m; 0 = off, as before)
+        self.pickup_lift_max_tip_z = float(self.declare_parameter('pickup_lift_max_tip_z', 0.0).value)
         # multi_drone_control 4 Nov (Wesley): to the ring along the plate's line, between the carriers (line_up_target)
         self.line_up = bool(self.declare_parameter('line_up', False).value)
         self.line_up_radius_m = float(self.declare_parameter('line_up_radius_m', 1.2).value)
         self.line_up_lateral_m = float(self.declare_parameter('line_up_lateral_m', 0.25).value)
+        # multi_drone_control 12 Nov: the transit to the DROP POINT lines up on the nearest carrier gap, given as
+        # clockwise offsets from the plate's line (launch line_up:=gap); [0.0] = the plate's line, as before
+        self.line_up_gap_offsets_deg = [float(v) for v in self.declare_parameter(
+            'line_up_gap_offsets_deg', [0.0]).value]
         self.experiment_navigation_ready_publisher = None
         if self.preloaded_navigation:
             self.experiment_navigation_ready_publisher = self.create_publisher(
@@ -1831,6 +1916,12 @@ class OnlineJoinPlanner(Node):
         if (not math.isfinite(self.pickup_alignment_high_xy_m)
                 or self.pickup_alignment_high_xy_m < tip_values['low_xy_m']):
             raise ValueError('pickup HIGH XY tolerance must be finite and >= LOW tolerance')
+        # multi_drone_control 11 Nov: 0 = off (his LOW tolerance alone); typed pickup_low_hold_xy on the rig
+        self.pickup_alignment_low_hold_xy_m = float(
+            self.declare_parameter('pickup_alignment_low_hold_xy_m', 0.0).value)
+        if (not math.isfinite(self.pickup_alignment_low_hold_xy_m)
+                or not 0 <= self.pickup_alignment_low_hold_xy_m <= tip_values['low_xy_m']):
+            raise ValueError('pickup LOW hold must be finite, >= 0 and <= the LOW tolerance')
         if self.pickup_alignment_mode == 'measured_tip_tiered' and (
                 self.is_m2b or not self.use_measured_magnet_tip or not self.use_geometry_aware_pickup):
             raise ValueError('measured_tip_tiered requires M1 measured-tip geometry-aware pickup')
@@ -1861,6 +1952,17 @@ class OnlineJoinPlanner(Node):
         self.m1_candidate_hold_reference = None
         self.pickup_candidate_max_clearance_m = float(self.declare_parameter(
             'pickup_candidate_max_clearance_m', .005).value)
+        # multi_drone_control 12 Nov: how much lower the early pickup contact's hold sits (0 = his: where it is)
+        self.pickup_candidate_press_m = float(self.declare_parameter('pickup_candidate_press_m', 0.0).value)
+        if not 0.0 <= self.pickup_candidate_press_m <= 0.05:
+            raise ValueError('pickup_candidate_press_m must be 0-0.05 m')
+        self.pickup_candidate_press_rate_mps = float(self.declare_parameter(
+            'pickup_candidate_press_rate_mps', 0.02).value)       # half the LOW descent's 0.04 m/s
+        if not 0.005 <= self.pickup_candidate_press_rate_mps <= 0.04:
+            raise ValueError('pickup_candidate_press_rate_mps must be 0.005-0.04 m/s')
+        self.m1_candidate_press_base = None
+        self.m1_candidate_press_t0 = 0.0
+        self.m1_candidate_press_s = 0.0           # the ramp's own clock: advances by at most PRESS_MAX_STEP_S per update
         if (not math.isfinite(self.pickup_candidate_max_clearance_m)
                 or self.pickup_candidate_max_clearance_m < 0):
             raise ValueError('pickup candidate clearance must be finite and nonnegative')
@@ -2652,6 +2754,17 @@ class OnlineJoinPlanner(Node):
                 self.external_landing_callback,
                 10,
             )
+        # multi_drone_control 11 Nov (Wesley): the operator's FORCE DROP, when the drop gates take too long
+        self.force_drop_pending = False
+        self.drop_hold_offset = None       # FORCE DROP in the lowering: the tip offset the release holds
+        self.drop_profile_start = None     # FORCE DROP from the transit or settle: where the lowering starts
+        self.force_drop_xy_m = float(self.declare_parameter('force_drop_xy_m', 0.25).value)   # the ring's rim: 0.225 m
+        # multi_drone_control 11 Nov (RIG-1111-fm9c_6: the object fell off in the lift and slid to y 2.16 m; the retry
+        # flew to it and out of the tracked volume): 0 = off; else the object more than this far from the world origin
+        # in x or y is not gone after: give-up, the fleet takes the vehicle back
+        self.pickup_box_m = float(self.declare_parameter('pickup_box_m', 0.0).value)
+        self.pickup_box_since = None
+        self.create_subscription(Bool, '/join_planner/force_drop', self.force_drop_callback, 10)
         self.give_up_publisher = None
         if self.contact_attach:
             self.create_subscription(Bool, self.contact_topic,
@@ -2677,6 +2790,7 @@ class OnlineJoinPlanner(Node):
         self.c1f1_shadow_target_publisher = None
         self.c1f1_shadow_enable_publisher = None
         self.c1f2_target_velocity_publisher = None
+        self.c1f2_static_target_publisher = None
         self.c1f2_authority_publisher = None
         self.c1f2_recovery_request_pub = None
         if self.c1f2_reference_recovery_enabled and not (
@@ -2707,6 +2821,9 @@ class OnlineJoinPlanner(Node):
                 self.c1f2_authority_publisher = self.create_publisher(
                     Bool, self.c1f2_authority_topic, 5
                 )
+                if getattr(self, 'return_after_drop', '') == 'cpp':
+                    # the C++ return's goal is a fixed world point: his backend predicts it still while this reads true
+                    self.c1f2_static_target_publisher = self.create_publisher(Bool, '/dynamic_planner/static_target', 5)
             self.create_subscription(
                 MultiDOFJointTrajectory,
                 (self.c1f2_recovery_continuation_topic if self.c1f2_stopped_continuation_enabled
@@ -4709,6 +4826,10 @@ class OnlineJoinPlanner(Node):
             self.takeoff_command_time = None
             self.takeoff_detected_time = None
         elif command in {"DISARM", "DISARMED"}:
+            if getattr(self, 'takeoff_held', False):           # Te-Jen's review 11 Nov: a cancelled TAKEOFF stays cancelled
+                self.takeoff_held = False
+                self.get_logger().warn('the held TAKEOFF is cancelled by DISARM')
+            self.force_drop_pending = False                     # and a FORCE DROP press (DISARM leaves the phase as it is)
             if self.drone_position is not None:
                 self.initial_quad_z = float(self.drone_position[2])
             self.takeoff_command_time = None
@@ -4717,6 +4838,7 @@ class OnlineJoinPlanner(Node):
     def external_landing_callback(self, msg: Bool) -> None:
         if not bool(msg.data):
             return
+        self.takeoff_held = False                             # a held TAKEOFF does not outlive a LAND
         self.cancel_c1f2_reference_recovery()
         if self.ground_ring_exit is not None:
             return  # Repeated LAND cannot skip release or measured separation.
@@ -5210,10 +5332,10 @@ class OnlineJoinPlanner(Node):
             target.acceleration,
         )
         if spec.target_source in (TargetSource.DROP_POINT, TargetSource.ATTACHMENT_POINT):
-            return self.line_up_target(body)
+            return self.line_up_target(body, drop=spec.target_source == TargetSource.DROP_POINT)
         return body
 
-    def line_up_target(self, body: TargetState) -> TargetState:
+    def line_up_target(self, body: TargetState, drop: bool = False) -> TargetState:
         """multi_drone_control 4 Nov (Wesley: line up with the plate, never get stuck): from outside line_up_radius_m
         of the ring centre and more than line_up_lateral_m off the plate's radial line, the transit aims first at the
         point on that line at line_up_radius_m (the target's height), then straight in between the carriers. No dwell;
@@ -5226,7 +5348,23 @@ class OnlineJoinPlanner(Node):
             return body
         if getattr(self, '_line_up_done_phase', None) == self.phase:
             return body                   # lined up once in this phase: stays direct (no flip-flop at the band's edge)
-        stage = line_up_stage(np.asarray(ring, float)[:2], np.asarray(plate, float)[:2], np.asarray(quad, float)[:2],
+        line = np.asarray(plate, float)[:2]
+        offsets = getattr(self, 'line_up_gap_offsets_deg', [0.0])
+        if drop and list(offsets) != [0.0]:           # the drop point: the nearest carrier gap (12 Nov), chosen once
+            chosen = getattr(self, '_line_up_gap', None)
+            if chosen is None or chosen[0] != self.phase:
+                point = line_up_gap_point(np.asarray(ring, float)[:2], line, np.asarray(quad, float)[:2], offsets)
+                if point is None:
+                    return body
+                u = point - np.asarray(ring, float)[:2]
+                plate_u = line - np.asarray(ring, float)[:2]
+                # kept as the angle from the plate's line, so the gap moves and turns with the ring
+                chosen = (self.phase, math.atan2(u[1], u[0]) - math.atan2(plate_u[1], plate_u[0]))
+                self._line_up_gap = chosen
+            pa = line - np.asarray(ring, float)[:2]
+            a = math.atan2(pa[1], pa[0]) + chosen[1]
+            line = np.asarray(ring, float)[:2] + np.array([math.cos(a), math.sin(a)])
+        stage = line_up_stage(np.asarray(ring, float)[:2], line, np.asarray(quad, float)[:2],
                               self.line_up_radius_m, self.line_up_lateral_m)
         if stage is None:
             self._line_up_done_phase = self.phase
@@ -5256,6 +5394,7 @@ class OnlineJoinPlanner(Node):
             or (getattr(self, 'is_delivery_rejoin', False) and self.phase == MissionPhase.TAKEOFF)
             or (getattr(self, 'attach_cpp_transit_active', False) and self.phase == MissionPhase.TAKEOFF)
             or self.pickup_reattach_prepare_phase()
+            or self.return_prepare_phase()
         )
 
     def pickup_reattach_prepare_phase(self) -> bool:
@@ -5263,6 +5402,26 @@ class OnlineJoinPlanner(Node):
         return bool(getattr(self, 'pickup_cpp_reattach_active', False)
                     and getattr(self, 'pickup_reattach_prepare_started', False)
                     and self.phase == MissionPhase.CLEAR_DROP_ZONE)
+
+    def return_prepare_phase(self) -> bool:
+        """return_after_drop 'cpp': the hold at the end of CLEAR_DROP_ZONE in which the C++ return is prepared."""
+        return bool(getattr(self, 'return_after_drop', '') == 'cpp'
+                    and getattr(self, 'return_prepare_started', False)
+                    and self.phase == MissionPhase.CLEAR_DROP_ZONE)
+
+    def return_context(self) -> bool:
+        """The C++ return's prepare hold or its transit: the backend's goal is the start hover."""
+        return bool(self.return_prepare_phase()
+                    or (getattr(self, 'return_after_drop', '') == 'cpp' and self.phase == MissionPhase.RETURN_TO_START))
+
+    def latch_return_hover(self) -> None:
+        """The start hover: TAKEOFF's start xy at the height QUAD4 holds once the drop zone is clear."""
+        if self.takeoff_start_position is None or self.drone_position is None:
+            raise RuntimeError('return_after_drop: no takeoff start position latched')
+        self.return_hover = np.array([self.takeoff_start_position[0], self.takeoff_start_position[1],
+                                      self.drone_position[2]], dtype=float)
+        self.get_logger().info(f'return_after_drop {self.return_after_drop}: start hover '
+                               f'({self.return_hover[0]:.2f}, {self.return_hover[1]:.2f}, {self.return_hover[2]:.2f})')
 
     def cpp_reattach_active(self) -> bool:
         """TRANSIT_TO_REATTACH flies on the C++ planner: floor_join's attach transit or pickup_cpp_reattach."""
@@ -5290,7 +5449,47 @@ class OnlineJoinPlanner(Node):
         phases = {MissionPhase.TRANSIT_TO_DROP_POINT, MissionPhase.M2_CPP_TRANSIT_CAPTURE}
         if self.cpp_reattach_active():
             phases.add(MissionPhase.TRANSIT_TO_REATTACH)
+        if getattr(self, 'return_after_drop', '') == 'cpp':
+            phases.add(MissionPhase.RETURN_TO_START)
+        if getattr(self, 'c1f2_python_fallback_active', False):
+            phases.discard(MissionPhase.TRANSIT_TO_DROP_POINT)
         return phases
+
+    def _c1f2_python_fallback_step(self) -> None:
+        """cpp_python_fallback_s (typed): in TRANSIT_TO_DROP_POINT, C++ authority lost (recovery active, the cached
+        window continuing, or not active) for longer than it -> drop C++ for this leg; his Python transfer flies on."""
+        limit = float(getattr(self, 'cpp_python_fallback_s', 0.0) or 0.0)
+        if (limit <= 0.0 or getattr(self, 'c1f2_python_fallback_active', False)
+                or self.phase != MissionPhase.TRANSIT_TO_DROP_POINT or not self.c1f2_cpp_authority_enabled):
+            self.c1f2_lost_since = None
+            return
+        recovery = getattr(self, 'c1f2_reference_recovery', None)
+        lost = bool(not self.c1f2_cpp_authority_active
+                    or getattr(self, 'c1f2_cached_continuation_active', False)
+                    or (recovery is not None and getattr(recovery, 'active', False)))
+        now = self._physical_now_s()
+        if not lost:
+            self.c1f2_lost_since = None
+            return
+        if self.c1f2_lost_since is None:
+            self.c1f2_lost_since = now
+            return
+        if now - self.c1f2_lost_since < limit:
+            return
+        self.c1f2_python_fallback_active = True
+        self.cancel_c1f2_reference_recovery()
+        self.c1f2_publish_authority(False)
+        self.c1f1_publish_shadow_enable(False)
+        self.c1f2_cpp_authority_active = False
+        self.c1f2_authority_grant_pending = False
+        self.c1f2_authority_acknowledged = False
+        self.c1f2_cached_cpp_reference = None
+        self.c1f2_cached_cpp_reference_receive_time = None
+        self.c1f2_cached_continuation_active = False
+        self.condition_start_time = None
+        self.get_logger().error(
+            f'C++ authority lost for {now - self.c1f2_lost_since:.1f} s in TRANSIT_TO_DROP_POINT: falling back to the '
+            'Python transfer for this leg (cpp_python_fallback_s)')
 
     def c1f2_attach_transit_context(self) -> bool:
         """floor_join's C++ flight to the plate: its climb hold (prepare) or TRANSIT_TO_REATTACH."""
@@ -5342,6 +5541,8 @@ class OnlineJoinPlanner(Node):
         """Require the future target state while holding before C++ transit."""
         if self.is_m2b and self.m2b_commissioning_stage == "b2":
             return True
+        if self.return_context():
+            return True
         if self.c1f2_attach_transit_context():
             return self._fresh(
                 self.attachment_position, self.last_attachment_pose_time, "attachment pose"
@@ -5372,6 +5573,8 @@ class OnlineJoinPlanner(Node):
             return TargetState(self.m2b_capture_body_target(), np.zeros(3), np.zeros(3))
         if self.phase == MissionPhase.TRANSIT_TO_DROP_POINT:
             return self.transfer_body_target()
+        if self.return_context() and self.return_hover is not None:
+            return TargetState(self.return_hover.copy(), np.zeros(3), np.zeros(3))
         if self.c1f2_attach_transit_context():
             return self.attach_transit_body_target()
         if not self.c1f2_prepare_phase_active():
@@ -5500,6 +5703,8 @@ class OnlineJoinPlanner(Node):
             self.c1f1_shadow_latched_body_target = live_target.copy()
             self.c1f1_shadow_target_latch_time = self._physical_now_s()
             self.c1f1_shadow_target_drift_m = 0.0
+            if getattr(self, 'c1f2_static_target_publisher', None) is not None:
+                self.c1f2_static_target_publisher.publish(Bool(data=bool(self.return_context())))
             self.c1f1_publish_shadow_target(live_target)
             self.c1f2_publish_target_velocity(live_target_state.velocity)
             if self.c1f2_reference_recovery.active:
@@ -5779,6 +5984,10 @@ class OnlineJoinPlanner(Node):
         advance through the last committed window rather than falling back to a
         separately moving Python transfer.
         """
+        self._c1f2_python_fallback_step()
+        if (getattr(self, 'c1f2_python_fallback_active', False) and python_reference is None
+                and self.phase == MissionPhase.TRANSIT_TO_DROP_POINT):
+            python_reference = self.build_reference()
         prepare_active = self.c1f2_initial_prepare_active()
         transit_active = bool(
             self.c1f2_cpp_authority_enabled
@@ -5814,6 +6023,15 @@ class OnlineJoinPlanner(Node):
             reference = recovery.reference(now_s=self._physical_now_s(), dt_s=self.dt)
             if prepare_active and recovery.hold_position is not None:
                 self.c1f2_prepare_hold_position = recovery.hold_position.copy()
+                if getattr(self, 'preloaded_navigation', False) and not np.array_equal(
+                    self.c1f2_prepare_lift_end_position, recovery.hold_position
+                ):
+                    # Preloaded preparation can start mid-climb. Revalidate at
+                    # the commanded stopped endpoint, not that early measured
+                    # snapshot; reset its dwell once, never chase measured pose.
+                    self.c1f2_prepare_lift_end_position = recovery.hold_position.copy()
+                    self.c1f2_prepare_settled = False
+                    self.c1f2_prepare_settle_start_time = None
             if not prepare_active:
                 return reference  # Opt-in recovery retains the same transit continuation.
             # Preserve physical revalidation, but never re-latch the command to
@@ -5831,7 +6049,11 @@ class OnlineJoinPlanner(Node):
                 measured_velocity=self.drone_velocity,
                 measured_acceleration=self.drone_acceleration,
                 max_drift_m=self.c1f2_prepare_max_lift_drift_m,
-                settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
+                # Only an already-earned settlement uses the retention band.
+                # Initial dwell and final backend authority checks are unchanged.
+                settle_speed_mps=(self.c1f2_prepare_revoke_speed_mps
+                                  if self.c1f2_prepare_settled
+                                  else self.c1f2_prepare_settle_speed_mps),
                 settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2,
             )
             self.c1f2_prepare_drift_m = grant_state.drift_m
@@ -5991,6 +6213,14 @@ class OnlineJoinPlanner(Node):
     def transition_to(self, new_phase: MissionPhase, reason: str) -> None:
         if new_phase == self.phase:
             return
+        # FORCE DROP's state lives only as long as its phases (Te-Jen's review 11 Nov: an abandoned press must not fire
+        # later)
+        if new_phase not in FORCE_DROP_PHASES:
+            self.force_drop_pending = False
+        if new_phase not in (MissionPhase.DESCEND_TO_DROP_HEIGHT, MissionPhase.DROP_OBJECT, MissionPhase.CLEAR_DROP_ZONE):
+            self.drop_profile_start = None
+        if new_phase not in (MissionPhase.DROP_OBJECT, MissionPhase.CLEAR_DROP_ZONE):
+            self.drop_hold_offset = None
         if not (self.phase == MissionPhase.DESCEND_TO_ATTACHMENT and new_phase == MissionPhase.ATTACH_READY):
             self.contact_abort_xy_since = None    # each attempt earns its own debounce; the bottom continues the descent
         self.contact_descent_holding, self.contact_hold_last_s = False, None    # a hold ends with its phase
@@ -6037,6 +6267,7 @@ class OnlineJoinPlanner(Node):
                          MissionPhase.DESCEND_TO_PICKUP, MissionPhase.TRANSIT_TO_DROP_POINT,
                          MissionPhase.LANDING, MissionPhase.LANDED_DISARMED}:
             self.m1_candidate_hold_reference = None
+            self.m1_candidate_press_base = None
         if getattr(self, 'm1_pickup_stall', None) is not None:
             self.m1_pickup_stall.reset()
         if (getattr(self, 'm1_pickup_release', None) is not None and
@@ -6163,6 +6394,8 @@ class OnlineJoinPlanner(Node):
                             start_height_m=floor+self.geometry_pickup_approach_height(),
                             floor_m=floor, speed_mps=self.pickup_descent_speed,
                             high_xy_m=self.pickup_alignment_high_xy_m,
+                            **({'low_hold_xy_m': self.pickup_alignment_low_hold_xy_m}
+                               if getattr(self, 'pickup_alignment_low_hold_xy_m', 0.0) > 0 else {}),
                             **(dict(low_speed_mps=self.pickup_low_descent_speed_mps,
                                     low_entry_height_m=self.pickup_low_entry_height_m,
                                     pause_low_for_xy=True)
@@ -6229,6 +6462,21 @@ class OnlineJoinPlanner(Node):
             self.c1f2_prepare_active = False
             self.get_logger().warn(
                 "C1F.2b authority source switched stationary Python hold -> C++ at TRANSIT_TO_REATTACH entry."
+            )
+        elif new_phase == MissionPhase.RETURN_TO_START and getattr(self, 'return_after_drop', '') == 'cpp':
+            if (
+                not self.c1f2_handoff_ready
+                or not self.c1f2_authority_acknowledged
+                or self.c1f2_cached_cpp_reference is None
+            ):
+                raise RuntimeError(
+                    "C1F.2b refused RETURN_TO_START without an acknowledged fresh post-grant C++ reference"
+                )
+            self.c1f2_cpp_authority_active = True
+            self.c1f2_authority_switch_count += 1
+            self.c1f2_prepare_active = False
+            self.get_logger().warn(
+                "C1F.2b authority source switched stationary Python hold -> C++ at RETURN_TO_START entry."
             )
         elif (
             (
@@ -6746,6 +6994,22 @@ class OnlineJoinPlanner(Node):
         self.pickup_tip_xy_compensation_raw = raw
         self.pickup_tip_xy_compensation_measurement_active = active
 
+    def step_candidate_press(self) -> None:
+        """multi_drone_control 12 Nov: lower the early-contact hold at a bounded rate (pickup_candidate_press_m, 0 = off;
+        nothing without a latched contact target to bound it)."""
+        base = getattr(self, 'm1_candidate_press_base', None)
+        press = getattr(self, 'pickup_candidate_press_m', 0.0)
+        target = getattr(self, 'latched_geometry_pickup_contact_target', None)
+        if base is None or press <= 0.0 or target is None or self.m1_candidate_hold_reference is None:
+            return
+        floor_z = float(target[2] + self.quad_reference_offset_from_tip()[2])
+        now = self._physical_now_s()
+        step = min(max(0.0, now - self.m1_candidate_press_t0), PRESS_MAX_STEP_S)   # an interrupted update pauses it
+        self.m1_candidate_press_t0 = now
+        self.m1_candidate_press_s = getattr(self, 'm1_candidate_press_s', 0.0) + step
+        self.m1_candidate_hold_reference = pressed_candidate_hold(
+            base, press, self.pickup_candidate_press_rate_mps, self.m1_candidate_press_s, floor_z)
+
     def quad_reference_offset_from_tip(self) -> np.ndarray:
         offset = self.nominal_quad_from_tip_offset()
         if (getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered'
@@ -7174,7 +7438,7 @@ class OnlineJoinPlanner(Node):
                 start, goal = lift_offsets_from_candidate_hold(
                     self.m1_candidate_hold_reference, self.latched_pickup_position,
                     self.quad_reference_offset_from_tip(), lift_delta_m=lift_delta)
-                return RateProfile(start, goal, self.pickup_lift_speed)
+                return RateProfile(start, self.capped_lift_goal(start, goal), self.pickup_lift_speed)
             if (
                 self.use_geometry_aware_pickup
                 and self.latched_geometry_pickup_contact_offset is not None
@@ -7185,22 +7449,29 @@ class OnlineJoinPlanner(Node):
                 )
                 return RateProfile(
                     self.latched_geometry_pickup_contact_offset,
-                    self.latched_geometry_pickup_contact_offset
-                    + np.array([0.0, 0.0, lift_delta], dtype=float),
+                    self.capped_lift_goal(self.latched_geometry_pickup_contact_offset,
+                                          self.latched_geometry_pickup_contact_offset
+                                          + np.array([0.0, 0.0, lift_delta], dtype=float)),
                     self.pickup_lift_speed,
                 )
+            start = np.array([0.0, 0.0, self.pickup_attach_clearance])
             return RateProfile(
-                np.array([0.0, 0.0, self.pickup_attach_clearance]),
-                np.array([0.0, 0.0, self.pickup_lift_height]),
+                start,
+                self.capped_lift_goal(start, np.array([0.0, 0.0, self.pickup_lift_height])),
                 self.pickup_lift_speed,
             )
         if phase == MissionPhase.DESCEND_TO_DROP_HEIGHT:
+            start = getattr(self, 'drop_profile_start', None)     # a FORCE DROP from the transit or settle
             return RateProfile(
-                np.array([0.0, 0.0, self.drop_approach_clearance]),
+                np.array([0.0, 0.0, self.drop_approach_clearance]) if start is None else start,
                 np.array([0.0, 0.0, self.drop_release_clearance]),
                 self.drop_descent_speed,
             )
         if phase == MissionPhase.CLEAR_DROP_ZONE:
+            held = getattr(self, 'drop_hold_offset', None)        # a FORCE DROP released away from the release height
+            if held is not None:
+                return RateProfile(held, np.array([held[0], held[1], max(float(held[2]), self.drop_clear_height)]),
+                                   self.drop_clear_speed)
             if getattr(self, 'drop_on_arrival', False):
                 start = self.drop_approach_clearance
                 return RateProfile(np.array([0.0, 0.0, start]),
@@ -7244,6 +7515,17 @@ class OnlineJoinPlanner(Node):
             )
         raise RuntimeError(f"Phase {phase.value} has no relative rate profile.")
 
+    def capped_lift_goal(self, start, goal) -> np.ndarray:
+        """multi_drone_control 12 Nov: LIFT_OBJECT's goal (a tip offset from the latched object) no higher in the world
+        than pickup_lift_max_tip_z (0 = off), and never less than PICKUP_LIFT_MIN_M above its start."""
+        cap = float(getattr(self, 'pickup_lift_max_tip_z', 0.0))
+        if cap <= 0.0 or self.latched_pickup_position is None:
+            return goal
+        goal = np.asarray(goal, dtype=float).copy()
+        top = max(float(start[2]) + PICKUP_LIFT_MIN_M, cap - float(self.latched_pickup_position[2]))
+        goal[2] = min(float(goal[2]), top)
+        return goal
+
     def desired_tip_offset(self) -> np.ndarray:
         if self.phase == MissionPhase.DESCEND_TO_ATTACHMENT and self.ground_ring_tiered_active():
             return np.array([self.approach_offset_x, self.approach_offset_y,
@@ -7283,6 +7565,8 @@ class OnlineJoinPlanner(Node):
         if self.phase == MissionPhase.TRANSIT_TO_REATTACH and self.cpp_reattach_active():
             return np.array([self.approach_offset_x, self.approach_offset_y, self.attach_transit_clearance])
         if self.phase == MissionPhase.DROP_OBJECT:
+            if getattr(self, 'drop_hold_offset', None) is not None:     # a FORCE DROP: where the reference was
+                return self.drop_hold_offset.copy()
             if getattr(self, 'drop_on_arrival', False):
                 return np.array([0.0, 0.0, self.drop_approach_clearance])
             return np.array([0.0, 0.0, self.drop_release_clearance])
@@ -7539,6 +7823,13 @@ class OnlineJoinPlanner(Node):
             return
         on_tip = self.measured_object_on_tip()
         if on_tip:
+            # multi_drone_control 11 Nov (RIG-1111-fm9hc_8): after the coil OFF the object rode the magnet ~0.9 s,
+            # then fell into the net; it gets drop_puck_wait_s to leave before the give-up
+            wait_s = getattr(self, 'drop_puck_wait_s', DROP_PUCK_WAIT_S)
+            if self._physical_now_s() - self.drop_start_time - self.drop_wait_time_s < wait_s:
+                self.get_logger().warning('Drop: the object is still on the magnet after the release dwell; waiting',
+                                          throttle_duration_sec=0.5)
+                return
             self.contact_give_up('the drop timed out with the object measured on the magnet')
             return
         if on_tip is None:
@@ -7557,6 +7848,7 @@ class OnlineJoinPlanner(Node):
         self.transition_to(MissionPhase.CLEAR_DROP_ZONE, 'object measured away from the magnet after the release dwell')
 
     def enter_taken_back(self, reason: str) -> None:
+        self.takeoff_held = False                             # nor a take-back
         if self.phase in {MissionPhase.RING_ATTACHED, MissionPhase.TAKEN_BACK}:
             return
         hold = (self.last_reference.positions[0] if self.last_reference is not None
@@ -7652,6 +7944,86 @@ class OnlineJoinPlanner(Node):
             return
         self.give_up_publisher.publish(Bool(data=True))
         self.contact_give_up_sent_s = now
+
+    def pickup_box_step(self) -> bool:
+        """True once the object has lain outside the pickup box for PICKUP_BOX_DWELL_S while this planner would fly
+        to it (the approach, the settle, the descent, or a retry's clearance): it has then given up."""
+        box = float(getattr(self, 'pickup_box_m', 0.0))
+        going = self.phase in PICKUP_BOX_PHASES or \
+            getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle'
+        position = getattr(self, 'pickup_object_position', None)
+        if (box <= 0.0 or not going or not getattr(self, 'contact_attach', False) or position is None
+                or max(abs(float(position[0])), abs(float(position[1]))) <= box):
+            self.pickup_box_since = None
+            return False
+        now = self._physical_now_s()
+        if getattr(self, 'pickup_box_since', None) is None:
+            self.pickup_box_since = now
+        if now - self.pickup_box_since < PICKUP_BOX_DWELL_S:
+            return False
+        self.pickup_box_since = None
+        self.contact_give_up(f'pickup: the object lies at x {float(position[0]):+.2f}, y {float(position[1]):+.2f} m, '
+                             f'outside the {box:.2f} m pickup box')
+        return True
+
+    def force_drop_callback(self, msg: Bool) -> None:
+        """The operator's FORCE DROP (multi_drone_control 11 Nov): in the flight to the drop point or the settle over
+        it, skip the gates and lower to the release; in the lowering, release now. Ignored in any other phase. The
+        mission goes on after the drop as usual."""
+        if not bool(msg.data):
+            return
+        if self.phase in FORCE_DROP_PHASES:
+            self.force_drop_pending = True
+            self.get_logger().warning(f'FORCE DROP (operator) in {self.phase.value}')
+        else:
+            self.get_logger().warning(f'FORCE DROP ignored in {self.phase.value}: only on the way to the drop, '
+                                      'over it or in the lowering')
+
+    def force_drop_step(self, xy_error: float) -> bool:
+        """Act on a pending FORCE DROP; True when it changed the phase. Only with the magnet over the ring (within
+        force_drop_xy_m of the drop point): a press further out is dropped, not kept for later."""
+        if not getattr(self, 'force_drop_pending', False):
+            return False
+        self.force_drop_pending = False
+        reach = float(getattr(self, 'force_drop_xy_m', 0.25))
+        if not xy_error <= reach:
+            self.get_logger().warning(f'FORCE DROP ignored: the magnet is {xy_error:.2f} m from the drop point '
+                                      f'(over {reach:.2f} m); press again over the ring')
+            return False
+        if self.phase in (MissionPhase.TRANSIT_TO_DROP_POINT, MissionPhase.SETTLE_ABOVE_DROP_POINT):
+            if getattr(self, 'c1f2_cpp_authority_active', False) or getattr(self, 'c1f2_exit_bridge_active', False):
+                self.get_logger().warning('FORCE DROP ignored: the C++ transfer has the reference')
+                return False
+            # Te-Jen's review 11 Nov: no step in the reference. The lowering (or the release) starts from the tip
+            # offset the vehicle is commanded to now, relative to the drop point, not from the nominal start over it
+            start = self.commanded_drop_tip_offset()
+            if getattr(self, 'drop_on_arrival', False):      # no lowering in this mode: release where it is
+                self.drop_hold_offset = start
+                self.transition_to(MissionPhase.DROP_OBJECT, 'operator FORCE DROP')
+            else:
+                if start is not None:
+                    start = start.copy()
+                    start[2] = max(float(start[2]), float(self.drop_release_clearance))
+                self.drop_profile_start = start
+                self.transition_to(MissionPhase.DESCEND_TO_DROP_HEIGHT, 'operator FORCE DROP: lowering to the release')
+            return True
+        if self.phase == MissionPhase.DESCEND_TO_DROP_HEIGHT:
+            # release now, where the lowering has got to: the reference holds that height (no step to the release height)
+            self.drop_hold_offset = self.rate_profile().tip_offset_at(self.phase_elapsed())
+            self.transition_to(MissionPhase.DROP_OBJECT, 'operator FORCE DROP: released in the lowering')
+            return True
+        return False
+
+    def commanded_drop_tip_offset(self) -> Optional[np.ndarray]:
+        """The tip offset from the drop point that the last reference commands (None without a reference)."""
+        if getattr(self, 'last_reference', None) is None:
+            return None
+        try:
+            target = self.target_state(self.mission.spec(MissionPhase.DESCEND_TO_DROP_HEIGHT).target_source)
+            return (np.asarray(self.last_reference.positions[0], dtype=float) - target.position
+                    - self.quad_reference_offset_from_tip())
+        except Exception:                                   # no drop target yet: the nominal start
+            return None
 
     def take_back_callback(self, msg: Bool) -> None:
         self.take_back_requested = bool(msg.data)
@@ -7862,6 +8234,18 @@ class OnlineJoinPlanner(Node):
         if self.c1f2_handoff_ready:
             self.transition_to(exit_phase or self.mission.takeoff_exit, f'C1F.2b C++ transfer prepared from {where}')
 
+    def navigation_capture_errors(self, tip_xy_m, tip_abs_z_m):
+        """Opt-in navigation body goal; all other missions retain tip capture."""
+        radius = getattr(self, 'navigation_body_goal_radius_m', 0.)
+        if not (getattr(self, 'preloaded_navigation', False) and radius > 0.):
+            return tip_xy_m, tip_abs_z_m, self.c1f2_nav_capture_xy_threshold_m
+        target = self.c1f2_transfer_target_state().position
+        if (self.drone_position is None or not np.all(np.isfinite(self.drone_position))
+                or not np.all(np.isfinite(target))):
+            return float('inf'), float('inf'), radius
+        delta = self.drone_position-target
+        return float(np.linalg.norm(delta[:2])), float(abs(delta[2])), radius
+
     def update_preloaded_navigation(self) -> None:
         """Operator-preloaded entry; no fabricated pickup, lift or proof authority."""
         now = self._physical_now_s()
@@ -7872,6 +8256,8 @@ class OnlineJoinPlanner(Node):
             ready_pub.publish(Bool(data=bool(fresh_load and
                 getattr(self, 'c1f2_prepare_settled', False))))
         if not fresh_load:
+            if not self.c1f2_prepare_settled:
+                self.c1f2_prepare_settle_start_time = None
             return
         if not self.c1f2_prepare_active:
             self.m2b_b2_begin_cpp_prepare()  # Existing measured-hold/authority bookkeeping.
@@ -7907,6 +8293,9 @@ class OnlineJoinPlanner(Node):
             return
         if self.ground_ring_exit is not None:
             self.update_ground_ring_exit()
+            return
+        box_step = getattr(self, 'pickup_box_step', None)       # absent on bare test stubs
+        if box_step is not None and box_step():
             return
         if getattr(getattr(self, 'm1_pickup_release', None), 'stage', 'idle') != 'idle':
             self.update_m1_pickup_recovery()
@@ -8079,6 +8468,9 @@ class OnlineJoinPlanner(Node):
                     self.m1_candidate_hold_reference = (
                         self.last_reference.positions[0].copy() if self.last_reference is not None
                         else self.drone_position.copy())
+                    self.m1_candidate_press_base = self.m1_candidate_hold_reference.copy()
+                    self.m1_candidate_press_t0 = self._physical_now_s()
+                    self.m1_candidate_press_s = 0.0
                     self.transition_to(MissionPhase.MAGNET_ATTACH_WAIT,
                         f'fresh near-surface LOW pickup candidate (gap={live_clearance:.3f} m); '
                         'hold for measured lift proof')
@@ -8119,6 +8511,9 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.MAGNET_ATTACH_WAIT:
+            press_step = getattr(self, 'step_candidate_press', None)     # absent on bare test stubs
+            if press_step is not None:
+                press_step()
             measured_contact = bool(getattr(self, 'pickup_proof_enabled', False)
                 and getattr(self, 'pickup_alignment_mode', 'legacy') == 'measured_tip_tiered')
             contact, fresh, gap = (self.pickup_contact_evidence() if measured_contact
@@ -8361,11 +8756,15 @@ class OnlineJoinPlanner(Node):
                 self.transition_to(MissionPhase.TRANSIT_TO_DROP_POINT, reason)
             return
 
+        if self.phase in FORCE_DROP_PHASES and self.force_drop_step(xy_error):
+            return
+
         if self.phase == MissionPhase.TRANSIT_TO_DROP_POINT:
-            if self.c1f2_cpp_authority_enabled:
+            if self.c1f2_cpp_authority_enabled and not getattr(self, 'c1f2_python_fallback_active', False):
+                capture_xy, capture_z, capture_radius = self.navigation_capture_errors(xy_error, abs_z_error)
                 spatial_capture = bool(
-                    xy_error < self.c1f2_nav_capture_xy_threshold_m
-                    and abs_z_error < self.c1f2_nav_capture_z_threshold_m
+                    capture_xy < capture_radius
+                    and capture_z < self.c1f2_nav_capture_z_threshold_m
                 )
                 bridge_feasible = False
                 if spatial_capture:
@@ -8384,7 +8783,9 @@ class OnlineJoinPlanner(Node):
                     self.c1f2_exit_bridge_pending_feasibility = None
                 good = spatial_capture and bridge_feasible
                 transition_reason = (
-                    "moving rendezvous entered dynamically-capturable bridge region"
+                    "navigation body goal entered dynamically-capturable bridge region"
+                    if getattr(self, 'preloaded_navigation', False) and getattr(self, 'navigation_body_goal_radius_m', 0.) > 0.
+                    else "moving rendezvous entered dynamically-capturable bridge region"
                 )
             elif getattr(self, 'drop_on_arrival', False):
                 # multi_drone_control 4 Nov: no settle, no descent: the magnet over the drop point releases at the
@@ -8438,11 +8839,28 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.DESCEND_TO_DROP_HEIGHT:
-            if self.rate_profile().complete(elapsed):
-                self.transition_to(
-                    MissionPhase.DROP_OBJECT,
-                    "drop descent profile complete",
-                )
+            if not self.rate_profile().complete(elapsed):
+                self.drop_release_wait_start = None
+                return
+            gate = float(getattr(self, 'drop_release_xy_m', 0.0) or 0.0)
+            reason = "drop descent profile complete"
+            if gate > 0.0:
+                now = self._physical_now_s()
+                if getattr(self, 'drop_release_wait_start', None) is None:
+                    self.drop_release_wait_start = now
+                waited = now - self.drop_release_wait_start
+                if xy_error >= gate and waited < float(getattr(self, 'drop_release_wait_s', 3.0)):
+                    self.get_logger().info(
+                        f"release held: the magnet {xy_error:.3f} m from the drop point (gate {gate:.2f} m, {waited:.1f} s)",
+                        throttle_duration_sec=0.5)
+                    return
+                reason += (f" (magnet {xy_error:.3f} m from the drop point" +
+                           (f", released after the {waited:.1f} s wait)" if xy_error >= gate else ")"))
+            self.drop_release_wait_start = None
+            self.transition_to(
+                MissionPhase.DROP_OBJECT,
+                reason,
+            )
             return
 
         if self.phase == MissionPhase.DROP_OBJECT:
@@ -8458,6 +8876,38 @@ class OnlineJoinPlanner(Node):
                     MissionPhase.CLEAR_DROP_ZONE,
                     "object released or release dwell completed",
                 )
+            return
+
+        if self.phase == MissionPhase.CLEAR_DROP_ZONE and getattr(self, 'return_after_drop', ''):
+            cleared = self.rate_profile().complete(elapsed) and abs_z_error < self.pickup_z_tolerance
+            if self.return_after_drop == 'cpp':
+                # as pickup_cpp_reattach: once clear, a fresh hand-over (the drop leg's is spent), then the C++ return
+                if not self.return_prepare_started:
+                    if not cleared:
+                        return
+                    self.latch_return_hover()
+                    self.reset_c1f2_for_pickup_retry()
+                    self.return_prepare_started = True
+                self.c1f2_climb_hold_handoff(True, 'drop-zone clearance', 'the drop-zone clearance hold',
+                                             exit_phase=MissionPhase.RETURN_TO_START)
+                return
+            if cleared:
+                self.latch_return_hover()
+                self.transition_to(MissionPhase.RETURN_TO_START, "drop zone cleared: back to the start (direct)")
+            return
+
+        if self.phase == MissionPhase.RETURN_TO_START:
+            if self.return_hover is not None:
+                error = self.drone_position - self.return_hover
+                if self.condition_true_for(
+                    float(np.linalg.norm(error[:2])) < self.c1f2_nav_capture_xy_threshold_m
+                    and abs(float(error[2])) < self.c1f2_nav_capture_z_threshold_m,
+                    0.50,
+                ):
+                    self.transition_to(MissionPhase.AT_START, "over the start hover: holding until LAND")
+            return
+
+        if self.phase == MissionPhase.AT_START:
             return
 
         if self.phase == MissionPhase.CLEAR_DROP_ZONE:
@@ -8882,6 +9332,7 @@ class OnlineJoinPlanner(Node):
                 or (getattr(self, 'is_delivery_rejoin', False) and self.phase == MissionPhase.TAKEOFF)
                 or (getattr(self, 'attach_cpp_transit_active', False) and self.phase == MissionPhase.TAKEOFF)
                 or self.pickup_reattach_prepare_phase()
+                or self.return_prepare_phase()
                 or (
                     self.is_m2b
                     and self.m2b_commissioning_stage == "b2"
@@ -8902,6 +9353,16 @@ class OnlineJoinPlanner(Node):
                 horizon_samples=self.horizon_samples,
                 min_reference_z=self.min_reference_z,
             )
+
+        if self.phase in {MissionPhase.RETURN_TO_START, MissionPhase.AT_START}:
+            if self.return_hover is None:
+                raise RuntimeError('return_after_drop: no start hover latched')
+            return self.transfer_generator.generate(
+                phase_key=self.phase.value,
+                measured_position=self.drone_position,
+                measured_velocity=self.drone_velocity,
+                target=TargetState(self.return_hover.copy(), np.zeros(3), np.zeros(3)),
+                advance=True)
 
         if self.phase in {MissionPhase.TAKEOFF, MissionPhase.M2_VERTICAL_TAKEOFF}:
             if self.takeoff_start_position is None:
@@ -9764,6 +10225,10 @@ class OnlineJoinPlanner(Node):
                     f"tip xy error={xy_error:.3f} m, relative xy speed={relative_velocity:.3f} m/s"
                 )
                 lines.append(f"tip z error={z_error:.3f} m")
+                if (getattr(self, 'navigation_body_goal_radius_m', 0.) > 0.
+                        and self.preloaded_navigation and self.phase == MissionPhase.TRANSIT_TO_DROP_POINT):
+                    body_xy, body_z, radius = self.navigation_capture_errors(xy_error, abs(z_error))
+                    lines.append(f"navigation BODY goal: xy={body_xy:.3f}m / {radius:.3f}m; z={body_z:.3f}m; existing dwell/bridge required")
             except RuntimeError:
                 pass
         if spec.reference_type == ReferenceType.TRANSFER:
@@ -9802,6 +10267,8 @@ class OnlineJoinPlanner(Node):
                 f"settled={self.c1f2_prepare_settled}, "
                 f"hold_drift={self.c1f2_prepare_drift_m:.4f}m, "
                 f"hold_speed={self.c1f2_prepare_speed_mps:.4f}m/s, "
+                f"settle/revoke_speed={self.c1f2_prepare_settle_speed_mps:.3f}/"
+                f"{self.c1f2_prepare_revoke_speed_mps:.3f}m/s, "
                 f"ready={self.c1f2_handoff_ready}, "
                 f"prepare_wait={self.c1f2_prepare_wait_s:.2f}s, "
                 f"cpp_active={self.c1f2_cpp_authority_active}, "
@@ -12502,6 +12969,12 @@ class OnlineJoinPlanner(Node):
                 return
 
             if not self.inputs_ready():
+                if getattr(self, 'preloaded_navigation', False) and not self.c1f2_prepare_settled:
+                    self.c1f2_prepare_settle_start_time = None
+                if (getattr(self, 'preloaded_navigation', False)
+                        and getattr(self, 'navigation_body_goal_radius_m', 0.) > 0.
+                        and self.phase == MissionPhase.TRANSIT_TO_DROP_POINT):
+                    self.condition_start_time = None
                 if getattr(self, 'parking_arc', None) is not None:
                     self.parking_last_step_s = None
                 if getattr(self, 'pickup_proof_enabled', False) and self.phase == MissionPhase.LIFT_OBJECT:
@@ -12528,6 +13001,12 @@ class OnlineJoinPlanner(Node):
 
             # A transition can change which target source is required.
             if not self.inputs_ready():
+                if getattr(self, 'preloaded_navigation', False) and not self.c1f2_prepare_settled:
+                    self.c1f2_prepare_settle_start_time = None
+                if (getattr(self, 'preloaded_navigation', False)
+                        and getattr(self, 'navigation_body_goal_radius_m', 0.) > 0.
+                        and self.phase == MissionPhase.TRANSIT_TO_DROP_POINT):
+                    self.condition_start_time = None
                 if getattr(self, 'parking_arc', None) is not None:
                     self.parking_last_step_s = None
                 if getattr(self, 'pickup_proof_enabled', False) and self.phase == MissionPhase.LIFT_OBJECT:

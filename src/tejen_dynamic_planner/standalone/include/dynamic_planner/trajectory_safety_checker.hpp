@@ -19,6 +19,8 @@ struct TrajectorySafetyResult {
     // Exact broad-phase skips.  AABB-disjoint convex hulls are provably
     // separated, so the expensive LP separator is unnecessary in these cases.
     std::size_t aabb_separation_skips = 0;
+    std::size_t relations_checked = 0;
+    std::size_t relations_reused = 0;
     TemporalRefinementStats temporal_refinement;
     std::string obstacle_name;
     double unsafe_interval_start_s = 0.0;
@@ -44,6 +46,16 @@ public:
         double from_s,
         double until_s,
         const WorldSnapshot& world) const;
+
+    // Subset results are labelled SAFE_CHANGED_RELATIONS, not full certificates.
+    // The caller must retain a full SAFE result for the identical trajectory
+    // over a containing interval, within this one planning transaction.
+    TrajectorySafetyResult checkPiece(
+        const TrajectoryPiece& ego, double from_s, double until_s,
+        const WorldSnapshot& world, const CollisionCheckSelection& selection) const;
+    TrajectorySafetyResult checkCommitted(
+        const CommittedTrajectory& ego, double from_s, double until_s,
+        const WorldSnapshot& world, const CollisionCheckSelection& selection) const;
 
 private:
     double separator_validation_tolerance_ = 1e-7;

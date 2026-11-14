@@ -674,7 +674,30 @@ ReplanResult RecedingHorizonPlanner::replan(
         return finish(std::move(result));
     }
 
-    result.local_plan = local_planner_.plan(request);
+    if (planning_world.workspace.enabled) {
+        // Bounds depend on this immutable attitude/component snapshot, not the
+        // pose at backend construction. Newest-world checking repeats the test.
+        try {
+            const auto bounds = assemblyCentreBounds(planning_world.workspace,
+                planning_world.ego_half_extents, planning_world.ego_suspended_geometry,
+                planning_world.ego_tracking_error_half_extents, planning_world.ego_body_rotation);
+            auto local_config = local_planner_.config();
+            local_config.octopus.xyz_min = local_config.octopus.xyz_min.cwiseMax(bounds.first);
+            local_config.octopus.xyz_max = local_config.octopus.xyz_max.cwiseMin(bounds.second);
+            local_config.refinement.xyz_min = local_config.refinement.xyz_min.cwiseMax(bounds.first);
+            local_config.refinement.xyz_max = local_config.refinement.xyz_max.cwiseMin(bounds.second);
+            if ((local_config.octopus.xyz_min.array() >= local_config.octopus.xyz_max.array()).any() ||
+                (local_config.refinement.xyz_min.array() >= local_config.refinement.xyz_max.array()).any())
+                throw std::invalid_argument("local search does not intersect assembly workspace");
+            result.local_plan = LocalPlanner(local_config).plan(request);
+        } catch (const std::exception& exc) {
+            result.status = "PLANNING_WORLD_INVALID";
+            result.recheck_error = exc.what();
+            return finish(std::move(result));
+        }
+    } else {
+        result.local_plan = local_planner_.plan(request);
+    }
     result.octopus_deadline_clock_invalid = useful_deadline_clock_invalid;
     if (useful_deadline_clock_invalid) {
         result.status = "TRAJECTORY_TIME_INVALID";
@@ -769,8 +792,15 @@ ReplanResult RecedingHorizonPlanner::replan(
         }
     }
 
+    // This proof context belongs only to the immutable candidate/prefix in this
+    // invocation. No result is reused across replans or across trajectory edits.
+    std::optional<WorldSnapshot> checked_world;
     auto checkAgainstSnapshot = [&](const WorldSnapshot& latest,
                                     bool retry) -> bool {
+        const auto previous_prefix = result.prefix_safety;
+        const auto previous_candidate = result.candidate_safety;
+        const auto previous_backup = result.candidate_backup_safety;
+        const auto previous_hold = result.candidate_terminal_hold_safety;
         // Results describe this snapshot only; an exception in the final check
         // must not expose the previous snapshot's SAFE candidate/prefix fields.
         result.prefix_safety.reset();
@@ -810,14 +840,42 @@ ReplanResult RecedingHorizonPlanner::replan(
             }
         };
         try {
+            const CollisionCheckSelection changes = retry && checked_world
+                ? latest.collisionChangesSince(*checked_world) : CollisionCheckSelection{};
+            result.recheck_change_kind = !retry ? "INITIAL_FULL" : changes.full_check ? "FULL" :
+                changes.ego_body_changed ? (changes.cooperative_names.empty() ? "BODY" : "BODY_AND_PEERS") :
+                changes.cooperative_names.empty() ? "UNCHANGED" : "PEERS";
+            const auto selectionFor = [&](const std::optional<TrajectorySafetyResult>& prior,
+                                          double from_s, double until_s) {
+                // Only a containing successful proof may discharge unchanged
+                // relations. Prefix time advances; candidate/backup stay fixed.
+                return retry && checked_world && prior && prior->safe &&
+                    from_s >= prior->checked_from_s && until_s <= prior->checked_until_s
+                    ? changes : CollisionCheckSelection{};
+            };
+            const auto account = [&](const TrajectorySafetyResult& check,
+                                     const CollisionCheckSelection& selection,
+                                     const Clock::time_point& started_check) {
+                const double elapsed = std::chrono::duration<double>(Clock::now() - started_check).count();
+                result.safety_check_s += elapsed;
+                if (selection.full_check) {
+                    ++result.full_safety_checks;
+                    result.full_safety_check_s += elapsed;
+                } else {
+                    ++result.incremental_safety_checks;
+                    result.incremental_safety_check_s += elapsed;
+                }
+                result.collision_relations_checked += check.relations_checked;
+                result.collision_relations_reused += check.relations_reused;
+            };
             if (had_incumbent) {
                 const auto prefix_started = Clock::now();
                 requireCoverage("prefix", check_from_s, splice_time);
+                const auto selection = selectionFor(previous_prefix, check_from_s, splice_time);
                 result.prefix_safety = safety_checker_.checkCommitted(
                     committed_, check_from_s,
-                    splice_time, latest);
-                result.safety_check_s +=
-                    std::chrono::duration<double>(Clock::now() - prefix_started).count();
+                    splice_time, latest, selection);
+                account(*result.prefix_safety, selection, prefix_started);
                 if (!result.prefix_safety->safe) {
                     result.incumbent_prefix_unsafe = true;
                     result.status = retry
@@ -836,10 +894,10 @@ ReplanResult RecedingHorizonPlanner::replan(
 
             const auto candidate_started = Clock::now();
             requireCoverage("candidate", splice_time, candidate.valid_until);
+            const auto candidate_selection = selectionFor(previous_candidate, splice_time, candidate.valid_until);
             result.candidate_safety = safety_checker_.checkPiece(
-                candidate, splice_time, candidate.valid_until, latest);
-            result.safety_check_s +=
-                std::chrono::duration<double>(Clock::now() - candidate_started).count();
+                candidate, splice_time, candidate.valid_until, latest, candidate_selection);
+            account(*result.candidate_safety, candidate_selection, candidate_started);
             if (!result.candidate_safety->safe) {
                 result.status = retry
                     ? "LATEST_CANDIDATE_UNSAFE_AFTER_RETRY"
@@ -854,11 +912,12 @@ ReplanResult RecedingHorizonPlanner::replan(
                 const auto backup_started = Clock::now();
                 requireCoverage("backup", rendezvous_backup_piece->valid_from,
                                 rendezvous_backup_piece->valid_until);
+                const auto backup_selection = selectionFor(previous_backup,
+                    rendezvous_backup_piece->valid_from, rendezvous_backup_piece->valid_until);
                 result.candidate_backup_safety = safety_checker_.checkPiece(
                     *rendezvous_backup_piece, rendezvous_backup_piece->valid_from,
-                    rendezvous_backup_piece->valid_until, latest);
-                result.safety_check_s +=
-                    std::chrono::duration<double>(Clock::now() - backup_started).count();
+                    rendezvous_backup_piece->valid_until, latest, backup_selection);
+                account(*result.candidate_backup_safety, backup_selection, backup_started);
                 if (!result.candidate_backup_safety->safe) {
                     result.status = retry
                         ? "LATEST_RENDEZVOUS_BACKUP_UNSAFE_AFTER_RETRY"
@@ -881,11 +940,12 @@ ReplanResult RecedingHorizonPlanner::replan(
                     const auto terminal_started = Clock::now();
                     requireCoverage("backup_terminal_hold", rendezvous_backup_piece->valid_until,
                                     rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s);
+                    const auto hold_selection = selectionFor(previous_hold, rendezvous_backup_piece->valid_until,
+                        rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s);
                     result.candidate_terminal_hold_safety = safety_checker_.checkCommitted(
                         candidate_with_backup, rendezvous_backup_piece->valid_until,
-                        rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s, latest);
-                    result.safety_check_s +=
-                        std::chrono::duration<double>(Clock::now() - terminal_started).count();
+                        rendezvous_backup_piece->valid_until + config_.terminal_hold_guard_s, latest, hold_selection);
+                    account(*result.candidate_terminal_hold_safety, hold_selection, terminal_started);
                     if (!result.candidate_terminal_hold_safety->safe) {
                         result.status = retry
                             ? "LATEST_RENDEZVOUS_BACKUP_HOLD_UNSAFE_AFTER_RETRY"
@@ -906,11 +966,12 @@ ReplanResult RecedingHorizonPlanner::replan(
                 const auto terminal_started = Clock::now();
                 requireCoverage("terminal_hold", candidate.valid_until,
                                 candidate.valid_until + config_.terminal_hold_guard_s);
+                const auto hold_selection = selectionFor(previous_hold, candidate.valid_until,
+                    candidate.valid_until + config_.terminal_hold_guard_s);
                 result.candidate_terminal_hold_safety = safety_checker_.checkCommitted(
                     candidate_with_hold, candidate.valid_until,
-                    candidate.valid_until + config_.terminal_hold_guard_s, latest);
-                result.safety_check_s +=
-                    std::chrono::duration<double>(Clock::now() - terminal_started).count();
+                    candidate.valid_until + config_.terminal_hold_guard_s, latest, hold_selection);
+                account(*result.candidate_terminal_hold_safety, hold_selection, terminal_started);
                 if (!result.candidate_terminal_hold_safety->safe) {
                     result.status = retry
                         ? "LATEST_CANDIDATE_TERMINAL_HOLD_UNSAFE_AFTER_RETRY"
@@ -918,6 +979,7 @@ ReplanResult RecedingHorizonPlanner::replan(
                     return false;
                 }
             }
+            checked_world = latest;
         } catch (const std::exception& exc) {
             result.recheck_error = exc.what();
             result.status = retry

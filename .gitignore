@@ -68,3 +68,5 @@ docs/paper/**/*.fdb_latexmk
 docs/paper/**/*.fls
 docs/paper/**/*.log
 docs/paper/**/*.out
+# the combined paper's Overleaf clone (its own git repo; Wesley 6 Nov)
+multi_drone_swung_payload_item_collection_wesley_version/

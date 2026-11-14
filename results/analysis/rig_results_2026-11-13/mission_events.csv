@@ -1,0 +1,199 @@
+flight,t_s,epoch,event,n_ours,detail
+fm9_5,-14.063,1794434716.753,FLEET RESIZED to n=4,4,"plates (cw) [90.0, 330.0, 210.0, 271.0]"
+fm9_5,-14.061,1794434716.754,start_weld,4,[dissipative] ATTACH drone 3 (start weld
+fm9_5,-4.370,1794434726.446,fleet ARM,4,fleet_manager
+fm9_5,0.000,1794434730.816,fleet TAKEOFF,4,fleet_manager
+fm9_5,7.814,1794434738.629,handover_done,4,[planner] handover settle complete
+fm9_5,11.290,1794434742.106,pretension_done,4,[planner] pretension done
+fm9_5,17.818,1794434748.633,UNLOAD,4,drone 4
+fm9_5,20.724,1794434751.540,ring at the top,4,"set-point at the top, ring within 10 cm"
+fm9_5,20.887,1794434751.703,UNLOADED,4,"planned 0.48 N, ring tilt 3.1 deg"
+fm9_5,20.889,1794434751.704,FLEET RESIZED to n=3,3,"plates (cw) [90.0, 330.0, 210.0]"
+fm9_5,20.990,1794434751.805,DETACH (OCP resize),3,drone 4
+fm9_5,22.303,1794434753.118,hold_over,3,[dissipative] reconfiguration hold over
+fm9_5,27.103,1794434757.919,PARTNER RELEASE,3,
+fm9_5,27.206,1794434758.022,his WAIT_FOR_TAKEOFF -> TAKEOFF,3,takeoff command received
+fm9_5,28.417,1794434759.232,his TAKEOFF -> APPROACH_ABOVE_PICKUP,3,takeoff confirmed at 0.12 m above start
+fm9_5,35.388,1794434766.204,his APPROACH_ABOVE_PICKUP -> SETTLE_ABOVE_PICKUP,3,arrived above pickup object
+fm9_5,38.289,1794434769.104,his SETTLE_ABOVE_PICKUP -> DESCEND_TO_PICKUP,3,settled above pickup object
+fm9_5,47.023,1794434777.838,his DESCEND_TO_PICKUP -> MAGNET_ATTACH_WAIT,3,pickup descent profile complete
+fm9_5,57.089,1794434787.905,pickup attempt 1 failed,3,contact wait made no progress for 10s
+fm9_5,63.622,1794434794.438,his MAGNET_ATTACH_WAIT -> APPROACH_ABOVE_PICKUP,3,fresh measured vertical separation; retry pickup
+fm9_5,64.156,1794434794.971,his APPROACH_ABOVE_PICKUP -> SETTLE_ABOVE_PICKUP,3,arrived above pickup object
+fm9_5,66.290,1794434797.106,his SETTLE_ABOVE_PICKUP -> DESCEND_TO_PICKUP,3,settled above pickup object
+fm9_5,77.725,1794434808.540,his DESCEND_TO_PICKUP -> MAGNET_ATTACH_WAIT,3,fresh near-surface LOW pickup candidate (gap=0.004 m); hold for measured lift proof
+fm9_5,87.788,1794434818.604,pickup attempt 2 failed,3,contact wait made no progress for 10s
+fm9_5,90.788,1794434821.604,his MAGNET_ATTACH_WAIT -> APPROACH_ABOVE_PICKUP,3,fresh measured vertical separation; retry pickup
+fm9_5,91.322,1794434822.137,his APPROACH_ABOVE_PICKUP -> SETTLE_ABOVE_PICKUP,3,arrived above pickup object
+fm9_5,92.390,1794434823.206,his SETTLE_ABOVE_PICKUP -> DESCEND_TO_PICKUP,3,settled above pickup object
+fm9_5,107.9,1794434838.704,his DESCEND_TO_PICKUP -> MAGNET_ATTACH_WAIT,3,pickup descent profile complete
+fm9_5,109.8,1794434840.605,his MAGNET_ATTACH_WAIT -> LIFT_OBJECT,3,object attached with xy error 0.012 m
+fm9_5,124.0,1794434854.805,his LIFT_OBJECT -> TRANSIT_TO_DROP_POINT,3,object lifted 1.58 m
+fm9_5,137.4,1794434868.170,his TRANSIT_TO_DROP_POINT -> SETTLE_ABOVE_DROP_POINT,3,drop point reached
+fm9_5,145.8,1794434876.571,his SETTLE_ABOVE_DROP_POINT -> DESCEND_TO_DROP_HEIGHT,3,drop-point-relative hover settled
+fm9_5,154.5,1794434885.339,his DESCEND_TO_DROP_HEIGHT -> DROP_OBJECT,3,drop descent profile complete
+fm9_5,155.0,1794434885.771,his DROP_OBJECT -> CLEAR_DROP_ZONE,3,object measured away from the magnet after the release dwell
+fm9_5,155.4,1794434886.173,his CLEAR_DROP_ZONE -> TRANSIT_TO_REATTACH,3,drop zone cleared
+fm9_5,155.6,1794434886.404,his TRANSIT_TO_REATTACH -> APPROACH_ABOVE_TARGET,3,entered attachment approach region
+fm9_5,157.4,1794434888.206,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9_5,158.1,1794434888.906,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9_5,158.6,1794434889.370,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9_5,161.4,1794434892.240,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9_5,163.3,1794434894.105,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9_5,163.5,1794434894.271,CONTACT (try 1),3,"xy 15.0 mm, normal 8.5 mm"
+fm9_5,163.5,1794434894.304,his ATTACH_READY -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9_5,166.2,1794434897.057,"PROOF FAILED (try 1, lost)",3,"drift 73.9 mm, plate rise -29.2 mm"
+fm9_5,166.3,1794434897.074,his LIFT_PROOF -> DESCEND_TO_ATTACHMENT,3,proof failed (1/3); descending again
+fm9_5,166.3,1794434897.104,descent_held,3,Contact descent held: tip 6.1 cm off the plate
+fm9_5,167.1,1794434897.871,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9_5,167.4,1794434898.208,CONTACT (try 2),3,"xy 17.7 mm, normal 0.6 mm"
+fm9_5,167.4,1794434898.240,his ATTACH_READY -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9_5,170.9,1794434901.719,ATTACH: proven (try 2),3,drift 0.3 mm
+fm9_5,170.9,1794434901.738,his LIFT_PROOF -> RING_ATTACHED,3,attach confirmed by the fleet in LIFT_PROOF
+fm9_5,171.0,1794434901.786,FLEET RESIZED to n=4,4,"plates (cw) [90.0, 330.0, 210.0, 271.8]"
+fm9_5,171.1,1794434901.928,ATTACH drone 3 (OCP resize),4,
+fm9_5,172.7,1794434903.487,hold_over,4,[dissipative] reconfiguration hold over
+fm9_5,186.7,1794434917.468,fleet LAND,4,fleet_manager
+fm9_5,199.7,1794434930.483,fleet DISARM,4,fleet_manager
+fm9_5,199.7,1794434930.522,Landed - disarming the fleet,4,fleet_manager
+fm9_5,199.8,1794434930.584,fleet DISARM,4,fleet_manager
+fm9_5,199.9,1794434930.683,fleet DISARM,4,fleet_manager
+fm9_5,200.0,1794434930.781,fleet DISARM,4,fleet_manager
+fm9_5,200.1,1794434930.881,fleet DISARM,4,fleet_manager
+fm9hc_2,-2.709,1794439206.170,fleet ARM,3,fleet_manager
+fm9hc_2,0.000,1794439208.879,fleet TAKEOFF,3,fleet_manager
+fm9hc_2,8.204,1794439217.084,handover_done,3,[planner] handover settle complete
+fm9hc_2,11.304,1794439220.184,pretension_done,3,[planner] pretension done
+fm9hc_2,14.166,1794439223.045,his WAIT_FOR_TAKEOFF -> TAKEOFF,3,takeoff command received
+fm9hc_2,20.521,1794439229.400,ring at the top,3,"set-point at the top, ring within 10 cm"
+fm9hc_2,20.606,1794439229.486,orbit_hold,3,[planner] hover hold 5.0 s before the orbit
+fm9hc_2,25.181,1794439234.061,his TAKEOFF -> TRANSIT_TO_DROP_POINT,3,delivery_rejoin: loaded climb complete
+fm9hc_2,25.605,1794439234.485,orbit_start,3,[planner] hover hold done: orbit starts
+fm9hc_2,34.151,1794439243.030,his TRANSIT_TO_DROP_POINT -> SETTLE_ABOVE_DROP_POINT,3,drop point reached
+fm9hc_2,35.217,1794439244.097,his SETTLE_ABOVE_DROP_POINT -> DESCEND_TO_DROP_HEIGHT,3,drop-point-relative hover settled
+fm9hc_2,43.982,1794439252.862,his DESCEND_TO_DROP_HEIGHT -> DROP_OBJECT,3,drop descent profile complete
+fm9hc_2,44.419,1794439253.299,his DROP_OBJECT -> CLEAR_DROP_ZONE,3,object measured away from the magnet after the release dwell
+fm9hc_2,44.816,1794439253.696,his CLEAR_DROP_ZONE -> TRANSIT_TO_REATTACH,3,drop zone cleared
+fm9hc_2,44.904,1794439253.783,pause,3,[dissipative] attach pause: the orbit slows to rest over 3.0 s
+fm9hc_2,45.053,1794439253.932,his TRANSIT_TO_REATTACH -> APPROACH_ABOVE_TARGET,3,entered attachment approach region
+fm9hc_2,46.651,1794439255.530,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_2,55.549,1794439264.428,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_2,55.914,1794439264.794,descent_held,3,Contact descent held: tip 5.5 cm off the plate
+fm9hc_2,58.716,1794439267.596,descent_held,3,Contact descent held: tip 5.1 cm off the plate
+fm9hc_2,60.682,1794439269.561,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_2,64.115,1794439272.994,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_2,65.415,1794439274.294,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_2,68.950,1794439277.829,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9hc_2,69.115,1794439277.994,his ATTACH_READY -> APPROACH_ABOVE_TARGET,3,bottom hold left: the tip sunk below the plate (off its edge); lifting clear to retry
+fm9hc_2,69.682,1794439278.561,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_2,71.882,1794439280.761,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_2,76.015,1794439284.894,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9hc_2,77.817,1794439286.696,his ATTACH_READY -> APPROACH_ABOVE_TARGET,3,bottom hold left: moving or far off the plate; lifting clear to retry
+fm9hc_2,79.017,1794439287.897,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_2,80.385,1794439289.264,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_2,80.684,1794439289.564,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_2,81.482,1794439290.361,his DESCEND_TO_ATTACHMENT -> APPROACH_ABOVE_TARGET,3,attachment descent aborted after loss of relative alignment
+fm9hc_2,82.019,1794439290.898,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_2,91.382,1794439300.261,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_2,91.482,1794439300.362,descent_held,3,Contact descent held: tip 5.1 cm off the plate
+fm9hc_2,92.549,1794439301.429,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_2,94.548,1794439303.428,descent_held,3,Contact descent held: tip 5.4 cm off the plate
+fm9hc_2,100.1,1794439308.964,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_2,102.5,1794439311.361,CONTACT (try 1),3,"xy 8.4 mm, normal -0.1 mm"
+fm9hc_2,102.5,1794439311.399,his DESCEND_TO_ATTACHMENT -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9hc_2,104.9,1794439313.754,ATTACH: proven (try 1),3,drift 1.2 mm
+fm9hc_2,104.9,1794439313.756,FLEET RESIZED to n=4,4,"plates (cw) [90.0, 330.0, 210.0, 268.6]"
+fm9hc_2,104.9,1794439313.763,his LIFT_PROOF -> RING_ATTACHED,4,attach confirmed by the fleet in LIFT_PROOF
+fm9hc_2,105.1,1794439313.945,ATTACH drone 3 (OCP resize),4,
+fm9hc_2,105.1,1794439313.947,pause_over,4,[dissipative] attach pause over: the orbit speeds back up over 3.0 s
+fm9hc_2,106.7,1794439315.532,hold_over,4,[dissipative] reconfiguration hold over
+fm9hc_2,124.5,1794439333.426,fleet LAND,4,fleet_manager
+fm9hc_2,137.1,1794439346.000,fleet DISARM,4,fleet_manager
+fm9hc_2,137.2,1794439346.096,fleet DISARM,4,fleet_manager
+fm9hc_2,137.3,1794439346.194,fleet DISARM,4,fleet_manager
+fm9hc_2,137.4,1794439346.286,fleet DISARM,4,fleet_manager
+fm9hc_2,137.5,1794439346.381,fleet DISARM,4,fleet_manager
+fm9hc_2,138.1,1794439346.985,Landed - disarming the fleet,4,fleet_manager
+fm9hc_4,-4.321,1794439933.581,fleet ARM,3,fleet_manager
+fm9hc_4,0.000,1794439937.902,fleet TAKEOFF,3,fleet_manager
+fm9hc_4,8.193,1794439946.095,handover_done,3,[planner] handover settle complete
+fm9hc_4,11.493,1794439949.395,pretension_done,3,[planner] pretension done
+fm9hc_4,20.624,1794439958.526,ring at the top,3,"set-point at the top, ring within 10 cm"
+fm9hc_4,20.794,1794439958.696,orbit_hold,3,[planner] hover hold 5.0 s before the orbit
+fm9hc_4,21.000,1794439958.902,his WAIT_FOR_TAKEOFF -> TAKEOFF,3,takeoff command received
+fm9hc_4,25.795,1794439963.697,orbit_start,3,[planner] hover hold done: orbit starts
+fm9hc_4,32.542,1794439970.444,his TAKEOFF -> TRANSIT_TO_DROP_POINT,3,delivery_rejoin: loaded climb complete
+fm9hc_4,42.775,1794439980.677,his TRANSIT_TO_DROP_POINT -> SETTLE_ABOVE_DROP_POINT,3,drop point reached
+fm9hc_4,43.811,1794439981.713,his SETTLE_ABOVE_DROP_POINT -> DESCEND_TO_DROP_HEIGHT,3,drop-point-relative hover settled
+fm9hc_4,52.575,1794439990.477,his DESCEND_TO_DROP_HEIGHT -> DROP_OBJECT,3,drop descent profile complete
+fm9hc_4,53.011,1794439990.913,his DROP_OBJECT -> CLEAR_DROP_ZONE,3,object measured away from the magnet after the release dwell
+fm9hc_4,53.409,1794439991.311,his CLEAR_DROP_ZONE -> TRANSIT_TO_REATTACH,3,drop zone cleared
+fm9hc_4,53.493,1794439991.395,pause,3,[dissipative] attach pause: the orbit slows to rest over 3.0 s
+fm9hc_4,53.676,1794439991.578,his TRANSIT_TO_REATTACH -> APPROACH_ABOVE_TARGET,3,entered attachment approach region
+fm9hc_4,55.076,1794439992.978,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_4,70.778,1794440008.680,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_4,71.042,1794440008.944,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_4,71.541,1794440009.443,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_4,72.575,1794440010.476,descent_held,3,Contact descent held: tip 5.7 cm off the plate
+fm9hc_4,74.242,1794440012.144,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_4,75.275,1794440013.177,descent_held,3,Contact descent held: tip 5.7 cm off the plate
+fm9hc_4,77.276,1794440015.178,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_4,79.109,1794440017.011,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_4,81.409,1794440019.311,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_4,83.274,1794440021.176,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9hc_4,83.721,1794440021.623,CONTACT (try 1),3,"xy 12.7 mm, normal -1.4 mm"
+fm9hc_4,83.741,1794440021.643,his ATTACH_READY -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9hc_4,87.146,1794440025.048,ATTACH: proven (try 1),3,drift 1.3 mm
+fm9hc_4,87.161,1794440025.063,FLEET RESIZED to n=4,4,"plates (cw) [90.0, 330.0, 210.0, 286.8]"
+fm9hc_4,87.174,1794440025.076,his LIFT_PROOF -> RING_ATTACHED,4,attach confirmed by the fleet in LIFT_PROOF
+fm9hc_4,87.351,1794440025.253,ATTACH drone 3 (OCP resize),4,
+fm9hc_4,87.352,1794440025.254,pause_over,4,[dissipative] attach pause over: the orbit speeds back up over 3.0 s
+fm9hc_4,88.904,1794440026.806,hold_over,4,[dissipative] reconfiguration hold over
+fm9hc_4,112.2,1794440050.096,fleet LAND,4,fleet_manager
+fm9hc_4,125.5,1794440063.397,Landed - disarming the fleet,4,fleet_manager
+fm9hc_5,-2.662,1794441274.396,fleet ARM,3,fleet_manager
+fm9hc_5,0.000,1794441277.058,fleet TAKEOFF,3,fleet_manager
+fm9hc_5,8.170,1794441285.228,handover_done,3,[planner] handover settle complete
+fm9hc_5,11.270,1794441288.328,pretension_done,3,[planner] pretension done
+fm9hc_5,20.395,1794441297.452,ring at the top,3,"set-point at the top, ring within 10 cm"
+fm9hc_5,20.571,1794441297.628,orbit_hold,3,[planner] hover hold 5.0 s before the orbit
+fm9hc_5,22.901,1794441299.958,his WAIT_FOR_TAKEOFF -> TAKEOFF,3,takeoff command received
+fm9hc_5,25.571,1794441302.628,orbit_start,3,[planner] hover hold done: orbit starts
+fm9hc_5,33.099,1794441310.157,his TAKEOFF -> TRANSIT_TO_DROP_POINT,3,delivery_rejoin: loaded climb complete
+fm9hc_5,45.133,1794441322.191,his TRANSIT_TO_DROP_POINT -> SETTLE_ABOVE_DROP_POINT,3,drop point reached
+fm9hc_5,46.200,1794441323.258,his SETTLE_ABOVE_DROP_POINT -> DESCEND_TO_DROP_HEIGHT,3,drop-point-relative hover settled
+fm9hc_5,54.964,1794441332.022,his DESCEND_TO_DROP_HEIGHT -> DROP_OBJECT,3,drop descent profile complete
+fm9hc_5,55.399,1794441332.457,his DROP_OBJECT -> CLEAR_DROP_ZONE,3,object measured away from the magnet after the release dwell
+fm9hc_5,55.798,1794441332.856,his CLEAR_DROP_ZONE -> TRANSIT_TO_REATTACH,3,drop zone cleared
+fm9hc_5,55.871,1794441332.929,pause,3,[dissipative] attach pause: the orbit slows to rest over 3.0 s
+fm9hc_5,56.031,1794441333.089,his TRANSIT_TO_REATTACH -> APPROACH_ABOVE_TARGET,3,entered attachment approach region
+fm9hc_5,58.065,1794441335.123,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_5,60.900,1794441337.957,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_5,61.502,1794441338.560,descent_held,3,Contact descent held: tip 5.1 cm off the plate
+fm9hc_5,62.666,1794441339.724,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_5,65.163,1794441342.221,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_5,68.863,1794441345.921,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_5,69.269,1794441346.326,his DESCEND_TO_ATTACHMENT -> APPROACH_ABOVE_TARGET,3,attachment descent aborted after loss of relative alignment
+fm9hc_5,69.831,1794441346.889,his APPROACH_ABOVE_TARGET -> MATCH_VELOCITY,3,attachment XY approach complete
+fm9hc_5,81.064,1794441358.122,his MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT,3,attachment position and velocity matched
+fm9hc_5,81.163,1794441358.221,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_5,82.630,1794441359.688,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_5,84.197,1794441361.255,descent_held,3,Contact descent held: tip 5.3 cm off the plate
+fm9hc_5,86.331,1794441363.389,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_5,87.564,1794441364.621,CONTACT (try 1),3,"xy 17.5 mm, normal 33.9 mm"
+fm9hc_5,87.600,1794441364.658,his DESCEND_TO_ATTACHMENT -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9hc_5,88.414,1794441365.472,"PROOF FAILED (try 1, lost)",3,"drift 73.7 mm, plate rise -0.4 mm"
+fm9hc_5,88.430,1794441365.487,his LIFT_PROOF -> DESCEND_TO_ATTACHMENT,3,proof failed (1/3); descending again
+fm9hc_5,88.463,1794441365.521,descent_held,3,Contact descent held: tip 5.2 cm off the plate
+fm9hc_5,89.030,1794441366.088,descent_held,3,Contact descent held: tip 5.0 cm off the plate
+fm9hc_5,90.600,1794441367.658,his DESCEND_TO_ATTACHMENT -> ATTACH_READY,3,terminal attachment profile complete
+fm9hc_5,91.178,1794441368.236,CONTACT (try 2),3,"xy 16.5 mm, normal 0.5 mm"
+fm9hc_5,91.197,1794441368.254,his ATTACH_READY -> LIFT_PROOF,3,contact reported; proving the catch by a small lift
+fm9hc_5,94.714,1794441371.771,ATTACH: proven (try 2),3,drift 2.5 mm
+fm9hc_5,94.731,1794441371.789,his LIFT_PROOF -> RING_ATTACHED,3,attach confirmed by the fleet in LIFT_PROOF
+fm9hc_5,94.750,1794441371.808,FLEET RESIZED to n=4,4,"plates (cw) [90.0, 330.0, 210.0, 267.8]"
+fm9hc_5,94.958,1794441372.016,ATTACH drone 3 (OCP resize),4,
+fm9hc_5,94.961,1794441372.019,pause_over,4,[dissipative] attach pause over: the orbit speeds back up over 3.0 s
+fm9hc_5,96.560,1794441373.617,hold_over,4,[dissipative] reconfiguration hold over
+fm9hc_5,116.6,1794441393.655,fleet LAND,4,fleet_manager
+fm9hc_5,130.7,1794441407.730,Landed - disarming the fleet,4,fleet_manager

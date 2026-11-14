@@ -15,15 +15,18 @@ Hi Te-Jen, a quick update from today on the 0.86 kg ring with 1 m cables.
 2. The bigger object: contact height 0.0181 m (measured with the magnet face on it), 100 x 10 mm.
 
 **Questions**
-1. On the triangle (carriers 60 deg either side of the plate) your descents reached plate height 3.5-10 cm off the plate
+1. On the triangle (carriers 60 deg either side of the plate) your descents reached plate height 3-11 cm off the plate
    centre, with QUAD4 2-7 cm off your reference sideways and the magnet swinging 2-6 cm under it, so no catch in about a
    minute. The square caught first try. Any setting you would change for the final alignment? We kept `match_xy` at 0.08
    because we worry a tighter value stops the attempts altogether.
-   Measured afterwards (bags of nr9m, nr9o_2, nr1r_3: 16 descents to plate height on the triangle): the misses are mostly
-   radial, alternating inward and outward (-7.8 to +9.5 cm), sideways mostly within 4 cm (two at 9-10 cm). Both parts
-   add up: QUAD4's body was -4 to +11 cm off radially at the bottom and had moved 3-10 cm radially in the last second,
-   and the magnet swung -10 to +7 cm radially under it. The square's catch (sq8_2, 1.7 cm) came with the body 7 cm
-   inward and the swing 6 cm outward. Does your final alignment chase the measured tip (`measured_tip_trim`) while the
+   Measured afterwards from the bags (every descent of 4-5 Nov, read when the magnet first reached the plate's height;
+   the plates are 5.5 cm across): on the triangle in hover 31 of 37 descents reached plate height, a median 6.2 cm off the
+   centre (0.3-11.0 cm), and on 5 Nov none of its 19 landed on the plate. The 31 misses (all on the triangle) are mostly radial (21), outward
+   and inward about equally (16 and 15), sideways mostly within 4 cm. Your reference was within 3.7 cm of the plate;
+   QUAD4's body was 0.2-6.2 cm off your reference, and the magnet swung a few cm under the body. In 27 of 31 misses the
+   body's offset and the swing were on the same side, so they added up. QUAD4 itself was slow (0.05 m/s over the last
+   second). The square's catch (sq8_2, 1.7 cm) came with the body 2-4 cm outward and the swing 4-6 cm inward: they
+   cancelled. Does your final alignment chase the measured tip (`measured_tip_trim`) while the
    magnet swings on its 1 m cable?
 2. When your TAKEOFF arrives before our release has finished (our route round the outside took ~20 s), your reference
    starts from where QUAD4 was at the TAKEOFF and stays there; at the hand-over QUAD4 flew 1.3 m across the ring. In our

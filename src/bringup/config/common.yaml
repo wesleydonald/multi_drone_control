@@ -56,6 +56,8 @@ trajectory:
   partner_release_around_r: '' # m from the ring centre for that circle ('' = 1.2)
   attach_pause: ''              # '' = off: once his TAKEOFF follows a release, the path slows to rest and waits for QUAD4's re-attach, then resumes (Wesley 4 Nov, the orbit)
   attach_pause_ramp_s: ''       # s to slow to rest and to speed back up ('' = 3.0)
+  attach_pause_at: ''           # '' = takeoff (the pause from his TAKEOFF); 'reattach': only from his re-attach leg, so the path runs on through his pickup and drop (Wesley 10 Nov, the full mission on the circle); 'pickup_reattach': also at rest for his pickup until it is confirmed (Wesley 11 Nov)
+  partner_rod_add_m: ''         # '' = 0: m added to a start-welded QUAD4's hand-over rod reading (11 Nov: it reads 7-14 mm short and its cable runs slack; docs/analysis/quad4_bounce_2026-11-11.md)
   foldin_cap: ''                # '' = off; 'level': QUAD4's fold-in blend capped where a level ring puts it on its rod (twin only; card 2026-11-05_quad4_foldin_weld_cap; 'weld' deleted 5 Nov)
   plan_rod_level: ''           # '' = off, twin only (sim.yaml): level tension and leaning direction references for the rod in the plan (card 2026-10-31_rod_in_plan)
   rod_level_mass: ''           # kg: the world's rod that plan_rod_level plans with when rod_mass is untyped (sim.yaml)
@@ -112,6 +114,8 @@ watchdogs:
   pos_limit_m: ''
   ring_low_land_m: ''           # '' = off: the ring this far (m) under its height reference after the lift lands the fleet (R3444)
   ring_low_land_s: ''           # for this long in a row (s; '' = 3.0)
+  take_back_avoid_pickup_m: ''  # a take-back never comes down within this of his pickup point (m; '' = off; Wesley 13 Nov, the stand)
+  attach_pause_through_landing: ''  # his LANDING keeps the attach pause until he is down ('' = off; 13 Nov, the drop-off over a paused ring)
 fleet_resize:
   reconfig_hold_s: 1.5
   min_survivors: 3

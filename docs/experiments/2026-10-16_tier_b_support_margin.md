@@ -182,3 +182,8 @@ planned pull at 150 deg dropped the ring 2 of 2); G180's ~61 deg or G150p's ~29.
 ">=" values cut at the fault or the drop); "the gap rule drops the ring before it passes 30 deg" (R1917: it won the
 race in 1 of 2 runs, after the ring had passed 30 deg).
 
+
+## At 1 m, final tree and masses (7 Nov, R4140-R4149 + R4033 / R4032; feed F084)
+B1, B2, B4 CONFIRMED as frozen here (judged after the run, F075); B3 not flown (planned pull dropped, Wesley 2 Nov); B5
+not confirmed (R4145's freed drone disarmed with the fleet at the drop's LANDED), not falsified (no abort or fault latch
+G120-G165). Details: docs/experiments/2026-10-23_refly_1m.md, last section.

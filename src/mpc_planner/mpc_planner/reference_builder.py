@@ -37,9 +37,11 @@ def unload_tensions(rho, s_dirs, load_mass, k, t_leave, rod_mass=0.0, rod_lam=0.
     slot k's remaining pull counted (the static balance of balanced_tensions, least squares
     from the equal split). With the directions unchanged a linear blend to it is balanced
     all the way, because both ends are. After the release the n-1 builder's own split
-    differs from this by slot k's t_leave share; the post-release blend covers that."""
+    differs from this by slot k's t_leave share; the post-release blend covers that.
+    k may be a list of slots (the set detach): every one at t_leave, the rest balanced with all their pulls counted."""
     n = len(rho)
-    keep = [i for i in range(n) if i != k]
+    ks = [int(k)] if np.ndim(k) == 0 else [int(x) for x in k]
+    keep = [i for i in range(n) if i not in ks]
     s = [np.asarray(v, float).reshape(3) for v in s_dirs]
     r = [np.asarray(v, float).reshape(3) for v in rho]
     b = np.array([0.0, 0.0, -float(load_mass) * g, 0.0, 0.0, 0.0])
@@ -49,8 +51,9 @@ def unload_tensions(rho, s_dirs, load_mass, k, t_leave, rod_mass=0.0, rod_lam=0.
             R_i = rod_mass * (rod_lam * float(G @ s[i]) * s[i] + (1.0 - rod_lam) * G)
             b[0:3] += R_i
             b[3:6] += np.cross(r[i], R_i)
-    f_k = float(t_leave) * s[k]
-    b = b - np.concatenate([f_k, np.cross(r[k], f_k)])
+    for kk in ks:
+        f_k = float(t_leave) * s[kk]
+        b = b - np.concatenate([f_k, np.cross(r[kk], f_k)])
     A = np.stack([np.concatenate([s[i], np.cross(r[i], s[i])]) for i in keep], axis=1)
     sz = -np.mean([s[i][2] for i in keep])
     t_eq = np.full(len(keep), -b[2] / max(len(keep) * sz, 1e-9))
@@ -62,7 +65,8 @@ def unload_tensions(rho, s_dirs, load_mass, k, t_leave, rod_mass=0.0, rod_lam=0.
     out = [0.0] * n
     for i, v in zip(keep, t):
         out[i] = float(max(v, t_min))
-    out[k] = float(t_leave)
+    for kk in ks:
+        out[kk] = float(t_leave)
     return out
 
 

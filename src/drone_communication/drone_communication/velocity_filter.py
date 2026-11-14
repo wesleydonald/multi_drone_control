@@ -24,6 +24,12 @@ class VelocityFilter:
         self._last = None
         self._v = None
 
+    def reset(self):
+        """Forget every sample: the next one starts a new estimate (after a gap in the poses)."""
+        self._hist.clear()
+        self._last = None
+        self._v = None
+
     def update(self, t, p):
         """Velocity (3,) after the sample at time t (s) and position p (3,); None for the first sample or t not
         after the last one."""

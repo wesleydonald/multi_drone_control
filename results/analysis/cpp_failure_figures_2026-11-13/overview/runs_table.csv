@@ -1,0 +1,92 @@
+run,name,traj,start,shape,swing_deg,spline,tracking_m,cap_m,workspace,refresh_s,splice_s,tti,paused,ring_speed_at_transit,cpp_started,reached_drop,transit_s,z_max_transit,closest_in_transit_m,closest_pair,quad4_to_ring_centre_at_end_m,rtf
+R4338,t13_hover_s1_cpp_twin,hover,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.1,0.313,object-cable,0.67,0.0
+R4339,t13_circle_s1_cpp_twin,circle,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.123,yes,no,,3.1,0.0,cable-cable,1.13,0.0
+R4340,t13_fig8_s1_cpp_twin,fig8,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.116,yes,no,,3.56,0.005,cable-body,0.04,0.0
+R4341,t13_hover_s9_cpp_twin,hover,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.21,0.61,object-cable,0.83,0.0
+R4342,t13_hover_s5_cpp_twin,hover,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,2.99,0.597,object-cable,0.89,0.0
+R4343,t13_circle_s9_cpp_twin,circle,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.144,yes,no,,3.61,0.374,object-cable,0.23,0.0
+R4344,t13_circle_s5_cpp_twin,circle,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.14,yes,no,,3.08,0.177,object-cable,0.63,0.0
+R4345,t13_fig8_s9_cpp_twin,fig8,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.12,yes,no,,3.56,0.132,cable-cable,0.16,0.0
+R4346,t13_fig8_s5_cpp_twin,fig8,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.122,yes,no,,3.12,-0.048,object-cable,0.68,0.0
+R4347,t13_hover_s1_cppre_twin,hover,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.12,0.598,object-cable,0.78,0.0
+R4348,t13_circle_s1_cppre_twin,circle,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.122,yes,no,,3.21,0.033,object-cable,0.84,0.0
+R4349,t13_fig8_s1_cppre_twin,fig8,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.121,yes,no,,3.58,0.453,object-body,0.1,0.0
+R4352,t13_hover_s9_cpp_twin,hover,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.26,0.574,object-cable,0.74,0.0
+R4353,t13_hover_s1_cpp_twin,hover,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.09,0.35,object-cable,0.5,0.0
+R4354,t13_hover_s5_cpp_twin,hover,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,2.89,0.401,object-cable,0.51,0.0
+R4355,t13_circle_s9_cpp_twin,circle,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.144,yes,no,,3.46,-0.036,object-cable,0.3,0.0
+R4356,t13_circle_s1_cpp_twin,circle,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.122,yes,no,,3.58,0.532,object-body,0.07,0.0
+R4357,t13_circle_s5_cpp_twin,circle,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.123,yes,no,,3.05,0.085,object-cable,0.86,0.0
+R4358,t13_fig8_s9_cpp_twin,fig8,s9,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.124,yes,no,,3.74,0.161,object-body,0.28,0.0
+R4359,t13_fig8_s1_cpp_twin,fig8,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.124,yes,no,,3.21,-0.072,object-cable,1.13,0.0
+R4360,t13_fig8_s5_cpp_twin,fig8,s5,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.122,yes,no,,3.65,-0.045,object-cable,0.09,0.0
+R4361,t13_hover_s1_cppre_twin,hover,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.0,yes,no,,2.91,0.462,object-cable,0.64,0.0
+R4362,t13_circle_s1_cppre_twin,circle,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.121,yes,yes,158.1,3.63,0.153,object-cable,0.08,0.0
+R4363,t13_fig8_s1_cppre_twin,fig8,s1,legacy_square (default),default,default,default,none,none,none,0.10 (default),default,no,0.12,yes,no,,3.23,-0.056,object-cable,1.1,0.0
+R4366,t13_hover_s9_cpp_sw5_twin,hover,s9,legacy_square (default),5.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4367,t13_hover_s1_cpp_sw5_twin,hover,s1,legacy_square (default),5.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4368,t13_hover_s5_cpp_sw5_twin,hover,s5,legacy_square (default),5.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4369,t13_circle_s9_cpp_sw5_twin,circle,s9,legacy_square (default),5.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4370,t13_hover_s9_cpp_sw3_twin,hover,s9,legacy_square (default),3.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4371,t13_circle_s9_cpp_sw3_twin,circle,s9,legacy_square (default),3.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4372,t13_hover_s9_cpp_sw7_twin,hover,s9,legacy_square (default),7.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4373,t13_circle_s9_cpp_sw7_twin,circle,s9,legacy_square (default),7.0,4,0.06,none,1.8,none,0.10 (default),default,no,,no,no,,,,,nan,0.0
+R4374,t13_hover_s9_cpp_sw5_nows_twin,hover,s9,legacy_square (default),5.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.0,yes,no,,3.2,0.518,object-cable,0.67,0.0
+R4375,t13_hover_s1_cpp_sw5_nows_twin,hover,s1,legacy_square (default),5.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.0,yes,no,,3.09,0.363,object-cable,0.54,0.0
+R4376,t13_hover_s5_cpp_sw5_nows_twin,hover,s5,legacy_square (default),5.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.0,yes,no,,3.08,0.347,object-cable,0.5,0.0
+R4377,t13_circle_s9_cpp_sw5_nows_twin,circle,s9,legacy_square (default),5.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.124,yes,yes,86.4,3.5,0.001,object-cable,0.06,0.0
+R4378,t13_hover_s9_cpp_sw3_nows_twin,hover,s9,legacy_square (default),3.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.0,yes,no,,3.14,0.498,object-cable,0.63,0.0
+R4379,t13_hover_s9_cpp_sw5_nows_inf4_twin,hover,s9,legacy_square (default),5.0,4,"0.04""",none,none,none,0.10 (default),default,no,0.0,yes,no,,3.14,0.477,object-cable,0.65,0.0
+R4380,t13_hover_s9_cpp_sw5_nows_body90_twin,hover,s9,legacy_square (default),5.0,4,0.06,none,none,none,0.10 (default),default,no,0.0,yes,no,,3.15,0.491,object-cable,0.67,0.0
+R4381,t13_hover_s9_cpp_sw5_nows_spl6_twin,hover,s9,legacy_square (default),5.0,6,"0.06""",none,none,none,0.10 (default),default,no,0.0,yes,no,,2.89,0.521,object-cable,0.67,0.0
+R4382,t13_circle_s9_cpp_sw5_nows_r2_twin,circle,s9,legacy_square (default),5.0,4,"0.06""",none,none,none,0.10 (default),default,no,0.124,yes,yes,75.9,3.87,0.006,object-cable,0.07,0.0
+R4383,t13_hover_s9_cpp_sw5_nows_oct_twin,hover,s9,"outer_octagon""",5.0,4,0.06,none,none,none,0.10 (default),default,no,0.0,yes,yes,10.3,2.89,0.341,object-cable,0.08,0.0
+R4384,t13_hover_s1_cpp_sw5_nows_oct_twin,hover,s1,"outer_octagon""",5.0,4,0.06,none,none,none,0.10 (default),default,no,0.0,yes,yes,13.9,3.2,0.337,object-cable,0.07,0.0
+R4385,t13_hover_s5_cpp_sw5_nows_oct_twin,hover,s5,"outer_octagon""",5.0,4,0.06,none,none,none,0.10 (default),default,no,0.0,yes,yes,9.4,3.14,0.353,object-cable,0.08,0.0
+R4386,t13_circle_s9_cpp_sw5_nows_oct_twin,circle,s9,"outer_octagon""",5.0,4,0.06,none,none,none,0.10 (default),default,no,0.148,yes,no,,3.33,0.153,object-cable,1.21,0.0
+R4387,t13_fig8_s9_cpp_sw5_nows_oct_twin,fig8,s9,"outer_octagon""",5.0,4,0.06,none,none,none,0.10 (default),default,no,0.125,yes,no,,3.46,0.238,object-cable,1.27,0.0
+R4388,t13_circle_s9_cpp_sw5_nows_oct_tti30_twin,circle,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),"30""",no,0.123,yes,no,,3.3,-0.019,object-cable,0.15,0.0
+R4389,t13_circle_s1_cpp_sw5_nows_oct_tti30_twin,circle,s1,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),"30""",no,0.148,yes,yes,123.2,3.51,0.151,object-cable,0.07,0.0
+R4390,t13_circle_s5_cpp_sw5_nows_oct_tti30_twin,circle,s5,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),"30""",no,0.123,yes,yes,52.1,3.17,0.081,object-cable,0.08,0.0
+R4391,t13_fig8_s9_cpp_sw5_nows_oct_tti30_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),"30""",no,0.123,yes,yes,87.0,3.61,0.357,object-cable,0.09,0.0
+R4392,t13_hover_s9_cpp_sw5_nows_oct_tti30_twin,hover,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),"30""",no,0.0,yes,yes,10.3,2.9,0.342,object-cable,0.08,0.0
+R4399,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retcpp_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.116,yes,yes,19.0,3.34,0.371,object-cable,0.08,0.0
+R4400,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.139,yes,yes,36.6,3.29,0.38,object-cable,0.1,0.0
+R4401,t13_fig8_s9_cpp_sw5_ws24z29_oct_tti30_retcpp_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,2.4,none,0.10 (default),30,no,,no,no,,,,,nan,0.0
+R4403,t13_circle_s5_cpp_sw5_nows_oct_tti30_retcpp_twin,circle,s5,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.128,yes,yes,109.3,3.57,0.028,object-cable,0.07,0.0
+R4404,t13_hover_s9_cpp_sw5_nows_oct_tti30_retcpp_twin,hover,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.0,yes,yes,10.3,2.89,0.341,object-cable,0.08,0.0
+R4405,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retcpp_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.118,yes,no,,3.24,-0.03,object-cable,1.43,0.0
+R4406,t13_hover_s9_cpp_sw5_nows_oct_tti30_retcpp_twin,hover,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.0,yes,yes,10.2,2.89,0.34,object-cable,0.08,0.0
+R4407,t13_circle_s5_cpp_sw5_nows_oct_tti30_retcpp_twin,circle,s5,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.122,yes,yes,67.3,3.84,0.43,object-cable,0.02,0.0
+R4408,t13_fig8_s9_cpp_sw5_ws24z30_oct_tti30_retcpp_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,2.4,none,0.10 (default),30,no,,no,no,,,,,nan,0.0
+R4411,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,none,0.10 (default),30,no,0.13,yes,no,,2.89,0.0,cable-cable,0.89,0.0
+R4412,t13_circle_s5_cpp_sw5_nows_oct_tti30_retdirect_top29_twin,circle,s5,outer_octagon,5.0,4,0.06,2.9,none,none,0.10 (default),30,no,0.128,yes,no,,2.89,0.969,object-cable,1.97,0.0
+R4413,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retcpp_climbtransit_twin,fig8,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.141,yes,yes,31.4,3.84,0.43,object-cable,0.03,0.0
+R4414,t13_hover_s9_cpp_sw5_nows_oct_tti30_retcpp_climbtransit_twin,hover,s9,outer_octagon,5.0,4,0.06,none,none,none,0.10 (default),30,no,0.0,yes,yes,10.4,2.9,0.343,object-cable,0.08,0.0
+R4417,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top28_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.8,none,none,0.10 (default),30,no,0.127,yes,no,,2.89,0.001,cable-cable,0.7,0.0
+R4418,t13_fig8_s9_cpp_sw5_nows_spl3_oct_tti30_retdirect_top28_twin,fig8,s9,outer_octagon,5.0,3,0.06,2.8,none,none,0.10 (default),30,no,0.118,yes,yes,196.3,2.9,-0.067,object-cable,0.05,0.0
+R4419,t13_fig8_s9_cpp_sw5_nows_inf4_oct_tti30_retdirect_top28_twin,fig8,s9,outer_octagon,5.0,4,0.04,2.8,none,none,0.10 (default),30,no,0.128,yes,yes,35.0,2.89,-0.074,object-cable,0.08,0.0
+R4420,t13_fig8_s9_cpp_sw3_nows_oct_tti30_retdirect_top28_twin,fig8,s9,outer_octagon,3.0,4,0.06,2.8,none,none,0.10 (default),30,no,0.114,yes,yes,31.7,2.89,0.281,object-cable,0.04,0.0
+R4421,t13_fig8_s9_cpp_sw3_nows_inf4_spl3_oct_tti30_retdirect_top28_twin,fig8,s9,outer_octagon,3.0,3,0.04,2.8,none,none,0.10 (default),30,no,0.122,yes,yes,13.4,2.9,0.308,object-cable,0.05,0.0
+R4422,t13_circle_s5_cpp_sw3_nows_inf4_spl3_oct_tti30_retdirect_top28_twin,circle,s5,outer_octagon,3.0,3,0.04,2.8,none,none,0.10 (default),30,no,0.127,yes,no,,2.89,1.381,object-cable,2.28,0.0
+R4423,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_pausetakeoff_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.2,2.9,0.343,object-cable,0.08,0.0
+R4424,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top38_wr20_pausetakeoff_twin,fig8,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.4,2.89,0.342,object-cable,0.08,0.0
+R4425,t13_circle_s5_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_pausetakeoff_twin,circle,s5,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.10 (default),30,yes,0.0,yes,yes,24.6,2.9,0.3,object-cable,0.09,0.0
+R4426,t13_hover_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_twin,hover,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.10 (default),30,no,0.0,yes,yes,10.4,2.89,0.341,object-cable,0.08,0.0
+R4427,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retcpp_climbtransit_top38_wr20_pausetakeoff_twin,fig8,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.1,2.9,0.342,object-cable,0.09,0.0
+R4429,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top38_wr20_pausetakeoff_landtransit_to_drop_point_twin,fig8,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,yes,0.0,yes,no,,2.88,1.575,object-cable,1.9,0.0
+R4430,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top38_wr20_pausetakeoff_landclear_drop_zone_twin,fig8,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.3,2.89,0.34,object-cable,0.08,0.0
+R4431,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top38_wr20_pausetakeoff_landreturn_to_start_twin,fig8,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.2,2.89,0.342,object-cable,0.08,0.0
+R4432,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_pausetakeoff_r2_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.10 (default),30,yes,0.0,yes,yes,10.3,2.89,0.342,object-cable,0.07,0.0
+R4433,t13_circle_s5_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_pausetakeoff_r2_twin,circle,s5,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.10 (default),30,yes,0.0,yes,no,,2.89,0.34,object-cable,0.53,0.0
+R4434,t13_hover_s9_cpp_sw5_nows_oct_tti30_retcpp_climbtransit_top38_wr20_twin,hover,s9,outer_octagon,5.0,4,0.06,3.8,none,0.2,0.10 (default),30,no,0.0,yes,yes,10.4,2.89,0.344,object-cable,0.08,0.0
+R4435,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,20.1,2.89,0.328,object-cable,0.07,0.0
+R4436,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_r2_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,18.0,2.9,0.334,object-cable,0.08,0.0
+R4437,t13_circle_s5_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_twin,circle,s5,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,25.6,2.9,0.29,object-cable,0.1,0.0
+R4438,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_landtransit_to_drop_point_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,,no,no,,,,,nan,0.0
+R4439,t13_circle_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_twin,circle,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,16.5,2.89,0.303,object-cable,0.08,0.0
+R4440,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,no,0.124,yes,no,,2.89,0.037,object-cable,0.59,0.0
+R4441,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_landtransit_to_drop_point_r2_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,no,,2.89,1.543,object-cable,2.13,0.0
+R4442,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_landtransit_to_drop_point_r3_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,no,,2.88,1.541,object-cable,2.12,0.0
+R4443,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_landclear_drop_zone_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,23.2,2.89,0.302,object-cable,0.08,0.0
+R4444,t13_fig8_s9_cpp_sw5_nows_oct_tti30_retdirect_top29_wr20_splice20_pausetakeoff_gate10_landreturn_to_start_twin,fig8,s9,outer_octagon,5.0,4,0.06,2.9,none,0.2,0.2,30,yes,0.0,yes,yes,19.4,2.89,0.307,object-cable,0.08,0.0

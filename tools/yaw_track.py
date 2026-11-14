@@ -7,7 +7,8 @@
 
 From the 22 Oct rig day (ls3, ls3c). The desired yaw is the planner's yaw datum (the ring's yaw at the path's start)
 plus LoadTrajectory.yaw_at(traj_t) for the run's own load_traj / traj_speed / traj_distance / traj_radius
-(params.json); traj_t comes from the planner's log, aligned to run.csv on the ring's lift-off. Printed (deg, s):
+(params.json); traj_t comes from the planner's log, on run.csv's clock through record.json's t_ready_sim (twin runs;
+rig runs, which have none, are lined up on the ring's lift-off, a few tens of ms off: feed F077). Printed (deg, s):
   error            ring minus desired over the path: mean, rms, max |.|
   delay            the time shift of the ring's yaw that best matches the desired (+ = the ring is late) and the
                    rms left after it
@@ -53,6 +54,16 @@ def _lift(t, z):
     return float(t[np.argmax(z > np.median(z[:20]) + 0.03)])
 
 
+def _run_clock(run, L, d):
+    """The planner log's sim_time on run.csv's clock: run t = sim time - t_ready_sim (record.json, twin runs); without it
+    (rig runs) line the two up on the ring's lift-off, 0.01-0.08 s off on the 7 Nov twin runs (F077)."""
+    rec = os.path.join(run, 'record.json')
+    t_ready = json.load(open(rec)).get('t_ready_sim') if os.path.exists(rec) else None
+    if t_ready is not None:
+        return L.sim_time - float(t_ready)
+    return L.sim_time - (_lift(L.sim_time, L.load_z) - _lift(d.t, d.payload_z))
+
+
 def _yaw_deg(q):
     q = np.asarray(q, float)
     return np.degrees(np.unwrap(np.arctan2(2 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]),
@@ -93,7 +104,7 @@ def track(arg, old_law=False):
     csvs = sorted(run_logs.planner_csvs(logs), key=lambda p: -os.path.getsize(p))
     L = pd.read_csv(csvs[0])
     P = json.load(open(os.path.join(os.path.dirname(csvs[0]), 'params.json')))
-    L['run_t'] = L.sim_time - (_lift(L.sim_time, L.load_z) - _lift(d.t, d.payload_z))
+    L['run_t'] = _run_clock(run, L, d)
     cls = OldLineSpin if old_law else LoadTrajectory
     traj = cls.from_params(P)
     t = d.t.to_numpy()

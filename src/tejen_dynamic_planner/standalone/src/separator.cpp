@@ -114,11 +114,134 @@ SeparationLP buildSeparationLP(const Eigen::MatrixXd& first_vertices,
     return lp;
 }
 
+SeparationResult certifyProjectedSeparation(
+    const Eigen::MatrixXd& first_vertices,
+    const Eigen::MatrixXd& second_vertices,
+    const Eigen::Vector3d& direction,
+    double minimum_gap_m,
+    double validation_tolerance) {
+    validatePoints(first_vertices, "first_vertices");
+    validatePoints(second_vertices, "second_vertices");
+    if (!(minimum_gap_m >= 0.0) || !std::isfinite(minimum_gap_m) ||
+        !(validation_tolerance > 0.0) || !std::isfinite(validation_tolerance)) {
+        throw std::invalid_argument("invalid projection gap or validation tolerance");
+    }
+    SeparationResult result;
+    result.backend = "projection";
+    result.status = "DIRECTION_NOT_CERTIFIED";
+    const double direction_norm = direction.norm();
+    if (!direction.allFinite() || !(direction_norm > 1e-12) ||
+        !std::isfinite(direction_norm)) return result;
+
+    const Eigen::Vector3d unit = direction / direction_norm;
+    const double first_support = (first_vertices * unit).maxCoeff();
+    const double second_support = (second_vertices * unit).minCoeff();
+    const double gap = second_support - first_support;
+    if (!(gap > 0.0) || gap < minimum_gap_m || !std::isfinite(gap)) return result;
+
+    SeparatingPlane plane;
+    plane.normal = (2.0 / gap) * unit;
+    plane.offset = -(first_support + 0.5 * gap) * (2.0 / gap);
+    const double norm = plane.normal.norm();
+    if (!plane.normal.allFinite() || !std::isfinite(plane.offset) ||
+        !(norm > 1e-12) || !std::isfinite(norm)) return result;
+
+    // Do not trust support arithmetic alone: the actual returned coefficients
+    // must satisfy the same independent row residual check as the LP output.
+    const double first_max = (first_vertices * plane.normal).maxCoeff() + plane.offset;
+    const double second_min = (second_vertices * plane.normal).minCoeff() + plane.offset;
+    const double actual_gap = (second_min - first_max) / norm;
+    if (!std::isfinite(first_max) || !std::isfinite(second_min) ||
+        first_max > -1.0 + validation_tolerance || second_min < 1.0 - validation_tolerance ||
+        !(actual_gap > 0.0) || actual_gap < minimum_gap_m) return result;
+
+    result.feasible = true;
+    result.plane = plane;
+    result.first_max_value = first_max;
+    result.second_min_value = second_min;
+    result.geometric_gap_m = actual_gap;
+    result.status = "VALIDATED_PROJECTION";
+    return result;
+}
+
 Separator::Separator(double validation_tolerance)
     : validation_tolerance_(validation_tolerance) {
     if (!(validation_tolerance_ > 0.0) || !std::isfinite(validation_tolerance_)) {
         throw std::invalid_argument("validation_tolerance must be finite and positive");
     }
+}
+
+SeparationResult Separator::solveWithFastPaths(
+    const Eigen::MatrixXd& first_vertices,
+    const Eigen::MatrixXd& second_vertices,
+    const std::optional<Eigen::Vector3d>& hint_direction) {
+    validatePoints(first_vertices, "first_vertices");
+    validatePoints(second_vertices, "second_vertices");
+    const auto certify = [&](const Eigen::Vector3d& direction) {
+        return certifyProjectedSeparation(first_vertices, second_vertices, direction,
+                                          0.0, validation_tolerance_);
+    };
+    if (hint_direction) {
+        auto result = certify(*hint_direction);
+        if (result.feasible) return result;
+    }
+    const Eigen::Vector3d first_lo = first_vertices.colwise().minCoeff().transpose();
+    const Eigen::Vector3d first_hi = first_vertices.colwise().maxCoeff().transpose();
+    const Eigen::Vector3d second_lo = second_vertices.colwise().minCoeff().transpose();
+    const Eigen::Vector3d second_hi = second_vertices.colwise().maxCoeff().transpose();
+    for (int axis = 0; axis < 3; ++axis) {
+        Eigen::Vector3d direction = Eigen::Vector3d::Zero();
+        if (first_hi(axis) < second_lo(axis)) direction(axis) = 1.0;
+        else if (second_hi(axis) < first_lo(axis)) direction(axis) = -1.0;
+        else continue;
+        auto result = certify(direction);
+        if (result.feasible) return result;
+    }
+    auto result = certify((second_vertices.colwise().mean() -
+                           first_vertices.colwise().mean()).transpose());
+    if (result.feasible) return result;
+    return solve(first_vertices, second_vertices);
+}
+
+SeparationResult Separator::solveWithMinimumGap(
+    const Eigen::MatrixXd& first_vertices,
+    const Eigen::MatrixXd& second_vertices,
+    double minimum_gap_m,
+    const std::optional<Eigen::Vector3d>& hint_direction) {
+    if (!std::isfinite(minimum_gap_m) || minimum_gap_m < 0.)
+        throw std::invalid_argument("minimum separator gap must be finite and nonnegative");
+    const auto before = num_lps_run_;
+    const auto initial = solveWithFastPaths(first_vertices, second_vertices, hint_direction);
+    if (minimum_gap_m == 0. || !initial.feasible) return initial;
+    const auto checked = [&](const Eigen::Vector3d& direction) {
+        return certifyProjectedSeparation(first_vertices, second_vertices, direction,
+                                          minimum_gap_m, validation_tolerance_);
+    };
+    if (initial.plane) {
+        auto result = checked(initial.plane->normal);
+        if (result.feasible) return result;
+    }
+    // A valid axis separator may be arbitrarily tight at a rotated corner.
+    // Alternate directions are hints only: current supports certify each one.
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            for (int z = -1; z <= 1; ++z) {
+                if (x == 0 && y == 0 && z == 0) continue;
+                auto result = checked(Eigen::Vector3d(x, y, z));
+                if (result.feasible) return result;
+            }
+        }
+    }
+    if (num_lps_run_ == before) {
+        const auto fallback = solve(first_vertices, second_vertices);
+        if (fallback.feasible && fallback.plane) {
+            auto result = checked(fallback.plane->normal);
+            if (result.feasible) return result;
+        }
+    }
+    SeparationResult rejected;
+    rejected.status = "NO_MINIMUM_GAP_CERTIFICATE";
+    return rejected;
 }
 
 SeparationResult Separator::solve(const Eigen::MatrixXd& first_vertices,

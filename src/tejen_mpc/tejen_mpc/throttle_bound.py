@@ -4,6 +4,7 @@ import numpy as np
 
 # his OCP's throttle-state upper bound as acados.py builds it (ubx[0] on idxbx [15, 13, 14, 16])
 THROTTLE_STATE_MAX = 0.6
+THROTTLE_STATE_INDEX = 15     # the throttle (control) state in his OCP: idxbx [15, 13, 14, 16] (acados.py)
 
 
 def set_throttle_state_max(ocp_solver, value, max_rate=1.0):
@@ -14,6 +15,14 @@ def set_throttle_state_max(ocp_solver, value, max_rate=1.0):
     if not THROTTLE_STATE_MAX <= value <= 0.95:
         raise ValueError(f'throttle_state_max {value} outside [{THROTTLE_STATE_MAX}, 0.95]')
     ub = np.array([value, max_rate, max_rate, max_rate])
+    # Te-Jen's review 11 Nov: keep the state bounds the solver was built with (a later profile may differ); only the
+    # throttle state's entry changes
+    cons = getattr(getattr(ocp_solver, 'acados_ocp', None), 'constraints', None)
+    built = None if cons is None else getattr(cons, 'ubx', None)
+    idx = None if cons is None else getattr(cons, 'idxbx', None)
+    if built is not None and idx is not None and THROTTLE_STATE_INDEX in [int(i) for i in idx]:
+        ub = np.array(built, dtype=float).copy()
+        ub[[int(i) for i in idx].index(THROTTLE_STATE_INDEX)] = value
     n = int(ocp_solver.acados_ocp.solver_options.N_horizon)
     for i in range(1, n):
         ocp_solver.constraints_set(i, 'ubx', ub)

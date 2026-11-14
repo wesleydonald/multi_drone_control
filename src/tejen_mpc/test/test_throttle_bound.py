@@ -42,3 +42,15 @@ def test_battery_offset_reaches_the_channel_but_never_a_zero_throttle_command():
     from tejen_mpc.throttle_bound import battery_compensated_channel as ch
     assert ch(0.2, 0.044) == round((0.6 + 0.044) * 2 - 1, 3)        # 0.60 -> 0.644
     assert ch(-1.0, 0.05) == -1.0 and ch(0.2, 0.0) == 0.2 and ch(0.95, 0.10) == 1.0
+
+
+def test_the_solvers_own_state_bounds_are_kept():
+    """Te-Jen's review 11 Nov: only the throttle state's bound changes; the other state bounds stay as built."""
+    s = FakeSolver(n=4)
+    s.acados_ocp.constraints = SimpleNamespace(ubx=np.array([0.6, 3.0, 2.0, 1.5]), idxbx=np.array([15, 13, 14, 16]))
+    set_throttle_state_max(s, 0.8)
+    assert all(np.allclose(c[2], [0.8, 3.0, 2.0, 1.5]) for c in s.calls)
+    s = FakeSolver(n=4)
+    s.acados_ocp.constraints = SimpleNamespace(ubx=np.array([2.0, 0.6]), idxbx=np.array([13, 15]))
+    set_throttle_state_max(s, 0.9)
+    assert all(np.allclose(c[2], [2.0, 0.9]) for c in s.calls)

@@ -272,7 +272,7 @@ class TieredDescent:
 
     def __init__(self, alignment, *, start_height_m, floor_m, speed_mps,
                  high_xy_m=.05, low_speed_mps=None, low_entry_height_m=None,
-                 pause_low_for_xy=True):
+                 pause_low_for_xy=True, low_hold_xy_m=None):
         self.alignment = alignment
         self.height_m = float(start_height_m)
         self.raise_ceiling_m = max(float(start_height_m), alignment.config.pre_low_normal_m)
@@ -283,6 +283,11 @@ class TieredDescent:
         self.low_entry_height_m = (alignment.config.min_normal_m if low_entry_height_m is None
                                   else float(low_entry_height_m))
         self.pause_low_for_xy = bool(pause_low_for_xy)
+        # multi_drone_control 11 Nov (RIG-1111-fm9c*): the height also holds in LOW while the tip is this far off, with
+        # no dwell (the tip swings 4-9 cm on its 1 m cable; the crossing into LOW keeps low_xy_m and its dwell)
+        self.low_hold_xy_m = None if low_hold_xy_m is None else float(low_hold_xy_m)
+        if self.low_hold_xy_m is not None and not 0 < self.low_hold_xy_m <= alignment.config.low_xy_m:
+            raise ValueError('pickup LOW hold must be positive and no wider than the LOW tolerance')
         if (not all(math.isfinite(v) for v in
                     (self.height_m, self.floor_m, self.speed_mps, self.high_xy_m,
                      self.low_speed_mps, self.low_entry_height_m))
@@ -337,7 +342,8 @@ class TieredDescent:
                     self.height_m <= self.low_entry_height_m+self.speed_mps*dt):
                 self.reason = tip.reason
                 return
-        tolerance = cfg.low_xy_m if self.band == 'LOW' else self.high_xy_m
+        low_xy = cfg.low_xy_m if self.low_hold_xy_m is None else self.low_hold_xy_m
+        tolerance = low_xy if self.band == 'LOW' else self.high_xy_m
         if xy > tolerance and (self.band == 'HIGH' or self.pause_low_for_xy):
             self.reason = 'Z frozen while XY catches up'
             return

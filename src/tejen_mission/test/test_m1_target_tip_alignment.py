@@ -18,7 +18,9 @@ def method(name, **extra):
     fn = next((n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
     assert fn is not None, f'missing planner adapter: {name}'
     from tejen_mission.mission_types import MissionPhase, TargetSource
-    scope = dict(np=np, math=math, MissionPhase=MissionPhase, TargetSource=TargetSource, **extra)
+    import tejen_mission.online_join_planner as planner
+    scope = dict(np=np, math=math, MissionPhase=MissionPhase, TargetSource=TargetSource,
+                 FORCE_DROP_PHASES=planner.FORCE_DROP_PHASES, pressed_candidate_hold=planner.pressed_candidate_hold, **extra)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[])), str(PLANNER), 'exec'), scope)
     return scope[name]
 

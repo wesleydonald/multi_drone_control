@@ -1,0 +1,6 @@
+configs/experiments_oldlinks/x2_full_fig8_soft.yaml
+configs/experiments_oldlinks/x2_full_fig8_soft.yaml
+configs/experiments_oldlinks/x2_full_fig8_unann.yaml
+configs/experiments_oldlinks/x2_full_fig8_unann.yaml
+configs/experiments_oldlinks/x2_full_fig8_base.yaml
+configs/experiments_oldlinks/x2_full_fig8_base.yaml

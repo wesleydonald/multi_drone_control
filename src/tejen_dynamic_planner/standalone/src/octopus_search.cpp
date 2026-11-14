@@ -716,6 +716,9 @@ std::pair<bool, std::vector<IntervalSeparator>> OctopusSearch::finalCheck(
     const ControlPoints& control_points) {
     std::vector<IntervalSeparator> separators;
     separators.reserve(static_cast<std::size_t>(num_segments_) * obstacles_.size());
+    // Directions are local hints only. Each subsequent interval is certified
+    // against its own current hull; no obstacle/world verdict is cached.
+    std::vector<std::optional<Vec3>> directions(obstacles_.size());
 
     // Keep the exact separator result for every chosen interval/obstacle pair.
     // Refinement consumes these planes as fixed QP constraints, so unlike the
@@ -724,7 +727,8 @@ std::pair<bool, std::vector<IntervalSeparator>> OctopusSearch::finalCheck(
         FourPoints interval_cp;
         interval_cp = control_points.middleRows(interval, 4);
         const FourPoints q_minvo = minvoVertices(interval_cp, interval, num_segments_);
-        for (const auto& obstacle : obstacles_) {
+        for (std::size_t obstacle_index = 0; obstacle_index < obstacles_.size(); ++obstacle_index) {
+            const auto& obstacle = obstacles_[obstacle_index];
             const Matrix4 parent_map = positionConverters(num_segments_).at(
                 static_cast<std::size_t>(interval)).transpose();
             if (config_.temporal_refinement.enabled && obstacle.temporal_hull_builder) {
@@ -788,10 +792,20 @@ std::pair<bool, std::vector<IntervalSeparator>> OctopusSearch::finalCheck(
                 }
                 continue;
             }
-            ++separator_calls_;
-            SeparationResult result = separator_.solve(
-                q_minvo,
-                obstacle.interval_vertices.at(static_cast<std::size_t>(interval)));
+            const auto lps_before = separator_.numLPsRun();
+            const auto& obstacle_vertices = obstacle.interval_vertices.at(
+                static_cast<std::size_t>(interval));
+            // Preserve the commissioned fixed-plane/QP choices for ordinary
+            // eight-corner box hulls. Expanded convex assembly hulls are the
+            // costly path targeted here; their canonical planes are nonunique.
+            SeparationResult result = obstacle_vertices.rows() > 8
+                ? separator_.solveWithFastPaths(q_minvo, obstacle_vertices,
+                                                directions[obstacle_index])
+                : separator_.solve(q_minvo, obstacle_vertices);
+            separator_calls_ += separator_.numLPsRun() - lps_before;
+            if (result.feasible && result.plane) {
+                directions[obstacle_index] = result.plane->normal;
+            }
             IntervalSeparator item;
             item.obstacle_name = obstacle.name;
             item.interval_index = interval;
@@ -1237,6 +1251,7 @@ OctopusResult OctopusSearch::search() {
             result.diagnostic_control_points = completed;
             result.separators = std::move(separators);
             result.partial_fallback_selected_rank = rank + 1U;
+            result.partial_fallback_selected_index = candidate->index;
             result.goal_distance_m =
                 (completed.row(final_search_index_).transpose() - goal_).norm();
             break;

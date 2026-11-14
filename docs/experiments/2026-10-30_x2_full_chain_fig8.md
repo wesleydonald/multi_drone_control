@@ -448,3 +448,20 @@ The current tree, not the final one: the claim re-flies after the freeze and the
 | Lap 6 | It flies a datum moved 53-58 mm: the ring to lap 1's reference is 36.6-39.7 mm RMS against the base's 10.5, 10.6. |
 
 Reviewer's scorer and output: `results/analysis/review_x2_x8_2026-11-04/rev_x2/`.
+
+## The claim re-fly on the earlier quadrotor masses (7 Nov, R3986-R3991; feed F069, reviewer F070)
+One tree for all six (git bf52a8a, diff_sha256 f9ef4ab959d3; the section-5 code hash 5e7b1d3bd133), no void, every
+return counted. Bars as written above.
+- **A: FALSIFIED** by R3986 (this card's section 5: any of A2-A6 missed in a valid repeat; A1 over 30 deg). A1's rise
+  from the 5 s mean 30.45 deg against 30 (absolute peak 31.03; the rise over 30 deg for 0.15 s), and the last fold-in
+  5.36 deg against 5 (0.19 s over). R3987 holds every bar (29.39, 4.13 deg). On 3 Nov, on the same masses, A held
+  (29.09 / 27.82; 3.00 / 3.30 deg): today's A1 is 1.3-1.6 deg higher, about the spread between repeats (1.1-1.3).
+- **B: CONFIRMED** in both repeats under the bar that replaced T6 (largest tilt from +6 s: 2.72 / 2.97 deg against 5).
+  That bar's value was set by Wesley on 4 Nov ~22:20 after R3586-R3591 (decisions.md), not on 31 Oct as the header
+  of "Bars for the later runs" reads. The original T6 stays recorded as missed (37.64 / 35.49 s against 5.0 s).
+- Steps 2, 3, 5, 6 hold in all four chain runs; returns on the plate in 17.5-22.9 s; lap 6 9.35-10.23 mm against 13.11
+  on a datum moved 52.8-61.1 mm (the ring 36.4-42.7 mm RMS from lap 1's reference; base 10.9 / 11.8).
+- Reported: drone 2 sits on the 0.8 throttle cap (the same value in sim.yaml and real.yaml) continuously for
+  10.5 / 9.2 / 5.6 / 6.4 s before the last weld (R3986-R3989) on the twin's modelled pack (22.75 -> 19.0 V); the ring
+  is 7.5-18.8 mm low then. Cap time and the fold-in rank together over four runs; no run flies that hold without the cap,
+  so it is a reading, not a shown cause.

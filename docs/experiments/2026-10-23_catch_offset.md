@@ -559,3 +559,21 @@ R2727-R2732` (R2634 left out: re-flown as R2728, by Wesley's answer (1)).*
   figure-8 runs 318-325 mm off the path; the measured arm at 20 cm is the flattest cell of the grid (0.08-0.18 deg).
 - **Two trees in one table:** 55 runs on be34f95 + cf1ab9ad, 6 on be34f95 + cae5cf26. Per Wesley, U re-flies whole on
   the final tree at the results freeze, before the reviewer. Registry rows R2727-R2732, no reviewer yet.
+
+## The claim re-fly on the final tree and masses (7 Nov, R4034-R4093; feed F078)
+Chunk 8a of docs/claim_batch_2026-11-07.md: the 30 configs x2 on bf52a8a, the hardware-matched masses, slope. One tree
+(code hash 5e7b1d3bd133, diff_sha256 11643a387a4c), no void, every run welded, plumbing within 2.5 cm.
+- The measured arm's fold-in tilt peak stays within 0.6-2.8 deg at every offset (to 16 cm along the rim, 20 cm in).
+- 10 runs end in a fleet abort during LAND (failure 3): the newcomer tilts to 64-71 deg 6.8-7.6 s after LAND, its body
+  0.20-0.27 m up with the ring on the floor, and the 60 deg envelope disarms the fleet: x11_u_meas_t04/t06/t08 (one
+  repeat each), t116/t12/t16 (both), x11_u_slot_t16 (one). The newcomer tips 26-71 deg in every landing of the grid.
+- Limits: d_tol(measured) rim 2 / in 20; d_tol(slot) rim 11.6 / in 4; d_sep(measured) rim 12 / in 20; d_sep(slot) 16 / 20;
+  mechanism shown in both directions.
+- Against §5 as written: FALSIFIED by the landing aborts (falsifier 1: d_task(measured, rim) 2 < 8; falsifier 3:
+  d_tol(slot) 11.6 > d_tol(measured) 2 along the rim); the fold-in falsifier did not fire (max 2.69 deg at d <= 4).
+  Wesley's rule of 7 Nov (F075: the bars are his to judge after the run) applies to the verdict.
+
+**Reviewer of the 7 Nov re-fly (feed F079):** numbers match; the FAILs are results. Catch-to-aim max 2.52 cm (R4081),
+0.2 mm over this card's 2.5 cm check (judged after the run, Wesley's F075 rule). The landing aborts sit on a touchdown
+spike at the 60 deg envelope (repeats split at 4-8 cm); the newcomer tips 26-71 deg at touchdown in every landing, also
+with no offset (44-53 deg on the slot). The rim ordering reversed since 23 Oct (now the measured arm folds in lower).

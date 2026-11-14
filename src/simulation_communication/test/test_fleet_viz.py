@@ -143,10 +143,11 @@ def test_summary_document_lists_every_body_and_is_strict_json():
     doc = mocap_summary(10.1, {'drone_0': seen, 'tip': never, 'puck': lost})
     assert doc['t'] == pytest.approx(10.1) and set(doc['bodies']) == {'drone_0', 'tip', 'puck'}
     d0 = doc['bodies']['drone_0']
-    assert set(d0) == {'z', 'tilt_deg', 'speed_mps', 'age_s', 'rate_hz', 'max_gap_s'}
+    assert set(d0) == {'x', 'y', 'z', 'tilt_deg', 'speed_mps', 'age_s', 'rate_hz', 'max_gap_s'}
+    assert (d0['x'], d0['y']) == (0.2, 0.0)
     assert d0['z'] == pytest.approx(1.234) and d0['tilt_deg'] == pytest.approx(11.5, abs=0.1)
     assert d0['age_s'] == pytest.approx(0.1) and d0['rate_hz'] == pytest.approx(0.5) and d0['speed_mps'] == 0.0
-    assert doc['bodies']['tip'] == {'z': None, 'tilt_deg': None, 'speed_mps': None, 'age_s': None,
+    assert doc['bodies']['tip'] == {'x': None, 'y': None, 'z': None, 'tilt_deg': None, 'speed_mps': None, 'age_s': None,
                                     'rate_hz': 0.0, 'max_gap_s': None}
     assert doc['bodies']['puck']['z'] is None
     json.loads(json.dumps(doc), parse_constant=lambda c: pytest.fail(f'{c} in the summary'))

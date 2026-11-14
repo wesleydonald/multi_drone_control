@@ -53,7 +53,7 @@ thrust_map:
 watchdogs:
   solve_budget_s: 0.06
   require_fc_armed: true
-  pos_limit_m: 1.75             # the rig's +-1.75 m position limit, on (Wesley 22 Oct, after its critic and the LIM runs)
+  pos_limit_m: 1.8              # the rig's +-1.8 m position limit, on (Wesley 22 Oct, after its critic and the LIM runs; 1.75 -> 1.8 Wesley 12 Nov)
 fleet_resize:
   reconfig_mode: 'ocp'
   detach_magnet: true
@@ -70,6 +70,7 @@ combined_m1:
   # 2026-10-10_combined_m1_contact rev 10, TB16): true typed on the command line lifts the refusal, with Wesley's
   # word (a params_file value is ignored)
   contact_rig_orbit: false
+  contact_rig_fig8: false      # Wesley 12 Nov: typed true lets partner_contact fly fig_8 on the rig (13 Nov trials; its take-back moves with the ring, as the circle's)
 
 tracker:
   # the measured pull's filter on the rig (Wesley 29 Oct): the 1 m ring bends at 5.3 Hz (RIG-1029-h4). Two 2 Hz low-pass

@@ -194,6 +194,11 @@ def undeclared_launch_args(cfg):
     return bad
 
 
+def launches_up(cfg, started):
+    """True once `started` LAUNCH-event launches cover every LAUNCH event of the config (a config with one: at once)."""
+    return started >= sum(1 for e in cfg.events if e.do == 'LAUNCH')
+
+
 def launch_cwd():
     """Working directory of the launches: the planner generates its solver relative to it
     (the solvers themselves follow MDC_ACADOS_ROOT), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
@@ -827,7 +832,9 @@ def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_s
                 extra.append((proc, pfh))
                 wait_launch_settled(node, proc, timeout=240.0)
                 gz_pause(world, False)
-                silent = [tp for tp in cfg.launch_expect_topics if not topic_flowing(tp)]
+                # checked once every LAUNCH of the config is up (two of his instances: each lists its own topics)
+                silent = ([tp for tp in cfg.launch_expect_topics if not topic_flowing(tp)]
+                          if launches_up(cfg, len(extra)) else [])
                 if silent:
                     # R0612: his planner and the ring bridge never published (their sim
                     # clock never arrived); fail in a minute, not after the whole run

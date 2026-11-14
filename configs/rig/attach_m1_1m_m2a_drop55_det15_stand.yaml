@@ -1,0 +1,16 @@
+# attach_m1_1m_m2a_drop55_det15.yaml plus take_back_avoid_pickup_m (Wesley 13 Nov: the object on Thomas' stand; a take-back never comes down on it). From: attach_m1_1m_m2a_drop55.yaml with the cable-length loss check at 15 cm (Wesley 5 Nov ~09:58, after sq8_2: the re-attach worked,
+# then 1 s into LAND the check read QUAD1's taut cable 9.8 cm long at the 0.18 m/s descent (pose timing; the mocap shows every
+# cable 1.01-1.03 m) and dropped the ring). A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+drop_tilt_deg: 55.0
+detach_detect_m: 0.15
+take_back_avoid_pickup_m: 0.6

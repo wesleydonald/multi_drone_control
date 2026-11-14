@@ -62,25 +62,57 @@ LocalPlanResult LocalPlanner::plan(const LocalPlanRequest& request) const {
     }
 
     output.partial = output.search.status.find("PADDED_CLOSEST_PARTIAL") != std::string::npos;
+    // A natural timeout can select the unextended q2 seed, including a moving
+    // splice prefix. Optimizing its own endpoint rewards stopping indefinitely.
+    // Use explicit search provenance, not a numerical stationarity threshold.
+    // Originally non-stopped searched evasive histories and callback stops keep
+    // their endpoint; ordinary stopped requests keep the nominal soft objective.
+    const bool seed_timeout = output.partial &&
+        output.search.termination_reason == "RUNTIME_REACHED" &&
+        output.search.partial_fallback_selected_index == 2;
+    const Vec3 selected_endpoint = output.search.control_points->bottomRows(1).transpose();
     output.effective_terminal_boundary = request.terminal_boundary;
     if (output.partial) {
         output.effective_terminal_boundary.mode = TerminalMode::Stopped;
         output.effective_terminal_boundary.position =
             output.search.control_points->row(output.search.control_points->rows() - 1).transpose();
+        if (seed_timeout) {
+            // Stopped fixes terminal derivatives, not terminal position.
+            output.effective_terminal_boundary.position = request.local_goal;
+        }
         output.effective_terminal_boundary.velocity.setZero();
     }
 
+    std::string seed_goal_failure;
     try {
-        // A padded partial is deliberately a local evasive continuation. Keep
-        // the refinement objective centred on the safe local endpoint selected
-        // by Octopus instead of pulling its stopped tail back toward the distant
-        // moving rendezvous goal. Complete candidates retain the requested goal.
-        const Vec3 refinement_goal = output.partial
+        // MADER/PB.71: an ordinary stopped partial is an initial guess and
+        // corridor, not a replacement destination. Keep the nominal soft goal.
+        // Originally non-stopped requests retain their evasive endpoint and
+        // the existing unextended-timeout fallback semantics above/below.
+        const Vec3 refinement_goal = output.partial &&
+            request.terminal_boundary.mode != TerminalMode::Stopped
             ? output.effective_terminal_boundary.position
             : request.local_goal;
-        output.refinement = refineOctopusTrajectory(
-            output.search, output.knots, refinement_goal, request.obstacles,
-            config_.refinement, output.effective_terminal_boundary);
+        try {
+            output.refinement = refineOctopusTrajectory(
+                output.search, output.knots, refinement_goal, request.obstacles,
+                config_.refinement, output.effective_terminal_boundary);
+        } catch (const std::exception& exc) {
+            if (!seed_timeout) throw;
+            seed_goal_failure = std::string("EXCEPTION: ") + exc.what();
+        }
+        if (seed_timeout && (!output.refinement || !output.refinement->success ||
+                             !output.refinement->control_points)) {
+            if (seed_goal_failure.empty()) seed_goal_failure = output.refinement
+                ? output.refinement->status : "NO_REFINEMENT_RESULT";
+            // One bounded retry of the already-certified stopped endpoint. It
+            // still goes through all refinement constraints and outer checking;
+            // never publish unchecked raw search points after QP failure.
+            output.effective_terminal_boundary.position = selected_endpoint;
+            output.refinement = refineOctopusTrajectory(
+                output.search, output.knots, selected_endpoint, request.obstacles,
+                config_.refinement, output.effective_terminal_boundary);
+        }
     } catch (const std::exception& exc) {
         output.status = "REFINEMENT_EXCEPTION";
         output.message = exc.what();
@@ -98,6 +130,11 @@ LocalPlanResult LocalPlanner::plan(const LocalPlanRequest& request) const {
     output.success = true;
     output.status = "SUCCESS";
     output.message = output.refinement->message;
+    if (seed_timeout) {
+        output.message += seed_goal_failure.empty()
+            ? "; unextended_seed_soft_goal=true"
+            : "; unextended_seed_endpoint_retry=" + seed_goal_failure;
+    }
     output.control_points = output.refinement->control_points;
     output.total_solve_time_s = std::chrono::duration<double>(Clock::now() - started).count();
     return output;

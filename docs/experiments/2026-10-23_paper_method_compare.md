@@ -694,3 +694,32 @@ after LAND with no run.csv, re-flown as R2790).** Scored 23 Oct 23:55 with `tool
 The ring's yaw on the rim, same tree: 23.5-23.7 deg hover, 8.2-45.6 deg line 0.2, 12.6 deg line 0.4 (hub 0.1 / 0.2 /
 20-28). No late loss: tilt peaks to LAND 4.3-14.6 deg. So on one tree the hub removes the yaw swing in hover and at
 0.2 m/s but leaves the error within 20 % of the rim's in every cell.
+
+## The final-tree re-fly (X11, 7 Nov; R4108-R4139; feed F082)
+Chunk 8d of docs/claim_batch_2026-11-07.md: every C, hub and world-C config of 23-24 Oct as an `x11_` copy on the
+slope filter (nothing else changed), x2, final masses, one code tree (section-5 hash 5e7b1d3bd133; diff_sha256
+319c020f6359; bf52a8a). Scored with tools/c_metrics.py --table on each world apart (results/analysis/
+x11_quan_2026-11-07.json). No void; every run not lost landed.
+
+| World, case (tested number, mm) | Our planner | The port | The paper's form |
+|---|---|---|---|
+| Rim, hover | 1.1 [1.1-1.1] | 11.8 [11.8-11.9] | LOSS 2 of 2 |
+| Rim, line 0.2 | 15.1 [14.8-15.3] | 38.9 [38.0-39.8] | LOSS 2 of 2 |
+| Rim, line 0.4 | 41.7 [41.4-42.0] | 96.4 [94.4-98.4] | LOSS 2 of 2 |
+| Hub, hover | 1.3 [1.2-1.3] | 10.8 [10.8-10.9] | not flown |
+| Hub, line 0.2 | 28.7 [28.5-28.9] | 37.5 [37.4-37.7] | not flown |
+| Hub, line 0.4 | 69.3 [68.8-69.9] | 99.5 [99.4-99.5] | not flown |
+
+- The paper's form (R4126-R4131) lost every run as on 23 Oct: the ring tipped 20-25 s after the hand-over and an
+  ENVELOPE FAULT (payload tilt 63-75 deg) aborted the fleet before LAND.
+- Section 5's claim rule (the lab chat's, never frozen by Wesley): "our planner at least as close" in every rim cell
+  against both forms, at n = 2 (the rule asks 3).
+- The hub's frozen bars (23 Oct 16:22): against the frozen rim pair, hover "partly the geometry", lines "the port"; on
+  this tree's rim pair, "the port" in all three; A "our planner at least as close on the paper's own geometry" in all
+  three; O holds.
+- Not like for like with 23 Oct (tree, masses, filter); the 23 Oct rows and misses stay as recorded.
+
+**Reviewer of the 7 Nov re-fly (feed F083):** the C values were ACCEPTED by Wesley 23 Oct ~07:25 (decisions.md), before
+every claim run (which seven not recorded; header never marked FROZEN), not "never frozen". Like-for-like reading on the
+hub: P met in all three cells ("the port"). World C flew the r6c law (Wesley 30 Oct), not 24 Oct's. The port's ring turns
+2.7-7.5 deg on the rim now (23 Oct 22-51).

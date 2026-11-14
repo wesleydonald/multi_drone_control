@@ -54,6 +54,10 @@ network:
   auto_network_handover: false
 weld_gate:
   weld_vel_filter_s: 0.1      # the twin's weld gate on a 0.1 s filtered speed (Wesley 4 Nov ~22:20; R3458, R3475 vs R3485-R3488)
+contact_traj:
+  # twin only (Wesley 11 Nov, Te-Jen's figure-eight demonstration): true lets partner_contact fly load_traj fig_8.
+  # The take-back clears hover and the circle only (TB16), so a take-back on the figure-eight is not cleared.
+  contact_sim_fig8: false
 sim_interface:
   sil: false
   sim_thrust_map: 'rig'

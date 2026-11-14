@@ -65,7 +65,9 @@ class RingBridge(FakeCooperativeTransportWorld):
             latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                  durability=DurabilityPolicy.TRANSIENT_LOCAL)
             plates = self.carrier_plates()
-            self._plate_pubs = [self.create_publisher(Int32, f'/fake_obstacles/drone_{i}/attached_plate', latched)
+            # the prefix as his obstacle topics' (a second instance of his stack has its own)
+            prefix = str(self._param('attached_plate_topic_prefix', '/fake_obstacles/drone'))
+            self._plate_pubs = [self.create_publisher(Int32, f'{prefix}_{i}/attached_plate', latched)
                                 for i in range(len(plates))]
             for pub, plate in zip(self._plate_pubs, plates):
                 pub.publish(Int32(data=plate))

@@ -1,0 +1,89 @@
+Cable-collision mechanism review for Wesley — 2026-11-13 06:50 AEDT
+Source basis: current local C++ source and the supplied exchange diffs/reports. The local ROS package is dynamic_planner_ros; the supplied fork renames its backend path to src/tejen_dynamic_planner/src/transfer_backend_node.cpp. I have not inspected ~/mdc, built the fork or run anything outside ~/mdc_exchange on the lab PC. Source facts below are Verified locally. Run-specific statements are Handoff-reported unless otherwise identified.
+
+1. Included geometry and omissions
+
+In tools/standalone_dynamic_planner_cpp/src/ego_collision_model.cpp:
+- assemblyComponents() creates a body box, then cable and magnet whenever SuspendedGeometry.enabled is true; payload is added only when payload_attached is true.
+- cooperativeAssemblyComponents() creates the other vehicle's body/suspended components and adds attached_tether when its attachment geometry is enabled.
+The ROS backend's suspendedGeometry() enables QUAD4's cable/magnet. objectAttachedCallback() toggles the extra payload component only if payload_collision_enabled is enabled. After release, that attached-payload component disappears; this mechanism does not automatically create a free dropped-object obstacle.
+For the shared-carrier scene, refreshSharedCooperativeObstacle() explicitly disables a carrier's generic hanging cable/magnet/payload assembly and separately supplies its attached tether. So the carrier representation is its body box plus its assigned body-to-ring tether, not an additional free-hanging magnet assembly.
+
+WorldSnapshot::timeIndexedObstacles() loops every ego component against every peer component, with names such as cooperative_drone_1::attached_tether_vs_ego_cable, ..._magnet and ..._payload. Cable-cable collision is explicitly a relation. This ego planner does not solve self-collision or carrier-carrier collision; it treats peer futures as given.
+
+Ring/net are separately configurable in TransferBackendNode::refreshMovingBasketCollisionObstacles():
+- segmented_ring: individual rim-bar obstacles, 24 by default, with measured ring rotation converted to conservative world AABBs; a translated committed ring-centre trajectory for each bar. NO net mesh, net bowl or filled interior in this branch.
+- solid_box: one configured ring/net volume envelope (MovingBasketGeometry), not a resolved mesh.
+- target_only: no ring/net collision body from this mechanism.
+The local m2d_four_drone_sequential.launch.py selects segmented_ring, shared_trajectory and attached-tether checking. These settings must be confirmed in R4433's actual params file; the supplied fork diff alone does not prove every run used the local launch settings.
+Plate positions define tether endpoints, but there is no separate arbitrary plate mesh beyond any containment provided by the configured rim bars. Rotor/airframe detail is represented only to the extent the body box encloses it. Slack, sag, elastic cable dynamics and future attitude variation are not explicitly simulated in this collision geometry.
+
+2. Shapes, swing and tracking
+
+makeCableComponent(): QUAD4's full bounded-swing cable envelope is a truncated cone approximation about world vertical. With cable length L, radius r and swing bound theta:
+  top z = r, bottom z = -L-r;
+  top lateral support = r;
+  bottom lateral support = r+(L+r)*tan(theta).
+Legacy uses a square section (pyramidal component); outer_octagon uses a circumscribed octagonal section. The polygon CONTAINS the admitted swing disk; it is not an inscribed polygon that cuts away real cable positions.
+
+makeMagnetComponent() / makePayloadComponent(): nominal box, enlarged laterally by L*sin(theta), and upwards by L*(1-cos(theta)). Legacy uses a box around that set; octagonal mode retains the physical box Minkowski-summed with an outer octagonal lateral disk and the admitted vertical rise. The payload offset/half extents are configured; the name is not proof they enclose the actual object/funnel at every attitude.
+
+makeAttachedTetherComponent(): a straight square-cross-section prism along the measured carrier-anchor to assigned ring-plate chord. It uses two perpendicular directions around that slanted axis, radius g.radius_m in both, and extends each end by radius along the axis. It is an enclosing box-like prism for a straight thick cable, not a world-axis-aligned box in convex mode. QUAD4's max_swing_angle_rad does NOT add a swing cone around this carrier tether; its orientation comes from measured endpoints and remains fixed in a world snapshot.
+
+Important second difference between legacy_square and outer_octagon:
+WorldSnapshot::timeIndexedObstacles() uses componentAabb() for every peer/ego pair in legacy mode, including replacing the slanted carrier tether by its large world AABB. In outer_octagon mode it retains actual component vertices and forms O + (-E), then adds tracking boxes. Thus the switch changes both QUAD4's envelope polygon and the preservation of the slanted carrier shape. It does not merely round one body box.
+The independent checker in trajectory_safety_checker.cpp::checkIntervals() makes the same legacy-vs-convex pair distinction.
+
+The ego and carrier tracking half-extents are added independently. If scalar values are 0.05 m and 0.06 m, the relative pair receives a 0.11 m half-extent inflation per axis, in addition to physical geometry/swing. These are assumed bounds, not bounds inferred from current motion by the separator. theta is configured, not estimated/proven/enforced by the collision checker. Carrier endpoint/shape/rotation uncertainty is not automatically covered merely because a centre tracking tube exists.
+
+3. Prediction over a planning interval
+
+Backend functions: cooperativePlateWorldPosition(), cooperativeAttachedTetherGeometry(), refreshSharedCooperativeObstacle(), refreshCooperativeWorld().
+At refresh time tk:
+  d_plate = measured_ring_pose * assigned_plate_location - measured_carrier_body_position;
+  d_anchor = configured cooperative_tether_anchor_from_body.
+A fixed relative tether prism is built between d_anchor and d_plate. For shared_trajectory mode its whole future is translated by that carrier's accepted committed BODY-centre trajectory p_j(t):
+  anchor_pred(t) = p_j(t) + d_anchor
+  plate_pred(t)  = p_j(t) + d_plate.
+The plate endpoint is NOT independently recomputed from the future ring trajectory at each t in this implementation. This is a frozen relative-geometry/translation model. Body state, plate assignment and ring pose updates rebuild it; coalescing can delay materialization. Asynchronous/noisy measured endpoint differences alter its shape. The anchor offset is used as supplied; no future carrier-attitude rotation is applied here.
+constant_velocity mode instead creates a finite body-centre prediction from measured position/velocity; that is a separate degraded/test mode.
+
+trajectory_geometry.cpp::convexCurveIntervals() splits at knots/piece boundaries, obtains exact cubic Bezier subcurve control vertices, and convexCurveHullVertices() combines them into an enclosing centre hull H_j(I). A stopped committed tail can be continued at its stop point; a moving tail cannot be silently extrapolated indefinitely.
+For each planning interval I and ego/peer component pair, WorldSnapshot forms:
+  C_ij(I) = H_j(I) + O_j + (-E_i) + T_j + T_ego,
+where + denotes Minkowski addition, E_i/O_j are relative component polytopes and T are tracking boxes. The ego body-centre MINVO hull must be strictly separable from C_ij(I).
+The four configured spline intervals are not necessarily four seconds; their durations come from the current time allocation.
+
+OctopusSearch::controlHullSeparable() prunes extensions; finalCheck() materializes separating planes for chosen intervals. Separator::solve() in separator.cpp uses a small GLPK feasibility LP, with independent returned-plane residual validation (and validated projection fast paths where used). trajectory_refinement.cpp::refineOctopusTrajectory() and appendFixedSeparatorInequalities() retain planes as QP corridor constraints, with the configured geometric inset and immutable prefix p/v/a.
+TrajectorySafetyChecker::checkPiece()/checkCommitted(), via checkIntervals(), independently sweep actual ego/peer components over matching absolute intervals and test physical-space separation; RecedingHorizonPlanner::replan() checks prefix, candidate and configured backup/hold against the current world.
+
+Swept hulls deliberately forget within-interval time correlation: ego at point A early and peer at A late can make whole-interval hulls overlap although they never occupy A together. Failure of separation means 'not certified by these hulls', not necessarily actual physical contact or global path impossibility. Optional exact temporal subdivision can reduce this conservatism without changing the motion; it remains OFF in the proposed line after the lab's unsuccessful isolated comparison. It does not repair an incorrect future.
+
+4. R4433 and the two moving zero windows
+
+R4433: the exchange presently contains its description in Wesley's question, but no R4433 params, time trace or rejection witness. I CANNOT name its first failed relation/active constraint from a distance of 0.5 m alone. Do not copy the earlier R4374 diagnosis to this later run without matching evidence.
+The earlier supplied R4374 probe/README reconstructs a legacy-square C-space blockage near y0.67, including attached_tether_vs_ego_payload/cable/magnet relations. There, large slanted-tether AABBs cover the target. Near the boundary the first-span QP corridor cannot admit the immutable prefix with the 0.001 m inset: PREFIX_CORRIDOR_INCOMPATIBLE. That is a specific geometric/corridor mechanism for that reconstruction, not independent proof about R4433.
+A clear instantaneous goal in octagonal mode still does not establish that a dynamically feasible, prefix-compatible finite spline and its required stopped continuation can be installed before its deadline. Identify which stage rejected R4433 rather than attributing it to 'cables' generally.
+
+Zero windows: the supplied extractors/reports show LOCAL_PLAN_FAILED:PADDED_CLOSEST_PARTIAL... / late installation failures, then INCUMBENT_REVALIDATION_UNSAFE and execution_fallback_certified=0, mode UNCERTIFIED_HARD_HOVER, while the carrier tether closes on the held ego. They do not show the exact pair/interval of every initial failed candidate.
+Source chain:
+- OctopusSearch::finalCheck() / terminalHoldViable() / finalDynamicsFeasible() distinguish a rejected padded partial's collision certificate, dynamic bound or terminal-hold requirement.
+- RecedingHorizonPlanner::replan() rejects late candidates and revalidateRemainingIncumbent() checks the remaining commitment over a finite horizon. The result contains prefix_safety.obstacle_name and unsafe interval when a geometric check fails; coverage/time exceptions can also fail closed.
+- backend requestExecutionFallback() -> activateExecutionFallback() tries makeBrakingHoverTrajectory() and checks it in the latest world. If that smooth brake is unsafe, it installs a measured-position stationary reference labeled UNCERTIFIED_HARD_HOVER, certified=false. This last-resort reference can be published even when it is not safe; it is not a successful safe-stopping certificate.
+- A stopped position remains an obstacle to a non-yielding moving formation. The emergency layer has no separately certified 'ascend/retreat/coordinate fleet stop' escape. Normal replanning may find evasive partials, but no such candidate is guaranteed.
+So the trace supports a failure to obtain/install a safe continuation followed by an explicitly uncertified emergency reference, NOT the claim that carrier cables were omitted or that a certified solver deliberately approved the crossing. Exact geometric vs timing vs future/admission contribution at the FIRST event still needs synchronized evidence.
+
+Minimal discriminating evidence to place in exchange/files:
+R4433's actual command/params and short native logs/replan/backend rows around first sustained stop (including existing 'C1F final-check witness' and the refinement message). For both zero cases, original synchronized rows around FIRST unsafe event, with prefix_safety/candidate/backup/hold failure object+interval where available, installed commit/splice identity, measured/advertised endpoints and materialized world generation/age. State any currently unlogged field as unavailable; do not infer it from a 1-second aggregate.
+finalCheckFailureWitness() in transfer_backend_node.cpp reports a rejected search separator when available; it is not a universal witness for all QP/deadline/coverage failures. A first failed relation in traversal is not necessarily the unique or globally closest binding constraint.
+
+Local SHA256 source identifiers (not historical fork binary hashes):
+ego_collision_model.cpp 0177086ecae07c0ac270a712329163e5d4e08fcc4056d4f3913d6374090946a2
+world_snapshot.cpp 7b0716cb1723626fb800565ef280587472427f53f8cb8405b85b5e64ded9b2d0
+trajectory_safety_checker.cpp 665d14a26a05a051a5a8f1a4f507e5aa77a48a94a5d4b2df3b56e9b96290cbe9
+octopus_search.cpp 802e0fc491154fa4a429c9a451c592fb97b86a52d4d12a1d126dad515bee5f11
+trajectory_refinement.cpp 1d5b513c7212b15a37d58be774c7898820d21a6b67bce329259c52282937f428
+trajectory_geometry.cpp d3d638a3c22d302ec58710382b66255f14b79b6e5455dbad47e2bb0f35b1ecb6
+separator.cpp c2f20a41649e310f3f604c77a6f6ac5684f196ba4dd2ee431f788cb0a7d26d3e
+local transfer_backend_node.cpp 1cb57163ad5d2042865f5f0b49a8b47619331c9dc8a864423e090565f6436c81
+moving_basket_geometry.hpp cd288183263c9bd6892deec092b42ae4a0db8042c26a014656b8b53b9db25156

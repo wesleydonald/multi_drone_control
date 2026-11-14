@@ -15,6 +15,7 @@ import numpy as np
 from collections import deque  # Import deque for the rolling average filter
 import os
 from drone_communication.velocity_filter import VelocityFilter
+from drone_communication.frozen_pose import FrozenPoseFilter
 import csv
 import scipy.signal  # Import scipy.signal for Butterworth filter
 import re
@@ -57,7 +58,7 @@ MOCAP_DEBUG_PRINT = False
 MOCAP_WORLD_FRAME = "map"
 # ═════════════════════════════════════════════════════════════════════════════
 
-def parse_extra_bodies(spec):
+def parse_extra_bodies(spec, what='extra_bodies'):
     """'6:/pickup/motion_capture_state[,id:topic...]' -> {6: '/pickup/motion_capture_state'}; '' -> {}.
     Extra rigid bodies (the combined M1 stack's pickup ball) go out as MotionCaptureState on their topic."""
     out = {}
@@ -66,10 +67,19 @@ def parse_extra_bodies(spec):
             continue
         rb, sep, topic = item.partition(':')
         if not sep or not rb.lstrip('-').isdigit() or not topic.startswith('/'):
-            raise ValueError(f"extra_bodies entry {item!r}: want <body id>:/<topic>")
+            raise ValueError(f"{what} entry {item!r}: want <body id>:/<topic>")
         if int(rb) in out:
-            raise ValueError(f'extra_bodies: body {rb} listed twice')
+            raise ValueError(f'{what}: body {rb} listed twice')
         out[int(rb)] = topic
+    return out
+
+
+def parse_tip_bodies(spec):
+    """'23:/drone_2/magnet_tip_pose[,id:topic...]' -> {23: '/drone_2/magnet_tip_pose'}; '' -> {}. More magnet tip
+    bodies (the 4 -> 2 -> 4 partners), each a PoseStamped on its own topic as magnet_tip_body_id's /magnet_tip_pose."""
+    out = parse_extra_bodies(spec, 'tip_bodies')
+    if len(set(out.values())) != len(out):
+        raise ValueError(f'tip_bodies {spec!r}: two bodies on one topic')
     return out
 
 
@@ -90,6 +100,7 @@ class ParseData():
         # linear velocity filter (card 2026-10-14_tracker_timing): None keeps the alpha 0.2 path below; the node
         # sets it on the carrier bodies only (MDC_MOCAP_VEL_FILTER, MDC_MOCAP_VEL_DRONES)
         self.vel_filter = None
+        self._reseed = False
 
         '''self.last_pen_pose = np.array([0, 0, 0])
         self.last_pen_orientation = np.array([0, 0, 0, 1])
@@ -223,6 +234,11 @@ class ParseData():
                 filtered_values.append(filtered_value)
         return tuple(filtered_values)
 
+    def reseed(self):
+        """The next packet only restarts the velocity estimate and is not published: poses were withheld
+        (frozen_pose.py), and a difference taken across that gap would read the whole jump as one frame's speed."""
+        self._reseed = True
+
     def parse_packet(self, data: str) -> Optional[ObjectData]:
         try:
             if not data or '|' not in data:
@@ -258,6 +274,17 @@ class ParseData():
             #qx, qy, qz, qw = self.apply_rolling_average(self.orientation_buffers, qx, qy, qz, qw)
 
             current_time = time.time()
+            if self._reseed:
+                self._reseed = False
+                self.last_pose = np.array([r_x, r_y, r_z])
+                self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
+                self.last_time = current_time
+                for buffers in (self.low_pass_velocity_buffers, self.low_pass_angular_velocity_buffers):
+                    for buf in buffers.values():
+                        buf.clear()
+                if self.vel_filter is not None:
+                    self.vel_filter.reset()
+                return None
             dt = current_time - self.last_time
             self.last_time = current_time
             
@@ -358,13 +385,21 @@ class MotionCapturePublisher(Node):
         # map -> drone_<id> on every drone frame; the rig's RViz uses fleet_viz's drone_<i>_mocap frames instead, so
         # real_io_launch turns it off (14 Oct load cut: ~360 TF messages/s from the node every pose passes through)
         self.publish_drone_tf = bool(self.declare_parameter('publish_drone_tf', True).value)
+        # more magnet tips, each a PoseStamped on its own topic ('' = none, the default)
+        self.tip_bodies = parse_tip_bodies(self.declare_parameter('tip_bodies', '').value)
         taken = set(self.body_to_drone) | {self.payload_body_id, self.magnet_tip_body_id}
         clash = sorted(set(self.extra_bodies) & taken)
         if clash:
             raise ValueError(f'extra_bodies {clash} already routed (drone, payload or magnet tip)')
+        clash = sorted(set(self.tip_bodies) & (taken | set(self.extra_bodies)))
+        if clash:
+            raise ValueError(f'tip_bodies {clash} already routed (drone, payload, magnet tip or extra body)')
+        if self.magnet_tip_body_id is not None and '/magnet_tip_pose' in self.tip_bodies.values():
+            raise ValueError('tip_bodies: /magnet_tip_pose is magnet_tip_body_id\'s topic')
         self.get_logger().info(
             f'MoCap bodies: drones {self.body_to_drone} (id -> drone), payload '
             f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}'
+            + (f', more tips {self.tip_bodies}' if self.tip_bodies else '')
             + (f', extra {self.extra_bodies}' if self.extra_bodies else ''))
 
         # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
@@ -380,6 +415,8 @@ class MotionCapturePublisher(Node):
             MotionCaptureState, '/payload/motion_capture_state', 10)
         self.extra_publishers = {rb: self.create_publisher(MotionCaptureState, topic, 10)
                                  for rb, topic in self.extra_bodies.items()}
+        self.tip_publishers = {rb: self.create_publisher(PoseStamped, topic, 10)
+                               for rb, topic in self.tip_bodies.items()}
         # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
         self.tf_broadcaster = TransformBroadcaster(self)
         # UDP Setup
@@ -458,6 +495,7 @@ class MotionCapturePublisher(Node):
         self.drone_parsers = {drone_id: ParseData()
                               for drone_id in self.body_to_drone.values()}
         extra_parsers = {rb: ParseData() for rb in self.extra_bodies}
+        tip_parsers = {rb: ParseData() for rb in self.tip_bodies}
         # card 2026-10-14_tracker_timing: another velocity filter on the carrier drones only (the ring, tip, ball and
         # QUAD4 feed his stack, our planner and the cable estimate, and keep the old filter). slope is the default
         # since Wesley's decision of 28 Oct (hE1/hS1); MDC_MOCAP_VEL_FILTER=ema flies the old filter
@@ -480,6 +518,13 @@ class MotionCapturePublisher(Node):
         if ring_mode != 'ema':
             self.payloadParseData.vel_filter = VelocityFilter(ring_mode, frames=int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4')))
             self.get_logger().warn(f'velocity filter {ring_mode} on the ring')
+        # a quad whose pose text stops changing is lost, not still (card 2026-11-11_frozen_pose_guard; RIG-1111-fm9c_6):
+        # its poses are withheld so the pose watchdogs see the loss. The quads only: the ring, the magnet marker and
+        # the object do freeze at rest or under a quad, and their readers must keep getting them (the card's critic, F1).
+        frozen = FrozenPoseFilter(float(os.environ.get('MDC_MOCAP_FROZEN_S', '0') or 0.0))
+        if frozen.window_s > 0.0:
+            self.get_logger().warn(f'frozen-pose guard: a quad sending one pose for more than {frozen.window_s:.2f} s '
+                                   f'is withheld until its pose changes')
         # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
         # before parse_packet so the velocity dt widens with the actual spacing.
         min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
@@ -515,6 +560,22 @@ class MotionCapturePublisher(Node):
                 m = re.search(r'-?\d+', obj_id)
                 rb_id = int(m.group()) if m else None
 
+                if rb_id in self.body_to_drone:
+                    live = frozen.allow(rb_id, (pos_str, rot_str), time.time())
+                    for body, what, held_s in frozen.events:
+                        quad = self.body_to_drone[body]
+                        if what == 'frozen':
+                            self.get_logger().error(
+                                f'MOCAP FROZEN: QUAD{quad + 1} (body {body}) has sent one pose for {held_s:.2f} s, so '
+                                f'motion capture has lost it: its poses are withheld until they change')
+                        else:
+                            self.drone_parsers[quad].reseed()
+                            self.get_logger().warn(f'mocap live again: QUAD{quad + 1} (body {body}), after '
+                                                   f'{held_s:.2f} s on one pose')
+                    frozen.events.clear()
+                    if not live:
+                        continue
+
                 # Throttle per body: the stream runs far faster than any
                 # subscriber needs, and every extra message is a callback in
                 # each controller (own pose + payload), which starves their
@@ -542,6 +603,10 @@ class MotionCapturePublisher(Node):
                             self.create_motion_capture_state_msg(obj_data))
                         if self.publish_drone_tf:
                             self.broadcast_drone_tf(drone_id, obj_data)
+                elif rb_id in tip_parsers:
+                    obj_data = tip_parsers[rb_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.tip_publishers[rb_id].publish(self.create_pose_stamped_msg(obj_data))
                 elif rb_id in extra_parsers:
                     obj_data = extra_parsers[rb_id].parse_packet(data)
                     if obj_data is not None:

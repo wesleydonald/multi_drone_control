@@ -1,0 +1,7 @@
+window s                   drops.py    3.570   by hand    3.567
+tilt before, mean (deg)    drops.py    3.385   by hand    3.396
+tilt before, max (deg)     drops.py    8.121   by hand    8.136
+tilt peak (deg)            drops.py    7.739   by hand    7.630
+swing (deg)                drops.py    6.633   by hand    6.492
+dip (mm)                   drops.py   26.767   by hand   26.821
+dip before (mm)            drops.py   14.805   by hand   14.934

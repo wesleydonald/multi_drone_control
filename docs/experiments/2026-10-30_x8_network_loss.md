@@ -197,3 +197,33 @@ the port's DETACH at +0.35 s, late ticks at most 0.17 %, no failed solves; R3593
 The current tree, not the final one: re-fly after the freeze, reviewer again on that table. Reviewer's scorer and output:
 `results/analysis/review_x2_x8_2026-11-04/rev_x8/`. Minor: section 6's hub smoke runs were never flown; R3640's leaver reads 3.81 m/s,
 3.65 m at the abort sample against the registry's 3.49 / 3.54 (a smoke run, no bar).
+
+## The claim re-fly on the final tree (7 Nov, R4000-R4013; feed F073)
+One tree for all 14 (bf52a8a, diff_sha256 f6426db0b67a; code hash 5e7b1d3bd133), the final (hardware-matched)
+quadrotor masses (X8 has no returns: Wesley 6 Nov), no void. Bars as written above (frozen 30 Oct 16:26).
+- **L1 (world C) CONFIRMED** on E alone: port 373.3 / 371.9 mm against ours_max + 20 = 310.4 (ours 286.2 / 290.4). The
+  port's "over 300 mm for 1.00 / 1.02 s" sits on the 1 s rule: not claimed as a loss (as the 4 Nov reviewer ruled).
+- **L2 (rim) CONFIRMED**: port 455.1 / 459.9 mm against 240.6 (ours 220.6 / 218.7). The port's loss is only the offline
+  80 deg rule (0.17-0.19 s continuous); the ring stayed up, hanging at 47-48 deg.
+- **L3 holds**: no ours run loses the ring; world C t_s 5.33 / 5.37 s.
+- The exact law never told: fleet abort at +1.22 / +1.21 s (the leaver at 3.40 / 3.30 m/s): the code reading stands.
+- Arms: the rim's ours flies int_k_xy 0 (the 31 Oct fallback, Wesley 31 Oct 17:16); its T ends at 1.8 deg in both
+  repeats (R3642 leaned to 16 deg on 4 Nov with the integral, another tree and masses: a reading, not a shown cause).
+  The hub's ours keeps the integral (the lab chat's recommendation, 5 Nov). Ours resizes 0.39-0.42 s after the release
+  (0.28-0.34 s on 3-4 Nov).
+
+**Reviewer of the 7 Nov re-fly (feed F074):** L1, L2, L3 hold as written. Wording: the hub port's 300 mm stretch is on
+the 1 s boundary within one sample (0.98-1.02 s); R4005 (claim), R4000, R4001 never landed the ring (0.18-0.22 m,
+41-54 deg, to the 160 s limit); the network tips the ring past 80 deg about 0.6 s after the release told or not; the
+hub's free ring under ours stays over 80 deg for ~11 s from +11.6 s (peak 96-97 deg) although its centre settles in
+5.4 s; the port is told 0.04-0.07 s before ours resizes. The two ours arms fly different integrals (rim 0 under the
+5 Nov T rule; hub 5.26 as flown, a 171 deg gap): asked Wesley 7 Nov.
+
+**7 Nov: the hub with our arm's sideways integral off** (Wesley 7 Nov ~10:10, so both cells follow the 5 Nov T rule;
+R4200 / R4201, x8_hub_ours_noxy, read-back differs from R4008 only in int_k_xy 0.0 vs 5.26; flown on X1's tree
+057e999eadce, which adds only configs, worlds and a tool to X8's 5e7b1d3bd133). With this arm as ours, L1 (hub) is
+CONFIRMED on E alone (bar ours_max + 20 = 308.3 mm; ours 287.3 / 288.3, port 373.3 / 371.9) and L3 holds (t_s 5.54 /
+5.61 s): the same verdicts as with the integral on (R4008 / R4009: 286.2 / 290.4 mm, 5.33 / 5.37 s). What changes: the
+ring's centre ends 33-34 mm off its point (1.2-1.4 mm with the integral), and the free ring stays over 80 deg without a
+break from +12.7-12.9 s to LAND (17.0-17.3 s; peak 100.4 / 103.0 deg at +22.7 / +23.1 s; 89-102 deg in the last 5 s)
+against 11.0-11.3 s and 26-66 deg at the end with the integral on. Results as is (F086); see the feed.

@@ -341,6 +341,9 @@ class SimulationTestSupervisor(Node):
         # (our load planner's /payload/trajectory_state once the ring flies its path)
         self.start_gate_topic = str(self.declare_parameter("start_gate_topic", "").value).strip()
         self.start_gate_open = not self.start_gate_topic
+        # multi_drone_control 13 Nov: the gate also waits for the path clock (traj_t), so his TAKEOFF comes while the
+        # ring already flies its path, as on the rig (0 = open on "running", as before)
+        self.start_gate_min_traj_t = float(self.declare_parameter("start_gate_min_traj_t", 0.0).value)
         if self.start_gate_topic:
             self.create_subscription(String, self.start_gate_topic, self._start_gate, 5)
         # optional (multi_drone_control rig-twin subtest): the arm waits until the pickup
@@ -537,10 +540,12 @@ class SimulationTestSupervisor(Node):
         if self.start_gate_open:
             return
         try:
-            running = bool(json.loads(msg.data).get("running", False))
-        except (ValueError, AttributeError):
+            state = json.loads(msg.data)
+            running = bool(state.get("running", False))
+            traj_t = float(state.get("traj_t", 0.0))
+        except (ValueError, AttributeError, TypeError):
             return
-        if running:
+        if running and traj_t >= self.start_gate_min_traj_t:
             self.start_gate_open = True
             self.get_logger().info(f"Start gate open ({self.start_gate_topic} running)")
 

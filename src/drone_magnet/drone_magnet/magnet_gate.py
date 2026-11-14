@@ -85,15 +85,24 @@ class MagnetGate:
         self._dropped_ours_off = False
         self._dropped_partner = False
         self._held_off_in = None
+        self._off_pending = False     # his OFF held before the drop: it goes when his phase reaches the drop
         self._held_on = False
         self._dropped_after_cut = False
         self.operator_off = False     # an operator OFF holds every ON until an operator ON
         self._held_on_operator = False
 
     def his_phase(self, phase):
+        """His phase; returns 'OFF' when an OFF of his was held just before it and the phase is now the drop (RIG-1111-
+        k1zo_3: his OFF came 1 ms before the gate heard DROP_OBJECT, was held, and the object stayed on)."""
         self.phase = str(phase).strip().upper()
         if self.phase in DROP_PHASES:
             self.dropped = True
+            if self._off_pending:
+                self._off_pending = False
+                if self.source == PARTNER and not self.dry and not self.operator_off:
+                    self.events.append(f'his held OFF goes now: his phase reached {self.phase}')
+                    return self._forward('OFF', 'his')
+        return None
 
     def puck(self, attached):
         attached = bool(attached)
@@ -165,11 +174,14 @@ class MagnetGate:
                 self.events.append(f'his {w} ignored: the coil is ours since our span began')
             return None
         if w == 'OFF' and self.puck_ever and not self.dropped and self.phase not in OFF_PHASES:
+            self._off_pending = True
             if self._held_off_in != self.phase:
                 self._held_off_in = self.phase
                 self.events.append(f'his OFF held in {self.phase or "an unknown phase"}: from the pickup to the drop '
                                    f'his OFF reaches the coil only at the pickup or in {" / ".join(DROP_PHASES)}')
             return None
+        if w == 'ON':
+            self._off_pending = False
         return self._forward(w, 'his')
 
     def ours(self, text):

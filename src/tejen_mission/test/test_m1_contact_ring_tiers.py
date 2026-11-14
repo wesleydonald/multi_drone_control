@@ -15,6 +15,8 @@ from tejen_mission.reference_generators import (
     TargetState, stationary_regulation, target_relative_tracking, rate_controlled_manoeuvre,
 )
 
+import tejen_mission.online_join_planner as _planner  # noqa: E402
+
 PACKAGE = Path(__file__).resolve().parents[1]
 SOURCE = PACKAGE / 'tejen_mission/online_join_planner.py'
 
@@ -29,7 +31,9 @@ def method(name):
         GroundRingExit=GroundRingExit,
         early_candidate_ready=early_candidate_ready, stationary_regulation=stationary_regulation,
         target_relative_tracking=target_relative_tracking, rate_controlled_manoeuvre=rate_controlled_manoeuvre,
-        _vec3_from_position=lambda p:np.array([p.x,p.y,p.z]))
+        _vec3_from_position=lambda p:np.array([p.x,p.y,p.z]),
+        # module-level names added in our copy (FORCE DROP 11 Nov, the pickup press 12 Nov)
+        FORCE_DROP_PHASES=_planner.FORCE_DROP_PHASES, pressed_candidate_hold=_planner.pressed_candidate_hold)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[])), str(SOURCE), 'exec'),scope)
     return scope[name]
 

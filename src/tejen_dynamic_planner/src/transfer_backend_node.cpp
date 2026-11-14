@@ -16,6 +16,7 @@
 #include "dynamic_planner/reference_window.hpp"
 #include "dynamic_planner/target_predictor.hpp"
 #include "dynamic_planner/trajectory_safety_checker.hpp"
+#include "dynamic_planner/trajectory_geometry.hpp"
 #include "dynamic_planner/world_snapshot.hpp"
 
 #include <builtin_interfaces/msg/time.hpp>
@@ -28,6 +29,7 @@
 #include <rclcpp/create_timer.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <atomic>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -457,12 +459,28 @@ Marker cableEnvelopeSurfaceMarker(
     const dynamic_planner::ConvexComponent& cable,
     const Vec3& origin,
     const std_msgs::msg::ColorRGBA& colour) {
-    if (cable.vertices.rows() != 8 || cable.vertices.cols() != 3) {
-        throw std::invalid_argument("cable envelope visualization expects 8 vertices");
+    if ((cable.vertices.rows() != 8 && cable.vertices.rows() != 16) || cable.vertices.cols() != 3) {
+        throw std::invalid_argument("envelope visualization expects 8 or 16 vertices");
     }
     Marker marker = baseMarker(
         frame_id, stamp, marker_namespace, id, Marker::TRIANGLE_LIST);
     marker.color = colour;
+    if (cable.vertices.rows() == 16) {
+        const auto triangle = [&](int a, int b, int c) {
+            for (int index : {a, b, c})
+                marker.points.push_back(markerPoint(origin + cable.vertices.row(index).transpose()));
+        };
+        for (int i = 0; i < 8; ++i) {
+            int next = (i+1)%8;
+            triangle(i, next, 8+next);
+            triangle(i, 8+next, 8+i);
+            if (i > 0 && i < 7) {
+                triangle(0, i+1, i);
+                triangle(8, 8+i, 8+i+1);
+            }
+        }
+        return marker;
+    }
     // makeCableComponent() orders the first four vertices on the top square and
     // the final four on the wide bottom square. Draw the exact frustum surface
     // used by the collision component rather than an unrelated bounding cylinder.
@@ -546,6 +564,10 @@ public:
             "target_velocity_topic", "/dynamic_planner/transfer_target_velocity");
         object_attached_topic_ = declare_parameter<std::string>(
             "object_attached_topic", "/magnet/object_attached");
+        // multi_drone_control 12 Nov: while this topic reads true the goal is a fixed world point (QUAD4's return to
+        // its start over a moving ring), so it is predicted still rather than riding the basket's committed future.
+        // '' (default) = off: the configured predictor as before. The obstacle futures are unchanged either way.
+        static_target_topic_ = declare_parameter<std::string>("static_target_topic", "");
         enable_topic_ = declare_parameter<std::string>(
             "enable_topic", "/dynamic_planner/transfer_enable");
         authority_topic_ = declare_parameter<std::string>(
@@ -578,9 +600,29 @@ public:
         planner_rate_hz_ = declare_parameter<double>("planner_rate_hz", 5.0);
         marker_rate_hz_ = declare_parameter<double>("marker_rate_hz", 5.0);
         minimum_search_z_m_ = declare_parameter<double>("minimum_search_z_m", 0.20);
+        // multi_drone_control 13 Nov: the top of the local search box (body z, m; 0 = off, his start/goal + 1 m). The
+        // rig keeps QUAD4 under 2.8-3.0 m; his planner climbed to 3.2-3.6 m on a moving ring in the twin. Never below
+        // the start or the goal, never within 0.2 m of the floor.
+        maximum_search_z_m_ = declare_parameter<double>("maximum_search_z_m", 0.0);
+        // multi_drone_control 13 Nov (real-time replay of 12 Nov: every carrier state / plate / ring pose message
+        // refreshed the world, ~214 versions/s, so with outer_octagon's 60-90 ms final recheck every candidate ended
+        // WORLD_CHANGED_DURING_FINAL_RECHECK): > 0 coalesces those refreshes to this period (s). The shared committed
+        // trajectories still refresh at once; 0 (default) = every message, as before.
+        cooperative_world_refresh_period_s_ = declare_parameter<double>("cooperative_world_refresh_period_s", 0.0);
+        if (!std::isfinite(cooperative_world_refresh_period_s_) || cooperative_world_refresh_period_s_ < 0.0 ||
+            cooperative_world_refresh_period_s_ > 1.0) {
+            throw std::invalid_argument("cooperative_world_refresh_period_s must be in [0, 1] s");
+        }
         initial_splice_timing_s_ = declare_parameter<double>("initial_splice_timing_s", 0.16);
         fixed_splice_lookahead_s_ = declare_parameter<double>(
             "fixed_splice_lookahead_s", 0.0);
+        min_splice_lookahead_s_ = declare_parameter<double>("min_splice_lookahead_s", 0.05);
+        planner_max_velocity_xy_mps_ = declare_parameter<double>(
+            "planner_max_velocity_xy_mps", 1.0);
+        planner_max_acceleration_xy_mps2_ = declare_parameter<double>(
+            "planner_max_acceleration_xy_mps2", 1.0);
+        planner_max_jerk_xy_mps3_ = declare_parameter<double>(
+            "planner_max_jerk_xy_mps3", 4.0);
         temporal_refinement_enabled_ = declare_parameter<bool>(
             "temporal_refinement_enabled", false);
         octopus_max_runtime_s_ = declare_parameter<double>(
@@ -690,6 +732,12 @@ public:
 
         max_swing_angle_rad_ = declare_parameter<double>(
             "max_swing_angle_rad", 15.0 * kPi / 180.0);
+        body_orientation_mode_ = declare_parameter<std::string>("body_orientation_mode", "axis_aligned");
+        swing_envelope_shape_ = declare_parameter<std::string>("swing_envelope_shape", "legacy_square");
+        if (body_orientation_mode_ != "axis_aligned" && body_orientation_mode_ != "measured_snapshot")
+            throw std::invalid_argument("body_orientation_mode must be axis_aligned or measured_snapshot");
+        if (swing_envelope_shape_ != "legacy_square" && swing_envelope_shape_ != "outer_octagon")
+            throw std::invalid_argument("swing_envelope_shape must be legacy_square or outer_octagon");
         suspended_cable_length_m_ = declare_parameter<double>("suspended_cable_length_m", 0.50);
         magnet_center_below_cable_end_m_ = declare_parameter<double>("magnet_center_below_cable_end_m", 0.025);
         workspace_bounds_enabled_ = declare_parameter<bool>("workspace_bounds_enabled", false);
@@ -713,6 +761,8 @@ public:
             declare_parameter<double>("payload_center_from_magnet_y_m", 0.0),
             declare_parameter<double>("payload_center_from_magnet_z_m", -0.028));
         static_scene_enabled_ = declare_parameter<bool>("static_scene_enabled", true);
+        static_obstacle_vertices_ = declare_parameter<std::vector<double>>(
+            "static_obstacle_vertices", std::vector<double>{});
         body_half_extents_ = Vec3(
             declare_parameter<double>("ego_body_half_x_m", 0.105),
             declare_parameter<double>("ego_body_half_y_m", 0.105),
@@ -863,6 +913,8 @@ public:
         }
 
         suspended_geometry_ = suspendedGeometry(max_swing_angle_rad_);
+        if (swing_envelope_shape_ == "outer_octagon")
+            suspended_geometry_.swing_envelope = dynamic_planner::SwingEnvelope::OuterOctagon;
         suspended_geometry_.cable_length_m = suspended_cable_length_m_;
         suspended_geometry_.magnet_center_below_cable_end_m = magnet_center_below_cable_end_m_;
         suspended_geometry_.payload_half_extents = payload_half_extents_;
@@ -876,12 +928,31 @@ public:
         initial_world.ego_half_extents = body_half_extents_;
         initial_world.ego_tracking_error_half_extents = ego_tracking_error_half_extents_;
         initial_world.ego_suspended_geometry = suspended_geometry_;
-        if (static_scene_enabled_) {
+        if (workspace_bounds_enabled_ && body_orientation_mode_ == "measured_snapshot") {
+            initial_world.workspace.enabled = true;
+            initial_world.workspace.lower = workspace_min_;
+            initial_world.workspace.upper = workspace_max_;
+        }
+        if (!static_obstacle_vertices_.empty()) {
+            if (!static_scene_enabled_ || require_scene_witness_ || static_obstacle_vertices_.size() % 24 != 0)
+                throw std::invalid_argument("static_obstacle_vertices requires physical boxes, static scene, and witness disabled");
+            for (std::size_t offset = 0; offset < static_obstacle_vertices_.size(); offset += 24) {
+                Eigen::MatrixXd vertices(8, 3);
+                for (int row = 0; row < 8; ++row)
+                    for (int col = 0; col < 3; ++col)
+                        vertices(row, col) = static_obstacle_vertices_[offset + 3 * row + col];
+                initial_world.physical_static_obstacles.push_back(
+                    {"door_panel_" + std::to_string(offset / 24), std::move(vertices)});
+            }
+        } else if (static_scene_enabled_) {
             physical_obstacle_ = makeYawedCuboidObstacle(
                 obstacle_name_, obstacle_centre_, obstacle_half_extents_, obstacle_yaw_rad_);
             initial_world.physical_static_obstacles.push_back(*physical_obstacle_);
         }
         world_ = std::make_shared<VersionedWorld>(std::move(initial_world));
+        RCLCPP_INFO(get_logger(), "Collision geometry body=%s swing=%s cone=%.3f deg panels=%zu (attitude held per snapshot)",
+            body_orientation_mode_.c_str(), swing_envelope_shape_.c_str(),
+            max_swing_angle_rad_ * 180. / kPi, static_obstacle_vertices_.size() / 24);
         scene_witness_passed_ = !require_scene_witness_;
         scene_witness_summary_ = require_scene_witness_ ? "PENDING" : "NOT_REQUIRED";
 
@@ -897,6 +968,16 @@ public:
         object_attached_sub_ = create_subscription<std_msgs::msg::Bool>(
             object_attached_topic_, rclcpp::QoS(10),
             std::bind(&TransferBackendNode::objectAttachedCallback, this, std::placeholders::_1));
+        if (!static_target_topic_.empty()) {
+            static_target_sub_ = create_subscription<std_msgs::msg::Bool>(
+                static_target_topic_, rclcpp::QoS(10),
+                [this](const std_msgs::msg::Bool::SharedPtr msg) { static_target_ = msg->data; });
+        }
+        if (cooperative_world_refresh_period_s_ > 0.0) {
+            cooperative_refresh_timer_ = create_wall_timer(
+                std::chrono::duration<double>(cooperative_world_refresh_period_s_),
+                [this]() { flushCooperativeRefresh(); });
+        }
         cooperative_state_samples_.resize(cooperative_drone_state_topics_.size());
         cooperative_state_subs_.reserve(cooperative_drone_state_topics_.size());
         for (std::size_t i = 0; i < cooperative_drone_state_topics_.size(); ++i) {
@@ -1031,7 +1112,14 @@ private:
     LocalPlannerConfig localConfig(const Vec3& start, const Vec3& goal, double minimum_z,
         double jerk_weight, double goal_weight, double runtime_s) const {
         auto config = unboundedLocalConfig(start, goal, minimum_z, jerk_weight, goal_weight, runtime_s);
-        if (workspace_bounds_enabled_) {
+        if (maximum_search_z_m_ > 0.0) {
+            const double top = std::max({maximum_search_z_m_, start.z(), goal.z(), config.octopus.xyz_min.z() + 0.2});
+            config.octopus.xyz_max.z() = std::min(config.octopus.xyz_max.z(), top);
+            config.refinement.xyz_max.z() = config.octopus.xyz_max.z();
+        }
+        config.refinement.j_max.x() = planner_max_jerk_xy_mps3_;
+        config.refinement.j_max.y() = planner_max_jerk_xy_mps3_;
+        if (workspace_bounds_enabled_ && body_orientation_mode_ != "measured_snapshot") {
             const auto bounds = assemblyWorkspaceBounds(workspace_min_, workspace_max_,
                 body_half_extents_, suspended_geometry_, ego_tracking_error_half_extents_);
             config.octopus.xyz_min = config.octopus.xyz_min.cwiseMax(bounds.first);
@@ -1063,11 +1151,17 @@ private:
             frame_id_.empty() || vehicle_id_.empty() || !(state_timeout_s_ > 0.0) ||
             !(object_attached_timeout_s_ > 0.0) ||
             !(planner_rate_hz_ > 0.0) || planner_rate_hz_ > kControlReferenceHz ||
+            !std::isfinite(planner_max_velocity_xy_mps_) || !(planner_max_velocity_xy_mps_ > 0.0) ||
+            !std::isfinite(planner_max_acceleration_xy_mps2_) || !(planner_max_acceleration_xy_mps2_ > 0.0) ||
+            !std::isfinite(planner_max_jerk_xy_mps3_) || !(planner_max_jerk_xy_mps3_ > 0.0) ||
             !(marker_rate_hz_ > 0.0) || marker_rate_hz_ > kControlReferenceHz ||
             !std::isfinite(minimum_search_z_m_) || !std::isfinite(initial_splice_timing_s_) ||
             !(initial_splice_timing_s_ >= 0.0) ||
             !std::isfinite(fixed_splice_lookahead_s_) ||
             !(fixed_splice_lookahead_s_ >= 0.0) || fixed_splice_lookahead_s_ > 1.0 ||
+            !std::isfinite(min_splice_lookahead_s_) || min_splice_lookahead_s_ < 0.0 ||
+            min_splice_lookahead_s_ > 1.0 ||
+            (fixed_splice_lookahead_s_ > 0.0 && fixed_splice_lookahead_s_ < min_splice_lookahead_s_) ||
             !std::isfinite(octopus_max_runtime_s_) || !(octopus_max_runtime_s_ > 0.0) ||
             !std::isfinite(octopus_pre_authority_max_runtime_s_) ||
             !(octopus_pre_authority_max_runtime_s_ > 0.0) ||
@@ -1329,7 +1423,11 @@ private:
                                "planning_world_version,recheck_world_version,final_recheck_world_version,recheck_error,"
                                "incumbent_recheck_performed,incumbent_recheck_world_version,"
                                "worker_exception,worker_error,previous_trajectory_elapsed_s,trajectory_elapsed_s,candidate_available_time_s,certified_world_version,authority_installed,authority_install_time_s,installation_rejection,"
-                               "result_collection_time_s,completion_to_collection_ms,installation_attempt_time_s,installation_splice_margin_ms,installation_world_version\n";
+                               "result_collection_time_s,completion_to_collection_ms,installation_attempt_time_s,installation_splice_margin_ms,installation_world_version,"
+                               "recheck_change_kind,full_safety_checks,incremental_safety_checks,full_safety_check_ms,incremental_safety_check_ms,collision_relations_checked,collision_relations_reused,"
+                               "tr_search_parent_tests,tr_search_child_tests,tr_search_max_depth,tr_search_accepted_leaves,"
+                               "tr_search_rejections,tr_search_unresolved,tr_safety_child_tests,tr_safety_max_depth,"
+                               "tr_safety_rejections,tr_safety_unresolved,tr_first_unresolved\n";
             } else {
                 RCLCPP_WARN(get_logger(), "Could not open C1F.0 replan CSV: %s", replan_csv_path_.c_str());
             }
@@ -1344,15 +1442,32 @@ private:
             disableBackend("ROS_TIME_BACKJUMP_DISABLED");
             kinematics_.reset();
         }
-        // A completed result may already match the current world. Drain it
-        // before applying this queued state sample, not after invalidating
-        // its certificate. The new measurement is still processed below.
+        // Drain completed work before updating measured state. Collision-model
+        // attitude is sampled at transaction boundaries, not on pose receipt.
         pollPlannerFuture();
         try {
+            Eigen::Quaterniond orientation(msg->pose.orientation.w, msg->pose.orientation.x,
+                msg->pose.orientation.y, msg->pose.orientation.z);
+            if (body_orientation_mode_ == "measured_snapshot" &&
+                (!orientation.coeffs().allFinite() || !std::isfinite(orientation.norm()) || orientation.norm() < 1e-9))
+                throw std::invalid_argument("invalid measured body quaternion");
             latest_state_ = kinematics_.update(position, velocity, now_s);
+            if (body_orientation_mode_ == "measured_snapshot") {
+                latest_body_orientation_ = orientation.normalized();
+            }
             last_state_receive_ros_s_ = now_s;
         } catch (const std::exception& exc) {
             RCLCPP_WARN(get_logger(), "Rejected C1F.0 kinematics sample: %s", exc.what());
+        }
+    }
+
+    void latchBodyOrientation() {
+        // Call only after currentState succeeds. Keep one actual measured
+        // attitude through planning/checking/caller installation; later pose
+        // samples remain live for control/freshness and seed the next attempt.
+        // Peer/static/payload updates still change the collision world normally.
+        if (body_orientation_mode_ == "measured_snapshot") {
+            world_->setEgoBodyOrientation(latest_body_orientation_);
         }
     }
 
@@ -1449,7 +1564,7 @@ private:
         sample.velocity = velocity;
         sample.receive_ros_s = now_s;
         if (cooperative_prediction_mode_ == "shared_trajectory") {
-            refreshSharedCooperativeObstacle(index, now_s, false);
+            requestCooperativeRefresh(index, now_s);
         }
     }
 
@@ -1502,6 +1617,27 @@ private:
         return geometry;
     }
 
+    void requestCooperativeRefresh(std::size_t index, double now_s) {
+        if (!(cooperative_world_refresh_period_s_ > 0.0)) {
+            refreshSharedCooperativeObstacle(index, now_s, false);
+            return;
+        }
+        if (cooperative_refresh_pending_.size() <= index) cooperative_refresh_pending_.resize(index + 1, 0);
+        cooperative_refresh_pending_[index] = 1;
+    }
+
+    void flushCooperativeRefresh() {
+        const double now_s = get_clock()->now().seconds();
+        for (std::size_t i = 0; i < cooperative_refresh_pending_.size(); ++i) {
+            if (!cooperative_refresh_pending_[i]) continue;
+            if (refreshSharedCooperativeObstacle(i, now_s, false)) {
+                cooperative_refresh_pending_[i] = 0;
+            } else {
+                ++cooperative_refresh_failures_;      // kept pending: an old world must not look synchronised
+            }
+        }
+    }
+
     bool refreshSharedCooperativeObstacle(
         std::size_t index,
         double now_s,
@@ -1542,11 +1678,14 @@ private:
             return;
         }
         auto& sample = cooperative_attached_plate_samples_[index];
+        const bool plate_changed = !sample.received || sample.plate_id != plate_id;
         sample.received = true;
         sample.plate_id = plate_id;
         sample.receive_ros_s = get_clock()->now().seconds();
         if (cooperative_prediction_mode_ == "shared_trajectory") {
-            refreshSharedCooperativeObstacle(index, sample.receive_ros_s, false);
+            // a discrete attach/plate change is never deferred; only identical heartbeats are coalesced
+            if (plate_changed) refreshSharedCooperativeObstacle(index, sample.receive_ros_s, false);
+            else requestCooperativeRefresh(index, sample.receive_ros_s);
         }
     }
 
@@ -1581,7 +1720,7 @@ private:
         }
         if (cooperative_prediction_mode_ == "shared_trajectory") {
             for (std::size_t i = 0; i < cooperative_trajectory_samples_.size(); ++i) {
-                refreshSharedCooperativeObstacle(i, cooperative_ring_pose_sample_.receive_ros_s, false);
+                requestCooperativeRefresh(i, cooperative_ring_pose_sample_.receive_ros_s);
             }
         }
     }
@@ -1967,6 +2106,10 @@ private:
             return {};
         }
         try {
+            if (static_target_) {
+                return std::make_shared<dynamic_planner::ConstantVelocityTargetPredictor>(
+                    *latest_target_, Vec3::Zero(), reference_time_s);
+            }
             if (target_predictor_type_ == "committed_trajectory") {
                 if (!moving_basket_scene_enabled_ ||
                     !moving_basket_trajectory_sample_.received ||
@@ -2172,6 +2315,7 @@ private:
             latest_status_ = "AUTHORITY_GRANT_REJECTED_NOT_STATIONARY";
             return;
         }
+        latchBodyOrientation();
         Vec3 grant_origin = measured.position;
         if (recovery_.seed) {
             if (!recoverySeedReady(now_s, measured)) return;
@@ -2187,6 +2331,8 @@ private:
             active_source_target_ = *latest_target_;
             active_target_ = planningGoalForState(measured);
             active_target_velocity_ = last_target_prediction_velocity_;
+            const double authority_timing_seed_s = fixed_splice_lookahead_s_ == 0.0 && planner_
+                ? planner_->previousSpliceTiming() : 0.0;
 
             // M2D liveness path: preserve the already accepted prepared trajectory
             // shape instead of throwing it away at the authority boundary. The old
@@ -2207,7 +2353,7 @@ private:
                     auto normal_planner = std::make_unique<RecedingHorizonPlanner>(
                         *active_target_,
                         withPlannerFeatures(recedingConfig(
-                            0.0, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
+                            authority_timing_seed_s, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
                             factor_alloc_close_, close_to_goal_m_,
                             incumbent_failure_recheck_horizon_s_,
                             terminal_hold_guard_s_, terminal_hold_guard_interval_s_,
@@ -2272,14 +2418,14 @@ private:
             // certified at earlier absolute times. Re-seed from the current
             // stationary grant state and obtain a fresh post-request commitment.
 
-            // Give the one-time authority handoff enough deterministic lead for:
-            // the bounded Octopus solve plus several 30 Hz ROS/reference callbacks.
-            // This is a handshake contract, not an adaptive solver-runtime heuristic.
+            // Fixed profiles retain their commissioned handoff lead. Adaptive
+            // profiles retain the completed-iteration history instead of resetting
+            // it or interpreting the zero policy sentinel as a fixed duration.
             const double authority_handoff_splice_s = preAuthoritySpliceLookaheadS();
             auto fresh_planner = std::make_unique<RecedingHorizonPlanner>(
                 *active_target_,
                 withPlannerFeatures(recedingConfig(
-                    0.0, authority_handoff_splice_s, spline_time_factor_, factor_alloc_,
+                    authority_timing_seed_s, authority_handoff_splice_s, spline_time_factor_, factor_alloc_,
                     factor_alloc_close_, close_to_goal_m_,
                     incumbent_failure_recheck_horizon_s_,
                     terminal_hold_guard_s_, terminal_hold_guard_interval_s_,
@@ -2527,6 +2673,9 @@ private:
             const bool cooperative_world_fresh =
                 (!cooperative_scene_enabled_ && !moving_basket_scene_enabled_) ||
                 refreshCooperativeWorld(now_s);
+            // This is a new fallback transaction; its earlier epoch increment
+            // already prevents the cancelled worker from installing old work.
+            latchBodyOrientation();
             const WorldSnapshot latest_world = world_->snapshot(now_s);
             auto checker = plannerSafetyChecker();
 
@@ -2544,8 +2693,14 @@ private:
                 // advancing the invalid old timeline. Try a measured-position
                 // hover as an emergency stop. This is intentionally a last-resort
                 // path and is prominently diagnosed if it cannot itself be certified.
+                // multi_drone_control 13 Nov (Te-Jen, RIG-1113-fm9h8_10): within one fallback episode keep the first
+                // hard-hover point; re-latching at the measured position each activation ratcheted QUAD4 down
+                // (restart z 2.635 -> 2.320 m in 6 s) into the carriers' cable zone.
+                const Vec3 hover_position =
+                    (execution_fallback_active_ && hard_hover_latch_.has_value())
+                        ? *hard_hover_latch_ : measured.position;
                 fallback = dynamic_planner::makeStationaryHoverTrajectory(
-                    measured.position, now_s, 0.10);
+                    hover_position, now_s, 0.10);
                 const double hold_check_until = now_s + incumbent_failure_recheck_horizon_s_;
                 // A stationary reference is not a physically certified transition
                 // from nonzero measured velocity. Even if the hold point itself is
@@ -2565,10 +2720,12 @@ private:
             [&](const PreparedExecutionFallback& prepared) {
             // Finish all potentially-throwing preparation before touching the
             // live planner/commit. The final swaps and scalar updates do not allocate.
+            const double fallback_timing_seed_s = fixed_splice_lookahead_s_ == 0.0 && planner_
+                ? planner_->previousSpliceTiming() : initial_splice_timing_s_;
             auto fallback_planner = std::make_unique<RecedingHorizonPlanner>(
                 *active_target_,
                 withPlannerFeatures(recedingConfig(
-                    initial_splice_timing_s_, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
+                    fallback_timing_seed_s, fixed_splice_lookahead_s_, spline_time_factor_, factor_alloc_,
                     factor_alloc_close_, close_to_goal_m_,
                     incumbent_failure_recheck_horizon_s_,
                     terminal_hold_guard_s_, terminal_hold_guard_interval_s_,
@@ -2599,6 +2756,11 @@ private:
             execution_fallback_restart_blocked_ =
                 fallback_restart_state.position.z() < minimum_search_z_m_ - 1e-6;
             execution_fallback_restart_z_m_ = fallback_restart_state.position.z();
+            if (prepared.mode == "UNCERTIFIED_HARD_HOVER") {
+                hard_hover_latch_ = fallback_restart_state.position;
+            } else {
+                hard_hover_latch_.reset();
+            }
             prepared_candidate_ready_ = false;
             execution_fallback_active_ = true;
             execution_fallback_certified_ = prepared.certified;
@@ -2667,6 +2829,12 @@ private:
         // Shared core owns certification semantics. This opt-in does not enable
         // a flight profile, change goals or introduce recovery.
         config.temporal_refinement.enabled = temporal_refinement_enabled_;
+        config.min_splice_lookahead_s = min_splice_lookahead_s_;
+        // Per-axis XY bounds, not a horizontal speed-norm limit. Preserve Z.
+        config.v_max.x() = planner_max_velocity_xy_mps_;
+        config.v_max.y() = planner_max_velocity_xy_mps_;
+        config.a_max.x() = planner_max_acceleration_xy_mps2_;
+        config.a_max.y() = planner_max_acceleration_xy_mps2_;
         return config;
     }
 
@@ -2682,7 +2850,8 @@ private:
         // active-flight planner. In that diagnostic mode Python still owns the
         // stationary hover, so the candidate splice must also move farther into
         // the future or a useful long search could reject itself as late.
-        if (octopus_pre_authority_max_runtime_s_ <= octopus_max_runtime_s_ + 1e-12) {
+        if (fixed_splice_lookahead_s_ == 0.0 ||
+            octopus_pre_authority_max_runtime_s_ <= octopus_max_runtime_s_ + 1e-12) {
             return fixed_splice_lookahead_s_;
         }
         return std::min(
@@ -2744,6 +2913,7 @@ private:
             latest_status_ = "WAITING_STATIONARY_ACTIVATION";
             return false;
         }
+        latchBodyOrientation();
 
         if (require_scene_witness_) {
             try {
@@ -2975,9 +3145,9 @@ private:
                     if (authority_fresh_plan_pending_) {
                         // The first post-request solve uses a slightly longer handoff splice
                         // so Python can receive the ACK/reference while still on the stationary
-                        // prefix. Restore the normal 100 ms commissioned splice for every
-                        // subsequent receding-horizon transaction without changing the accepted
-                        // commitment itself.
+                        // prefix. Restore the configured fixed/adaptive policy
+                        // for subsequent transactions without changing the
+                        // accepted commitment or its timing history.
                         try {
                             auto normal_planner = std::make_unique<RecedingHorizonPlanner>(
                                 *active_target_,
@@ -3016,8 +3186,8 @@ private:
                         RCLCPP_WARN(
                             get_logger(),
                             "C1F.8c execution authority granted from a fresh post-request commit "
-                            "certified in the current dynamic world; normal %.1f ms splice restored.",
-                            1e3 * fixed_splice_lookahead_s_);
+                            "certified in the current dynamic world; normal %s splice policy restored.",
+                            fixed_splice_lookahead_s_ > 0.0 ? "fixed" : "adaptive");
                     } else {
                         prepared_candidate_ready_ = true;
                         latest_status_ = "PREPARED_WAITING_AUTHORITY";
@@ -3050,9 +3220,12 @@ private:
             // commitments and the moving basket update VersionedWorld directly.
             if (authority_granted_ && shadow_commit_.has_value()) {
                 const double certificate_now_s = get_clock()->now().seconds();
+                // multi_drone_control 13 Nov (Te-Jen's Codex entry 8): with the peer refreshes coalesced the world version
+                // no longer tracks every live input, so this same-version shortcut is unavailable then
                 const bool version_tracks_live_dynamic_inputs =
-                    !cooperative_scene_enabled_ ||
-                    cooperative_prediction_mode_ == "shared_trajectory";
+                    (!cooperative_scene_enabled_ ||
+                     cooperative_prediction_mode_ == "shared_trajectory") &&
+                    !(cooperative_world_refresh_period_s_ > 0.0);
                 const bool live_dynamic_inputs_still_valid =
                     (!cooperative_scene_enabled_ ||
                      (cooperativeStatesFresh(certificate_now_s) &&
@@ -3249,6 +3422,7 @@ private:
             }
         }
 
+        latchBodyOrientation();
         if (!refreshCooperativeWorld(now_s)) {
             ++stale_cooperative_replan_skips_;
             disableBackend(cooperativeDisableStatus(now_s));
@@ -3455,6 +3629,11 @@ private:
 
     void publishMarkers() noexcept {
         try {
+            // Optional display work must not copy/expand the world without a viewer.
+            if (marker_pub_->get_subscription_count() == 0U &&
+                marker_pub_->get_intra_process_subscription_count() == 0U) {
+                return;
+            }
             const rclcpp::Time now = get_clock()->now();
             const double now_s = now.seconds();
             const builtin_interfaces::msg::Time stamp = now;
@@ -3463,6 +3642,7 @@ private:
             Marker clear;
             clear.action = Marker::DELETEALL;
             array.markers.push_back(std::move(clear));
+            const auto visual_world = world_->snapshot(now_s);
 
             if (physical_obstacle_.has_value()) {
                 Marker obstacle = baseMarker(
@@ -3477,7 +3657,7 @@ private:
                 array.markers.push_back(std::move(obstacle));
 
                 const auto components = dynamic_planner::assemblyComponents(
-                    body_half_extents_, suspended_geometry_);
+                    body_half_extents_, suspended_geometry_, visual_world.ego_body_rotation);
                 int component_id = 0;
                 for (const auto& component : components) {
                     const Eigen::MatrixXd cspace =
@@ -3505,13 +3685,19 @@ private:
             if (latest_state_.has_value()) {
                 const Vec3 ego = latest_state_->position;
                 const auto components = dynamic_planner::assemblyComponents(
-                    body_half_extents_, suspended_geometry_);
+                    body_half_extents_, suspended_geometry_, visual_world.ego_body_rotation);
 
                 // Physical geometry: opaque markers answer "where is the hardware?".
                 array.markers.push_back(cubeMarker(
                     frame_id_, stamp, "ego_physical_body", 0, ego, body_half_extents_,
                     markerColour(0.20F, 0.85F, 1.00F, 0.90F)));
-                array.markers.push_back(cubeMarker(
+                const Eigen::Quaterniond body_q(visual_world.ego_body_rotation);
+                auto& body_marker = array.markers.back();
+                body_marker.pose.orientation.w = body_q.w();
+                body_marker.pose.orientation.x = body_q.x();
+                body_marker.pose.orientation.y = body_q.y();
+                body_marker.pose.orientation.z = body_q.z();
+                if (body_orientation_mode_ != "measured_snapshot") array.markers.push_back(cubeMarker(
                     frame_id_, stamp, "ego_tracking_body", 0, ego,
                     body_half_extents_ + ego_tracking_error_half_extents_,
                     markerColour(0.20F, 0.85F, 1.00F, 0.18F)));
@@ -3547,11 +3733,25 @@ private:
 
                 // Collision geometry: transparent markers are generated from the
                 // same assemblyComponents() objects used by planner safety checks.
-                // The exact cable swing frustum is shown separately from the
-                // tracking-expanded AABB used by cooperative component-pair checks.
-                // Magnet/payload components are already AABBs, so adding the ego
-                // tracking allowance visualizes their protected instantaneous volume.
+                // Outer-octagon mode keeps these convex components for cooperative
+                // pairs too; legacy mode retains its tracking-expanded AABBs.
                 for (const auto& component : components) {
+                    if (body_orientation_mode_ == "measured_snapshot" ||
+                        swing_envelope_shape_ == "outer_octagon") {
+                        if (component.vertices.rows() == 16)
+                            array.markers.push_back(cableEnvelopeSurfaceMarker(frame_id_, stamp,
+                                "ego_collision_" + component.name, 0, component, ego,
+                                markerColour(.8F, .3F, .8F, .2F)));
+                        const auto vertices = dynamic_planner::inflateVerticesByAabb(
+                            component.vertices, ego_tracking_error_half_extents_);
+                        std::vector<Vec3> points;
+                        for (Eigen::Index i = 0; i < vertices.rows(); ++i)
+                            points.push_back(ego + vertices.row(i).transpose());
+                        array.markers.push_back(pointsMarker(frame_id_, stamp,
+                            "ego_tracking_vertices_" + component.name, 0, points, .01F,
+                            markerColour(.4F, .8F, 1.F, .25F)));
+                        continue;
+                    }
                     if (component.name == "cable") {
                         array.markers.push_back(cableEnvelopeSurfaceMarker(
                             frame_id_, stamp, "ego_collision_cable", 0, component, ego,
@@ -3979,7 +4179,48 @@ private:
                     << outcome.installation_attempt_time_s << ','
                     << outcome.installation_splice_margin_ms << ',';
         if (outcome.installation_world_version) replan_csv_ << *outcome.installation_world_version;
-        replan_csv_ << '\n';
+        replan_csv_ << ',' << safeCsvField(result.recheck_change_kind) << ','
+                    << result.full_safety_checks << ',' << result.incremental_safety_checks << ','
+                    << 1e3 * result.full_safety_check_s << ',' << 1e3 * result.incremental_safety_check_s << ','
+                    << result.collision_relations_checked << ',' << result.collision_relations_reused;
+        // multi_drone_control 13 Nov (Te-Jen's Codex, entry 7): diagnostics only, his temporal refinement counters; blank
+        // where a stage was not attempted; the first unresolved leaf as stage/primitive/reason
+        std::string first_unresolved;
+        const auto note_first = [&first_unresolved](const dynamic_planner::TemporalRefinementStats& st) {
+            if (first_unresolved.empty() && !st.unresolved_leaves.empty()) {
+                const auto& leaf = st.unresolved_leaves.front();
+                first_unresolved = leaf.stage + "/" + leaf.primitive_identity + "/" + leaf.limit_reason;
+            }
+        };
+        if (result.local_plan) {
+            const auto& st = result.local_plan->search.temporal_refinement;
+            replan_csv_ << ',' << st.parent_tests << ',' << st.child_tests << ',' << st.max_depth_reached << ','
+                        << st.accepted_leaves << ',' << st.depth_or_budget_rejections << ',' << st.unresolved_leaves.size();
+            note_first(st);
+        } else {
+            replan_csv_ << ",,,,,,";
+        }
+        std::size_t safety_children = 0U, safety_rejections = 0U, safety_unresolved = 0U;
+        int safety_depth = 0;
+        bool safety_seen = false;
+        for (const auto* check : {&result.prefix_safety, &result.candidate_safety, &result.candidate_backup_safety,
+                                  &result.candidate_terminal_hold_safety}) {
+            if (!check->has_value()) continue;
+            const auto& st = (*check)->temporal_refinement;
+            safety_seen = true;
+            safety_children += st.child_tests;
+            safety_rejections += st.depth_or_budget_rejections;
+            safety_unresolved += st.unresolved_leaves.size();
+            safety_depth = std::max(safety_depth, st.max_depth_reached);
+            note_first(st);
+        }
+        if (safety_seen) {
+            replan_csv_ << ',' << safety_children << ',' << safety_depth << ',' << safety_rejections << ','
+                        << safety_unresolved;
+        } else {
+            replan_csv_ << ",,,,";
+        }
+        replan_csv_ << ',' << safeCsvField(first_unresolved) << '\n';
         replan_csv_.flush();
     }
 
@@ -4053,7 +4294,8 @@ private:
             }
         }
         text << "\ntarget predictor/type/valid/horizon_s/pred_v: "
-             << target_predictor_type_ << " / " << last_target_prediction_valid_ << " / "
+             << (static_target_ ? std::string("static") : target_predictor_type_) << " / "
+             << last_target_prediction_valid_ << " / "
              << last_target_prediction_horizon_s_ << " / ["
              << last_target_prediction_velocity_.x() << ' '
              << last_target_prediction_velocity_.y() << ' '
@@ -4268,13 +4510,22 @@ private:
     double marker_rate_hz_ = 5.0;
     double planner_period_s_ = 0.20;
     double minimum_search_z_m_ = 0.20;
+    double maximum_search_z_m_ = 0.0;
+    double cooperative_world_refresh_period_s_ = 0.0;
+    std::vector<char> cooperative_refresh_pending_;
+    std::size_t cooperative_refresh_failures_ = 0U;
+    rclcpp::TimerBase::SharedPtr cooperative_refresh_timer_;
     double initial_splice_timing_s_ = 0.16;
     double fixed_splice_lookahead_s_ = 0.0;
+    double min_splice_lookahead_s_ = 0.05;
     bool temporal_refinement_enabled_ = false;
     double octopus_max_runtime_s_ = 2.0;
     double octopus_pre_authority_max_runtime_s_ = 2.0;
     bool reuse_prepared_commit_on_authority_ = false;
     double spline_time_factor_ = 3.0;
+    double planner_max_velocity_xy_mps_ = 1.0;
+    double planner_max_acceleration_xy_mps2_ = 1.0;
+    double planner_max_jerk_xy_mps3_ = 4.0;
     double factor_alloc_ = 1.0;
     double factor_alloc_close_ = 2.5;
     double close_to_goal_m_ = 0.20;
@@ -4320,6 +4571,10 @@ private:
     double estimated_solve_runtime_s_ = 0.50;
     bool seed_stationary_on_activation_ = true;
     double max_swing_angle_rad_ = 15.0 * kPi / 180.0;
+    std::string body_orientation_mode_ = "axis_aligned";
+    std::string swing_envelope_shape_ = "legacy_square";
+    Eigen::Quaterniond latest_body_orientation_ = Eigen::Quaterniond::Identity();
+    std::vector<double> static_obstacle_vertices_;
     double suspended_cable_length_m_ = 0.50;
     double magnet_center_below_cable_end_m_ = 0.025;
     bool workspace_bounds_enabled_ = false;
@@ -4360,6 +4615,7 @@ private:
     Vec3 moving_basket_tracking_error_half_extents_ = Vec3::Constant(0.05);
     SegmentedRingGeometry segmented_ring_geometry_;
     bool execution_tracking_safety_enabled_ = false;
+    std::optional<Vec3> hard_hover_latch_;   // 13 Nov: the episode's first hard-hover point (no downward ratchet)
     Vec3 ego_tracking_error_half_extents_ = Vec3::Zero();
     int execution_tracking_violation_samples_ = 3;
     double execution_velocity_error_limit_mps_ = 0.0;
@@ -4372,6 +4628,9 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr target_velocity_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr object_attached_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr static_target_sub_;
+    std::string static_target_topic_;
+    std::atomic<bool> static_target_{false};
     std::vector<rclcpp::Subscription<interfaces::msg::MotionCaptureState>::SharedPtr>
         cooperative_state_subs_;
     std::vector<rclcpp::Subscription<interfaces::msg::CommittedTrajectory>::SharedPtr>

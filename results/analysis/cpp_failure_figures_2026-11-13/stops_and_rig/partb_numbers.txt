@@ -1,0 +1,28 @@
+fig5: climb end 14.54, taken back 40.57; settled 16, left 11; settled durations [0.03 2.   1.03 1.3  2.1  1.   1.8  0.83 0.2  1.   1.94 1.67 0.57 1.1
+ 0.9  0.7 ]
+fig5: left speeds [0.086, 0.084, 0.083, 0.085, 0.092, 0.083, 0.083, 0.08, 0.08, 0.092, 0.081] accels in log only
+fig5: hold |v| median 0.057 p90 0.095; frac > 0.08 raw 0.22 smooth 0.20; drift max 0.106; z 2.137-2.195
+fig5: backend statuses {'WAITING_ABOVE_SEARCH_FLOOR': 25, 'RECOVERY_WAITING_COMMON_STOPPED_REFERENCE': 1} replans max {'acc': 0, 'fail': 0, 'late': 0} enabled {False: 26}
+fig6: climb end 8.75 settled 9.32 TB 34.18 LAND 34.01
+fig6: z in hold 2.297-2.370 median 2.330; WAITING blocks 24 from 9.3 to 33.3; replans max {'acc': 0, 'fail': 0, 'late': 0}
+fig6: statuses {'DISABLED_WAITING_FOR_TARGET': 116, 'WAITING_ABOVE_SEARCH_FLOOR': 24, 'RECOVERY_CANCELLED': 16, 'RECOVERY_WAITING_EXISTING_TRACKING_ENVELOPE': 1}
+fig6: ring z hold median 0.976
+fig6: frac z>2.36 in hold 0.022
+fig6: target z in hold min 2.239 median 2.345 max 2.451, frac under floor 0.76
+fig6: settled [(9.32, 0.042, 0.063), (13.09, 0.06, 0.028)] left [(12.72, 0.059, 0.126)]
+fig7 phase -0.10 WAIT_FOR_TAKEOFF -> TAKEOFF | takeoff command received
+fig7 phase 23.89 TAKEOFF -> TRANSIT_TO_REATTACH | C1F.2b C++ transfer prepared from the stationary climb hold
+fig7 phase 43.69 TRANSIT_TO_REATTACH -> APPROACH_ABOVE_TARGET | C++ attach transit entered its capture region above the plate
+fig7 phase 44.75 APPROACH_ABOVE_TARGET -> MATCH_VELOCITY | attachment XY approach complete
+fig7 phase 57.05 MATCH_VELOCITY -> DESCEND_TO_ATTACHMENT | attachment position and velocity matched
+fig7 phase 57.49 DESCEND_TO_ATTACHMENT -> APPROACH_ABOVE_TARGET | attachment descent aborted after loss of relative alignment
+fig7 phase 58.55 APPROACH_ABOVE_TARGET -> MATCH_VELOCITY | attachment XY approach complete
+fig7 phase 68.49 MATCH_VELOCITY -> TAKEN_BACK | take-back from the fleet planner
+fig7: fallback at 31.87: C1F.4 execution certificate invalid (TRACKING_TUBE_VIOLATION pos=[0.0529616 0.0428872 -0.0373473] vel_norm=0.129059). Installed SMOOTH_BRAKE fallback; certified=true.
+fig7: C++ on 23.89, capture 43.69 (19.8 s), climb end 21.12, TB 68.49
+fig7: z during C++ 3.159-3.238; ring z 0.990; xy dist at C++ on 1.82, at capture 0.33
+fig7: horizontal speed during C++ max 0.444, time moving >0.05: 11.3 s
+fig7: replans max {'acc': 27, 'fail': 18, 'late': 0} statuses {'DISABLED_WAITING_FOR_TARGET': 87, 'DISABLED_BY_COMMAND': 87, 'EXECUTION_FALLBACK_RESTART_BLOCKED_BELOW_MIN_SEARCH_Z': 12, 'LIVE_TARGET_RETARGETED': 8, 'RECOVERY_WAITING_COMMON_STOPPED_REFERENCE': 2, 'LIVE_TARGET_UPDATE_PENDING': 1}
+fig7: matches [44.75 58.55] descents [57.05] aborts [57.49]
+fig7: z at fallback 3.194, z during brake hold min 3.159 median 3.173 max 3.195
+fig7: z at capture 3.182, at first descend 2.336

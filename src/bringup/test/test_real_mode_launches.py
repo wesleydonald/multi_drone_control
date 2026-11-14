@@ -1177,9 +1177,10 @@ def test_attach_pause_reaches_the_planner_only_when_typed(dds):
     kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
               **QUAD4_RECORD)
     p = _by_name(rig('attach', **kw))['/dissipative_planner']['params']
-    assert 'attach_pause' not in p and 'attach_pause_ramp_s' not in p
-    p = _by_name(rig('attach', attach_pause=True, attach_pause_ramp_s=4.0, **kw))['/dissipative_planner']['params']
-    assert p['attach_pause'] is True and p['attach_pause_ramp_s'] == 4.0
+    assert 'attach_pause' not in p and 'attach_pause_ramp_s' not in p and 'attach_pause_at' not in p
+    p = _by_name(rig('attach', attach_pause=True, attach_pause_ramp_s=4.0, attach_pause_at='reattach',
+                     **kw))['/dissipative_planner']['params']
+    assert p['attach_pause'] is True and p['attach_pause_ramp_s'] == 4.0 and p['attach_pause_at'] == 'reattach'
 
 
 def test_foldin_cap_reaches_the_planner_only_when_typed():
@@ -1470,6 +1471,15 @@ def test_tb16_the_twin_refuses_other_trajectories(traj):
     assert _twin_partner(load_traj=traj)                          # without partner_contact: as before
 
 
+def test_tb16_the_twin_flies_the_figure_eight_only_with_its_switch():
+    """Wesley 11 Nov (Te-Jen's demonstration): contact_sim_fig8:=true lets the twin fly fig_8; nothing else is lifted."""
+    g = _twin_partner(partner_contact=True, load_traj='fig_8', contact_sim_fig8=True)
+    assert g['/dissipative_planner']['params']['load_traj'] == 'fig_8'
+    for traj in ('circle', 'spin', 'line_x'):
+        with pytest.raises(RuntimeError, match='hover or orbit only'):
+            _twin_partner(partner_contact=True, load_traj=traj, contact_sim_fig8=True)
+
+
 def test_tb16_the_rig_flies_hover_only_until_the_co_move_is_reviewed(dds):
     g = _combined_rig()
     assert g['/dissipative_planner']['params']['take_back_release_guard'] is True
@@ -1479,6 +1489,29 @@ def test_tb16_the_rig_flies_hover_only_until_the_co_move_is_reviewed(dds):
         _combined_rig(load_traj='circle', contact_rig_orbit=True)
     g = _combined_rig(load_traj='orbit', contact_rig_orbit=True)    # lifted with Wesley's word
     assert g['/dissipative_planner']['params']['load_traj'] == 'orbit'
+
+
+def test_the_rig_flies_the_figure_eight_only_with_its_typed_switch(dds, tmp_path):
+    """Wesley 12 Nov (the 13 Nov trials): contact_rig_fig8:=true typed lets the rig fly fig_8; a params_file value,
+    the orbit switch or the twin's switch does not; other paths stay refused."""
+    with pytest.raises(RuntimeError):
+        _combined_rig(load_traj='fig_8')
+    with pytest.raises(RuntimeError):
+        _combined_rig(load_traj='fig_8', contact_rig_orbit=True)
+    pf = tmp_path / 'f8.yaml'
+    pf.write_text('contact_rig_fig8: true\n')
+    with pytest.raises(RuntimeError):
+        _combined_rig(load_traj='fig_8', params_file=str(pf))
+    g = _combined_rig(load_traj='fig_8', contact_rig_fig8=True)
+    assert g['/dissipative_planner']['params']['load_traj'] == 'fig_8'
+    laps = tmp_path / 'laps.yaml'
+    laps.write_text('traj_laps: 12\n')
+    g = _combined_rig(load_traj='fig_8', contact_rig_fig8=True, params_file=str(laps))   # laps with the switch only
+    assert g['/dissipative_planner']['params']['traj_laps'] == 12
+    with pytest.raises(RuntimeError, match='traj_laps flies only in the twin'):
+        _combined_rig(load_traj='orbit', contact_rig_orbit=True, params_file=str(laps))
+    with pytest.raises(RuntimeError, match='hover or orbit only'):
+        _combined_rig(load_traj='circle', contact_rig_fig8=True)
 
 
 # ── rig-port critic round 2 (rig card 2026-10-21_combined_m1_rig, ## Critic): A3, the guard's weld point (A4), A9 ──
@@ -1654,7 +1687,7 @@ def test_combined_rig_feeds_his_launch_the_cables_and_quad4s_record(dds):
 
 
 def test_the_position_limit_passes_nothing_until_set_then_reaches_every_node(tmp_path):
-    """pos_limit_m (Wesley 22 Oct): off in the twin, 1.75 by default on the rig (real.yaml); unset, no twin node gets
+    """pos_limit_m (Wesley 22 Oct; 1.8 since 12 Nov): off in the twin, 1.8 by default on the rig (real.yaml); unset, no twin node gets
     it; set (or by the rig's default), the fleet manager, the planner and every tracker, the newcomer's too, carry it."""
     twin = lambda **a: (_by_name(sim('mpc', **a)), _by_name(sim('dissipative', **a)),  # noqa: E731
                         _by_name(sim('attach', legacy=False, num_drones=3, enable_approach_mpc=False, **a)))
@@ -1663,10 +1696,10 @@ def test_the_position_limit_passes_nothing_until_set_then_reaches_every_node(tmp
                         _by_name(rig('free_hover', thrust_ratio=35.2, **a)))
     for g in twin():
         assert not [k for k, n in g.items() if 'pos_limit_m' in n['params']]
-    for g in twin(pos_limit_m=1.75) + rigs():
+    for g in twin(pos_limit_m=1.8) + rigs():
         want = [k for k, n in g.items() if n['executable'] in ('tracker', 'fleet_manager', 'mpc_planner',
                                                                  'dissipative_planner')]
-        assert want and all(g[k]['params']['pos_limit_m'] == 1.75 for k in want), want
+        assert want and all(g[k]['params']['pos_limit_m'] == 1.8 for k in want), want
 
 
 def test_rejoin_departed_bridges_each_tether_joint_in_the_twin_only():
@@ -1901,6 +1934,34 @@ def test_the_newcomers_tracker_reads_its_mux_and_the_carriers_do_not(dds):
         assert g['/tracker_3']['params']['mux_state_topic'] == '/drone_3/mux_state'
         assert '/elrs_mux_3' in g
         assert all('mux_state_topic' not in g[f'/tracker_{i}']['params'] for i in range(3))
+
+
+TRACKER_DROP_KNOBS = ('drop_on_loss', 'drop_tilt_deg', 'drop_samples', 'drop_glitch_step_deg')
+
+
+def test_quad4s_tracker_carries_the_carriers_drop_knobs(dds):
+    """Card 2026-11-06_quad4_tracker_drop_rule: QUAD4's tracker gets the carriers' drop knobs as typed (a launch
+    argument or the rig line's params_file), so welded it asks for the drop at drop_tilt_deg as they do; untyped it
+    gets none of them but the profile's drop_on_loss, as the carriers. Its mux topic still stands it down off the ring."""
+    kw = dict(enable_approach_mpc=False, partner=True, partner_contact=True, weld_radius=0.01, proof_taut_len=0.577,
+              **QUAD4_RECORD)
+    typed = {'drop_on_loss': True, 'drop_tilt_deg': 55.0, 'drop_samples': 3, 'drop_glitch_step_deg': 20.0}
+    line = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..', 'configs', 'rig',
+                        'attach_m1_1m_m2a_drop55_det15.yaml')
+    for g, want in ((rig('attach', **kw, **typed), typed),
+                    (rig('attach', partner_attached=True, detach_unload_s=3.0, **kw, **typed), typed),
+                    (sim('attach', legacy=False, **typed), typed),
+                    (rig('attach', partner_attached=True, detach_unload_s=3.0, params_file=line, **kw),
+                     {'drop_on_loss': True, 'drop_tilt_deg': 55.0})):
+        g = _by_name(g)
+        assert g['/tracker_3']['params']['mux_state_topic'] == '/drone_3/mux_state'
+        for i in range(4):
+            p = g[f'/tracker_{i}']['params']
+            assert {k: p[k] for k in TRACKER_DROP_KNOBS if k in p} == want, f'tracker_{i}'
+    for g in (rig('attach', **kw), sim('attach', legacy=False)):
+        for i in range(4):
+            p = _by_name(g)[f'/tracker_{i}']['params']
+            assert p['drop_on_loss'] is True and not set(TRACKER_DROP_KNOBS[1:]) & set(p), f'tracker_{i}'
 
 
 def test_a_welded_quad4s_takeoff_waits_for_our_release(dds):

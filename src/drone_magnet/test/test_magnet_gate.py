@@ -263,3 +263,42 @@ def test_operator_off_releases_a_welded_quad4_and_a_cut_or_dry_gate_ignores_it()
     g = MagnetGate(); g.cut()
     assert g.operator('OFF') is None and g.last == 'OFF'
     assert MagnetGate(dry=True).operator('OFF') is None
+
+
+def test_his_off_held_just_before_the_drop_phase_goes_when_the_drop_phase_arrives():
+    """RIG-1111-k1zo_3: his 'Magnet command: OFF' reached the gate 1 ms before DROP_OBJECT did; it was held and never
+    sent, and the object stayed on the magnet. A held OFF goes when his phase reaches the drop; a later ON cancels it."""
+    g = MagnetGate()
+    g.his_phase('LIFT_OBJECT')
+    assert g.partner('ON') == 'ON'
+    g.puck(True)
+    g.his_phase('DESCEND_TO_DROP_HEIGHT')
+    assert g.partner('OFF') is None                   # held: not the drop yet
+    assert g.his_phase('DROP_OBJECT') == 'OFF'         # the phase arrives: the held OFF goes
+    assert g.last == 'OFF'
+    g = MagnetGate()
+    g.his_phase('LIFT_OBJECT')
+    g.partner('ON')
+    g.puck(True)
+    g.his_phase('TRANSIT_TO_DROP_POINT')
+    assert g.partner('OFF') is None
+    assert g.partner('ON') == 'ON'                    # a later ON of his cancels the held OFF
+    assert g.his_phase('DROP_OBJECT') is None
+    assert g.last == 'ON'
+
+
+def test_node_sends_his_held_off_when_his_phase_reaches_the_drop(monkeypatch):
+    """Te-Jen's review 11 Nov: the held OFF (RIG-1111-k1zo_3) must reach the coil through the PHASE subscription's own
+    publish, with no further command of his."""
+    try:
+        n = _node(monkeypatch, '-p', 'restore_s:=0.0')
+        n._on(n.gate.partner, 'ON')                      # his pickup: the coil follows him
+        n._on(n.gate.puck, True)                         # the object on the magnet
+        n._on(n.gate.his_phase, 'DESCEND_TO_DROP_HEIGHT')
+        n._on(n.gate.partner, 'OFF')                     # 1 ms early: held
+        assert [m.data for m in n.pub.msgs] == ['ON']
+        n._on(n.gate.his_phase, 'DROP_OBJECT')           # the phase alone sends it
+        assert [m.data for m in n.pub.msgs] == ['ON', 'OFF']
+        n.destroy_node()
+    finally:
+        rclpy.shutdown()

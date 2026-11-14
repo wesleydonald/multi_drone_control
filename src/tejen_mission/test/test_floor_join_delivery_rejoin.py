@@ -15,6 +15,7 @@ from tejen_mission.mission_definitions import PICKUP_PHASES, mission_for_mode
 from tejen_mission.mission_types import MissionDefinition
 from tejen_mission.mission_types import MissionPhase as P
 from test_m1_contact_attach import PLATE, QUAD_FROM_TIP, Recorder, _dropping, planner, tick
+from tejen_mission.online_join_planner import DROP_PUCK_WAIT_S
 
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'partner_mission.launch.py'
 MAT = np.array([1.5, -1.0, 0.05])           # QUAD4's body on its mat
@@ -401,6 +402,9 @@ def test_the_delivery_drop_check_is_pickup_deliverys():
     stuck = _dropping([0.0, 0.0, -0.04])
     stuck.mission = mission_for_mode('delivery_rejoin', contact_attach=True)
     stuck.clock.t += 0.5
+    tick(stuck)
+    assert stuck.phase == P.DROP_OBJECT                # still on: it gets the wait to fall (RIG-1111-fm9hc_8)
+    stuck.clock.t += DROP_PUCK_WAIT_S
     tick(stuck)
     assert stuck.phase == P.TAKEN_BACK and stuck.contact_gave_up
 

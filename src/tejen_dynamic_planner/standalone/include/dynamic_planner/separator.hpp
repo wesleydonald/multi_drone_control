@@ -39,12 +39,38 @@ struct SeparationLP {
 SeparationLP buildSeparationLP(const Eigen::MatrixXd& first_vertices,
                                const Eigen::MatrixXd& second_vertices);
 
+// Try a direction, not a cached collision verdict. Recompute both current-hull
+// supports, enforce the physical gap, then independently validate a canonical
+// <=-1/>=+1 plane. Failure means only that this direction did not certify.
+SeparationResult certifyProjectedSeparation(
+    const Eigen::MatrixXd& first_vertices,
+    const Eigen::MatrixXd& second_vertices,
+    const Eigen::Vector3d& direction,
+    double minimum_gap_m = 0.0,
+    double validation_tolerance = 1e-7);
+
 class Separator {
 public:
     explicit Separator(double validation_tolerance = 1e-7);
 
     SeparationResult solve(const Eigen::MatrixXd& first_vertices,
                            const Eigen::MatrixXd& second_vertices);
+
+    // Materialize a checked plane using a hint, disjoint AABB axis or centroid
+    // direction; fall back to the unchanged LP if none certifies separation.
+    SeparationResult solveWithFastPaths(
+        const Eigen::MatrixXd& first_vertices,
+        const Eigen::MatrixXd& second_vertices,
+        const std::optional<Eigen::Vector3d>& hint_direction = std::nullopt);
+
+    // Repair-only path: verify the required gap from current hull supports.
+    // Bounded alternate directions, at most one LP; failure is not proof that
+    // no other separating direction exists. Zero preserves the legacy path.
+    SeparationResult solveWithMinimumGap(
+        const Eigen::MatrixXd& first_vertices,
+        const Eigen::MatrixXd& second_vertices,
+        double minimum_gap_m,
+        const std::optional<Eigen::Vector3d>& hint_direction = std::nullopt);
 
     std::size_t numLPsRun() const noexcept { return num_lps_run_; }
 

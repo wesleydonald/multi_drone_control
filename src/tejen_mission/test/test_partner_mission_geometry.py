@@ -80,6 +80,18 @@ def test_rig_twin_L100_p115_is_the_28_oct_payload():
     assert contact['bridge_attach_z_m'] == 0.037       # plate face 0.025 + the 0.012 tip sphere
 
 
+def test_rig_twin_L100_plate_is_the_m2a_ring_with_the_plate_object():
+    """Q011 (9 Nov): the 0.86 kg ring of rig_twin_L100 with the pickup plate of rig_twin_L100_p115, nothing else."""
+    G = _module().GEOMETRY
+    obj = ('object_bottom_below_tip', 'object_rest_z', 'pickup_object')
+    assert {k: v for k, v in G['rig_twin_L100_plate'].items() if k not in obj} == \
+        {k: v for k, v in G['rig_twin_L100'].items() if k not in obj}
+    assert {k: G['rig_twin_L100_plate'][k] for k in obj} == {k: G['rig_twin_L100_p115'][k] for k in obj}
+    ring = _params('rig_twin_L100_plate')['fake_cooperative_transport_world']
+    assert (ring['bridge_attach_radius_m'], ring['ring_plate_pitch_diameter_m'], ring['ring_plate_diameter_m']) == \
+        (0.225, 0.45, 0.06)
+
+
 def test_unknown_geometry_is_refused():
     with pytest.raises(RuntimeError, match='geometry'):
         _params('rig')

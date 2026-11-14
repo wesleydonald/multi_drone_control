@@ -46,6 +46,12 @@ bool broadPhaseSeparated(TrajectorySafetyResult* result,
     return false;
 }
 
+bool checkRelation(TrajectorySafetyResult* result, bool selected) {
+    if (selected) ++result->relations_checked;
+    else ++result->relations_reused;
+    return selected;
+}
+
 TrajectorySafetyResult collisionResult(
     const TrajectorySafetyResult& base,
     const ConvexCurveInterval& interval,
@@ -93,7 +99,8 @@ TrajectorySafetyResult checkIntervals(
     double until_s,
     const WorldSnapshot& world,
     double separator_tolerance,
-    const TemporalRefinementConfig& temporal_config) {
+    const TemporalRefinementConfig& temporal_config,
+    const CollisionCheckSelection& selection) {
     TrajectorySafetyResult result;
     result.checked_from_s = from_s;
     result.checked_until_s = until_s;
@@ -108,12 +115,29 @@ TrajectorySafetyResult checkIntervals(
         throw std::invalid_argument("invalid trajectory-safety temporal refinement config");
     }
     const auto ego_components = assemblyComponents(
-        world.ego_half_extents, world.ego_suspended_geometry);
+        world.ego_half_extents, world.ego_suspended_geometry, world.ego_body_rotation);
+    const bool convex_pairs = world.ego_suspended_geometry.swing_envelope == SwingEnvelope::OuterOctagon;
     Separator separator(separator_tolerance);
 
     for (const auto& interval : ego_intervals) {
+        if (world.workspace.enabled && checkRelation(&result, selection.checksBody())) {
+            const auto bounds = assemblyCentreBounds(world.workspace, world.ego_half_extents,
+                world.ego_suspended_geometry, world.ego_tracking_error_half_extents,
+                world.ego_body_rotation);
+            const Vec3 lo = interval.vertices.colwise().minCoeff().transpose();
+            const Vec3 hi = interval.vertices.colwise().maxCoeff().transpose();
+            if ((lo.array() < bounds.first.array() - separator_tolerance).any() ||
+                (hi.array() > bounds.second.array() + separator_tolerance).any()) {
+                auto outside = collisionResult(result, interval, "workspace");
+                outside.status = "WORKSPACE_BOUNDS";
+                return outside;
+            }
+        }
         // Legacy pre-inflated static obstacles retain the old body-centre contract.
         for (const auto& obstacle : world.static_obstacles) {
+            // Legacy obstacles are already inflated body-centre constraints;
+            // measured rotation does not change this stored representation.
+            if (!checkRelation(&result, selection.full_check)) continue;
             if (broadPhaseSeparated(&result, interval.vertices, obstacle.vertices)) {
                 continue;
             }
@@ -131,9 +155,14 @@ TrajectorySafetyResult checkIntervals(
         // physical obstacle.
         for (const auto& obstacle : world.physical_static_obstacles) {
             for (const auto& ego_component : ego_components) {
-                const Eigen::MatrixXd ego_component_hull = inflateVerticesByAabb(
+                if (!checkRelation(&result, selection.full_check ||
+                        (selection.ego_body_changed && ego_component.name == "body"))) continue;
+                Eigen::MatrixXd ego_component_hull = inflateVerticesByAabb(
                     sweptComponentHull(interval.vertices, ego_component),
                     world.ego_tracking_error_half_extents);
+                if (world.ego_suspended_geometry.swing_envelope == SwingEnvelope::OuterOctagon ||
+                    world.ego_body_rotation != Eigen::Matrix3d::Identity())
+                    ego_component_hull = compactHorizontalLayers(ego_component_hull);
                 if (broadPhaseSeparated(
                         &result, ego_component_hull, obstacle.vertices)) {
                     continue;
@@ -150,11 +179,13 @@ TrajectorySafetyResult checkIntervals(
         }
 
         for (const auto& obstacle : world.cooperative_obstacles) {
-            const auto obstacle_breakpoints = trajectoryBreakpoints(
-                obstacle.trajectory, interval.start_s, interval.end_s);
-            if (!world.ego_suspended_geometry.enabled &&
+            if (world.ego_body_rotation == Eigen::Matrix3d::Identity() &&
+                !world.ego_suspended_geometry.enabled &&
                 !obstacle.suspended_geometry.enabled &&
                 !obstacle.attached_tether_geometry.enabled) {
+                if (!checkRelation(&result, selection.checksBody() || selection.checksPeer(obstacle.name))) continue;
+                const auto obstacle_breakpoints = trajectoryBreakpoints(
+                    obstacle.trajectory, interval.start_s, interval.end_s);
                 const Vec3 inflation = world.ego_half_extents +
                                        world.ego_tracking_error_half_extents +
                                        obstacle.physical_half_extents +
@@ -193,24 +224,40 @@ TrajectorySafetyResult checkIntervals(
             const auto other_components = cooperativeAssemblyComponents(
                 obstacle.physical_half_extents, obstacle.suspended_geometry,
                 obstacle.attached_tether_geometry);
+            if (!selection.checksBody() && !selection.checksPeer(obstacle.name)) {
+                result.relations_reused += ego_components.size() * other_components.size();
+                continue;
+            }
+            const auto obstacle_breakpoints = trajectoryBreakpoints(
+                obstacle.trajectory, interval.start_s, interval.end_s);
             const Eigen::MatrixXd other_center_hull = convexCurveHullVertices(
                 obstacle.trajectory, interval.start_s, interval.end_s);
 
             for (const auto& ego_component : ego_components) {
+                if (!selection.checksPeer(obstacle.name) &&
+                    !(selection.ego_body_changed && ego_component.name == "body")) {
+                    result.relations_reused += other_components.size();
+                    continue;
+                }
                 Vec3 ego_center;
                 Vec3 ego_half;
                 componentAabb(ego_component, &ego_center, &ego_half);
-                const Eigen::MatrixXd ego_physical_hull = inflateVerticesByAabb(
-                    shiftedVertices(interval.vertices, ego_center),
-                    ego_half + world.ego_tracking_error_half_extents);
+                const Eigen::MatrixXd ego_physical_hull = convex_pairs
+                    ? compactHorizontalLayers(inflateVerticesByAabb(
+                        sweptComponentHull(interval.vertices, ego_component), world.ego_tracking_error_half_extents))
+                    : inflateVerticesByAabb(shiftedVertices(interval.vertices, ego_center),
+                                           ego_half + world.ego_tracking_error_half_extents);
 
                 for (const auto& other_component : other_components) {
+                    ++result.relations_checked;
                     Vec3 other_center;
                     Vec3 other_half;
                     componentAabb(other_component, &other_center, &other_half);
-                    const Eigen::MatrixXd other_physical_hull = inflateVerticesByAabb(
-                        shiftedVertices(other_center_hull, other_center),
-                        other_half + obstacle.tracking_error_half_extents);
+                    const Eigen::MatrixXd other_physical_hull = convex_pairs
+                        ? compactHorizontalLayers(inflateVerticesByAabb(
+                            sweptComponentHull(other_center_hull, other_component), obstacle.tracking_error_half_extents))
+                        : inflateVerticesByAabb(shiftedVertices(other_center_hull, other_center),
+                                               other_half + obstacle.tracking_error_half_extents);
                     if (!temporal_config.enabled) {
                         if (broadPhaseSeparated(&result, ego_physical_hull, other_physical_hull)) continue;
                         const auto separation = separator.solve(ego_physical_hull, other_physical_hull);
@@ -222,18 +269,22 @@ TrajectorySafetyResult checkIntervals(
                     const auto certificate = certifyAdaptiveTemporalSeparation(
                         interval.start_s, interval.end_s,
                         ego_physical_hull, other_physical_hull,
-                        [interval, ego_component,
+                        [interval, ego_component, convex_pairs,
                          tracking = world.ego_tracking_error_half_extents](
                             double start_s, double end_s) {
                             const FourPoints ego_child = restrictCubicBezierVertices(
                                 interval.vertices, interval.start_s, interval.end_s,
                                 start_s, end_s);
-                            return inflateVerticesByAabb(
+                            Eigen::MatrixXd hull = inflateVerticesByAabb(
                                 sweptComponentHull(ego_child, ego_component), tracking);
+                            return convex_pairs ? compactHorizontalLayers(hull) : hull;
                         },
-                        [trajectory = obstacle.trajectory, other_center, other_half,
+                        [trajectory = obstacle.trajectory, other_center, other_half, other_component, convex_pairs,
                          tracking = obstacle.tracking_error_half_extents](
                             double start_s, double end_s) {
+                            if (convex_pairs) return compactHorizontalLayers(inflateVerticesByAabb(
+                                sweptComponentHull(convexCurveHullVertices(trajectory, start_s, end_s),
+                                                   other_component), tracking));
                             return inflateVerticesByAabb(
                                 shiftedVertices(
                                     convexCurveHullVertices(
@@ -254,7 +305,7 @@ TrajectorySafetyResult checkIntervals(
     }
 
     result.safe = true;
-    result.status = "SAFE";
+    result.status = selection.full_check ? "SAFE" : "SAFE_CHANGED_RELATIONS";
     return result;
 }
 
@@ -265,6 +316,12 @@ TrajectorySafetyResult TrajectorySafetyChecker::checkPiece(
     double from_s,
     double until_s,
     const WorldSnapshot& world) const {
+    return checkPiece(ego, from_s, until_s, world, CollisionCheckSelection{});
+}
+
+TrajectorySafetyResult TrajectorySafetyChecker::checkPiece(
+    const TrajectoryPiece& ego, double from_s, double until_s,
+    const WorldSnapshot& world, const CollisionCheckSelection& selection) const {
     if (!std::isfinite(separator_validation_tolerance_) ||
         !(separator_validation_tolerance_ >= 0.0)) {
         throw std::invalid_argument("invalid separator validation tolerance");
@@ -272,7 +329,7 @@ TrajectorySafetyResult TrajectorySafetyChecker::checkPiece(
     const auto intervals = convexCurveIntervals(ego, from_s, until_s);
     return checkIntervals(
         intervals, from_s, until_s, world, separator_validation_tolerance_,
-        temporal_refinement_);
+        temporal_refinement_, selection);
 }
 
 TrajectorySafetyResult TrajectorySafetyChecker::checkCommitted(
@@ -280,6 +337,12 @@ TrajectorySafetyResult TrajectorySafetyChecker::checkCommitted(
     double from_s,
     double until_s,
     const WorldSnapshot& world) const {
+    return checkCommitted(ego, from_s, until_s, world, CollisionCheckSelection{});
+}
+
+TrajectorySafetyResult TrajectorySafetyChecker::checkCommitted(
+    const CommittedTrajectory& ego, double from_s, double until_s,
+    const WorldSnapshot& world, const CollisionCheckSelection& selection) const {
     if (!std::isfinite(separator_validation_tolerance_) ||
         !(separator_validation_tolerance_ >= 0.0)) {
         throw std::invalid_argument("invalid separator validation tolerance");
@@ -287,7 +350,7 @@ TrajectorySafetyResult TrajectorySafetyChecker::checkCommitted(
     const auto intervals = convexCurveIntervals(ego, from_s, until_s);
     return checkIntervals(
         intervals, from_s, until_s, world, separator_validation_tolerance_,
-        temporal_refinement_);
+        temporal_refinement_, selection);
 }
 
 }  // namespace dynamic_planner

@@ -6,6 +6,18 @@ the dates below are only the fixed ones (lab sessions, the freezes Wesley set, h
 
 ## Direction from Fri 30 Oct evening (the order of work; tick below as items close)
 
+**Where it stands, Thu 5 Nov night (the lab chat; the 30 Oct direction below is history where it says so):**
+- The T fix: settled by the 31 Oct fallback (the T cells fly the sideways integral off); the rod-in-the-plan fix was
+  reversed 4 Nov. X2-full and X8 no longer wait on it.
+- QUAD4's fold-in cap: decided 5 Nov ('level' kept off, 'weld' deleted).
+- The code freeze is committed (bf52a8a, Wesley 5 Nov); the weekend claim batch runs every claim on it from 5 Nov 18:25
+  (docs/claim_batch_2026-11-07.md, ~22 h). X4 on that tree: 26/26 swaps but each pack ~12 min against the 10 min budget
+  (the rejoin is slower on the hardware-matched twin); Wesley: report as flown.
+- The laptop's X3b timing runs cannot fly 8-9 quads with Gazebo on it (R3451 31 Oct, R3777/R3778 5 Nov): the ground
+  computer keeps R3451 and the idle bench (re-run 6 Nov 00:30).
+- S1/S2 flew the combined attach work instead of the baselines (see S1 and S2 below); the baselines and the release move to
+  S3/S4. The real-world attach table (every descent of 4-5 Nov): feed F052.
+
 **First, before the code freeze (Wesley 30 Oct): fix the square-to-T settle.** X1's first pass: after an unannounced
 release from the square, our planner settles the T 7-13 deg off level where no resize settles at 2.2 deg. Diagnose
 from the logs, fix behind a switch, critic, twin (X1's sqT cell), then the default. X2-full and X8 wait for it.
@@ -24,8 +36,8 @@ solver bench, then the solve-time figure with the one-iteration tick for 2-9 car
 
 **After the T fix, before the freeze:** QUAD4's fold-in gets the rejoin's weld-height cap (card, critic; Wesley 30 Oct).
 
-**Real world:** S1 Wed 4 Nov, the sheet `docs/rig/wed_2026-11-04.md` is desk-checked (h3t, h4m1, sq6b x3-4, release
-x2; W and L measured on the day). S2 Thu 5 Nov: the sheet `docs/rig/thu_2026-11-05.md` is desk-checked 2 Nov (attach first if S1 went to the heave, then
+**Real world:** S1 Wed 4 Nov, the sheet `docs/rig/archive/wed_2026-11-04.md` is desk-checked (h3t, h4m1, sq6b x3-4, release
+x2; W and L measured on the day). S2 Thu 5 Nov: the sheet `docs/rig/archive/thu_2026-11-05.md` is desk-checked 2 Nov (attach first if S1 went to the heave, then
 the release x2 if missing, then the 1 m baselines); its calls are typed Wed afternoon from Wed's logs.
 
 **Thesis chat (starts once the draft is on Overleaf):** supervisor round 1 (this weekend: Wesley picks and rewords the
@@ -37,9 +49,11 @@ investigations running); the automatic rule is the preferred fix if nothing is f
 merged (Wesley).
 
 **Fixed dates**
-- Lab sessions, Wed and Thu 8-11 am: 4/5 Nov, 11/12 Nov, 18/19 Nov.
+- Lab sessions 8-11 am: 4/5 Nov, 11/12 Nov, 13 Nov; next week (Wesley 14 Nov) Mon 16, Thu 19, Fri 20 (Wesley), Tue 17 and
+  Wed 18 (Te-Jen alone). Sheets: docs/rig/mon_2026-11-16.md, docs/rig/tue_2026-11-17.md.
 - Code tree freeze Fri 6 Nov; simulation freeze Mon 9 Nov.
-- Real-world freeze: aim Thu 12 Nov 11:00, hard limit Thu 19 Nov. Anything flown 18-19 Nov goes in only if clean.
+- Real-world freeze (Wesley 14 Nov): the thesis takes flights up to Thu 19 Nov; Friday's are for the combined paper.
+  Hand-in Fri 20 Nov 17:00.
 - Hand-in Fri 20 Nov.
 
 **Who:** sections 1 and 4 (writing, figures) are the thesis chat's; sections 2, 3 and 5 the lab chat's (it ticks a result
@@ -109,6 +123,10 @@ answers, the ones left:
 - [ ] The M1 four-quad hover.
 - [ ] Tejen's attach sq6b x3-4: the first real join. Catch radius 45 mm; `attach_z` 0.028.
 - [ ] The 1 m release x2 (QUAD4's magnet off, unannounced).
+- Flown instead (registry RIG-1104-*, feed F039-F041): the first real join from the mat (sq6m, caught and proven on the
+  0.86 kg ring), the release then re-attach (nr9, nr9m x5, nr1_2: no catch; nr1_2's plate-1 contacts were dead centre but
+  not proven), and the pickup (k1m x4). W and L were re-measured (decisions 4 Nov). h3t, h4m1, the bench latency and the
+  release x2 were not flown: they move to S3/S4.
 
 **S2, Thu 5 Nov:**
 - [ ] The cable-length re-read (Wesley 31 Oct; card `docs/experiments/2026-10-31_rod_len_reread.md`): if Wed's logs hold its reading, the first h3 flies the
@@ -122,33 +140,49 @@ answers, the ones left:
   caught), the drop into the moving ring (k1ob_2, in the net, then an automatic drop), the triangle re-attach (not caught).
   The re-read, the 1 m baselines and release x2 were not flown: they move to S3/S4.
 
-**S3, Wed 11 Nov:** (sheet `docs/rig/wed_2026-11-11.md`, desk-checked 5 Nov; the M2A ring on 1 m cables; no frozen bars,
-results as measured, Wesley 5 Nov; every LAND flies the rig's new LAND defaults: decisions 5 Nov)
-- [ ] Nr in hover x3: release, then Tejen's re-attach, on the square (11/2/5 + QUAD4 on 8, as sq8_2; Wesley 5 Nov).
-- [ ] If the attach is unreliable: attach attempts only.
-- **Cut line:** nothing below it is counted on for the thesis.
-
-**S4, Thu 12 Nov:** (sheet `docs/rig/thu_2026-11-12.md`)
-- [ ] K in hover x2: the small object only, the ring at 1.2 m, drop_height 0.28 (k1z; Wesley 5 Nov).
-- [ ] Nr on a path x1: the orbit (the figure-eight is refused under the combined mode; Wesley 5 Nov), the square's twin
-      run done (R3771).
-- [ ] The funnel on plate 9 for the triangle try (Wesley's print; `cad/funnel/`), match_dwell 1.0 (his call).
-- [ ] Missing re-flies.
-- Real-world freeze 11:00 (aim).
-
-**S5/S6, 18/19 Nov:** videos and a demo for the supervisor. Results only if clean.
+**S3-S6, Wed 11 / Thu 12 / Wed 18 / Thu 19 Nov: ONE list** (Wesley 10 Nov after the supervisor's "results are king":
+a full run once + 3-5 detach and re-attach; decisions DECIDED 2026-11-10 23:10 / 23:27 / 23:42). Sheet
+`docs/rig/wed_2026-11-11.md`, flown as far as each session gets; the real-world freeze moved to Thu 19 Nov. Funnel v4 on
+plate 9, then the supervisor's (`BAND=cone`). No frozen bars.
+- [ ] (1) Detach and re-attach: nrtf x5 (hover, plate 9), nr1f x3 (re-attach on plate 1), nro x3 (circle, his TAKEOFF
+      stops it for the re-attach).
+- [ ] (2) The drop into the circling ring: k1zo x3 (small object).
+- [ ] (3) Only if pickups keep failing: fm9hc (the held object into the circling ring, then the re-attach).
+- [ ] THE FULL MISSION on the circle: fm9c until one completes (the ring stops by itself for the re-attach); fallback fm9
+      in hover.
+- [ ] Videos and the supervisor's demo (18/19 Nov).
+- Dropped (Wesley 10 Nov): rel, relo (the unannounced releases), fm9o, k1z as a line (backup), the 1 m baselines.
 
 **After every flight:** a registry row; read the log before answering.
 
 ## 3. Simulation (lab PC)
 
 All runs are in `docs/sim_runs_todo.md`. In order:
-- [ ] X1 release ablation (running).
-- [ ] Merge X4, then the short relay check, then the 30-min relays.
-- [ ] X2 the chain.
-- [ ] X3 the 8-quad set.
+- [x] X1 release ablation: FINAL on the earlier masses R4150-R4193 (feed F087, reviewer corrections F088: the release always caught;
+      the resize leaves the ring more level in hover only, adds a second swing, never settles sooner; square-to-T 0.6 vs 2.2 deg only
+      on the earlier masses with the integral off (1.74 vs 1.80 on the final masses): reported on both models side by side (Wesley 7 Nov, F089);
+      34 solver switches, none failed). The final-mass
+      R3821-R3906 (F059 / F060) stay recorded.
+- [x] Merge X4, then the short relay check, then the 30-min relays. (Final tree: R3772-R3776, feed F054; R7 missed, reported as flown.)
+- [x] X2 the chain: FINAL on the earlier masses R3986-R3991 (feed F069, reviewer corrections F070: A falsified in one repeat, its rise 30.45 deg vs 30 and last fold-in 5.36 vs 5; B confirmed, under 3 deg from 6 s on).
+- [x] X3 the 8-quad set: FINAL on the earlier masses R3922-R3927, R3954-R3979 (feed F065 + its reviewer's corrections F066: every return welded; N4 missed by 0.7-1.6 mm in five cases (the window opens with the ring 28-31 mm off after the last fold-in), held in chain2back; the claim chain falsified by N4 as written).
 - [ ] X3b eight and nine carriers at one iteration per tick (real-time) + the ground computer's tick (before X4's long runs).
-- [ ] X8 the paper's method through a loss.
+      Chains FINAL on the earlier masses R3980, R3981, R3984, R3985 (feed F067, reviewer corrections F068); C8 and N9 on one model with R4194-R4199 (F090, reviewer corrections F093: C8
+      CONFIRMED; N9's flight items hold, N9 not confirmed); R9a done 8 Nov (F095: 50.4 ms at 8, 63.1 at 9, holds); R9b not flyable here (void twice).
+- [x] X8 the paper's method through a loss: FINAL on the final tree R4000-R4013 (feed F073: L1 world C and L2 rim CONFIRMED, L3 holds; reviewer corrections F074; the hub's integral-off arm R4200 / R4201 (F091): same verdicts, the centre ends 33-34 mm off, the free ring past 80 deg to LAND).
+- [x] 4.1 the fixed team and 4.2 the 4 -> 3 release: FINAL on the final tree and masses R4014-R4033 (feed F076: numbers
+      only for 4.1, no card bars; the release detected 0.36-0.37 s, the freed drone disarmed alone (it tipped over in R4033); reviewer corrections F077: yaw 3.7-4.0 deg RMS on the exact clock).
+- [x] 4.3 U, the magnet caught off its slot: FINAL on the final tree and masses R4034-R4093 (feed F078: the measured
+      arm's fold-in within 2.8 deg to 16 cm along the rim / 20 cm in; 10 fleet aborts in the landing, the newcomer tipping
+      over with the ring on the floor; falsified as the card is written by those aborts; reviewer corrections F079: aborts on a touchdown spike, rim ordering reversed since 23 Oct).
+- [x] 4.3 the newcomer's join: FINAL on the final tree and masses R4094-R4107 (feed F080, reviewer corrections F081: joins proven, 20-34 s
+      on the triangle, 32 s on the square, 97-99 s with a pickup, one cell 3 contacts; the square floor-join landings abort after LAND: TB14, the known twin effect). Re-flown on the 0.86 kg ring (Q011, Wesley 9 Nov;
+      R4214-R4227, F097 + F098): every join on the first contact, 20-21 s triangle, 32 s square, 97 s with the pickup; Figure 15 from R4227.
+- [x] 4.5 comparison with Quan et al.: FINAL on the final tree and masses R4108-R4139 (feed F082: our planner closer than the port
+      in every rim and hub cell; the paper's form lost all 6 runs, as on 23 Oct; the law as printed on world C ~0.14 m off, landed; reviewer corrections F083: rim values accepted by Wesley 23 Oct, like-for-like hub reading "the port", thesis draft line 325 stale).
+- [x] 4.2 the gap table (tab:res_gap): FINAL on the final tree and masses R4140-R4149 + R4033 / R4032 (feed F084: tilt rise
+      6.3 / 10.3 / 16.0 deg at 120 / 135 / 150, one 165 deg run of two dropped, 180 tips without the drop rule; B1, B2, B4 confirmed; reviewer corrections F085: R4146 valid, Tier B bars never approved by Wesley;
+      the draft's table, results_discussion.tex lines 79-96, cites 23 Oct).
 - [x] Code freeze: the tree as of Thu 5 Nov 18:25 (Wesley: "Start running"; 9f20f8b + uncommitted, recorded in every
       manifest; gate 2200 passed).
 - [ ] The final-tree re-fly of every claim, X1-X4, X8, 4.1/4.2 and X11 (`docs/claim_batch_2026-11-07.md`, 255 runs,
@@ -191,7 +225,7 @@ Style: full box, legends below and framed, tables with full borders (`tools/plot
       the real plate's overrides in our launch (collision 0.100/0.100/0.025, his pickup point -0.0045, backend half
       0.050/0.050/0.0125, object centre vs magnet, object_mass_kg stays 0) before any pickup flight; document the frozen-
       marker rule's limit in CHANGES_FROM_TEJEN.md; partial_step re-test in the twin only after the delay paths are separated.
-- [x] Wed 4 Nov sheet: `docs/rig/wed_2026-11-04.md`, desk-checked again 2 Nov on the final tree: lines h3t, h3t180, h4m1, sq6b, rel1/2; detection and body
+- [x] Wed 4 Nov sheet: `docs/rig/archive/wed_2026-11-04.md`, desk-checked again 2 Nov on the final tree: lines h3t, h3t180, h4m1, sq6b, rel1/2; detection and body
       set settled, his MPC cable typed 1.0 (Wesley), throttle_max 0.95 for the three left after a release; every line
       desk-ok on fake mocap 30 Oct (the release's marker check moved to configs/rig/m1_release_tip.yaml after a refusal).
 - [x] Thrust margin (lab chat, exploratory, from logs; done 31 Oct, `docs/analysis/thrust_margin_2026-10-31.md`, feed

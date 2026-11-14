@@ -26,6 +26,9 @@ class MissionPhase(str, Enum):
     DROP_OBJECT = "DROP_OBJECT"
     CLEAR_DROP_ZONE = "CLEAR_DROP_ZONE"
     TRANSIT_TO_REATTACH = "TRANSIT_TO_REATTACH"
+    # return_after_drop (12 Nov): the supervisor's drop-off ends back at the start (start -> ring -> start)
+    RETURN_TO_START = "RETURN_TO_START"
+    AT_START = "AT_START"
     APPROACH_ABOVE_TARGET = "APPROACH_ABOVE_TARGET"
     MATCH_VELOCITY = "MATCH_VELOCITY"
     DESCEND_TO_ATTACHMENT = "DESCEND_TO_ATTACHMENT"
