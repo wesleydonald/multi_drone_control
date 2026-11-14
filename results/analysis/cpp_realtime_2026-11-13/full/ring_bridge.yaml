@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    attach_twist: zero
+    bridge_attach_radius_m: 0.225
+    bridge_attach_xy_m:
+    - 0.0
+    - 0.2293
+    bridge_attach_z_m: 0.0491
+    bridge_cable_elev_deg: 60.0
+    bridge_cable_len_m: 1.0
+    bridge_carrier_azimuths_deg:
+    - 270.0
+    - 30.0
+    - 150.0
+    enable_fake_obstacles: true
+    fake_drone_count: 3
+    fake_drone_radius: 0.12
+    fake_drone_safety_radius: 0.35
+    full_pose_attachment: true
+    payload_committed_trajectory_topic: /fake_payload/committed_trajectory
+    publish_attached_plates: true
+    publish_shared_trajectories: true
+    ring_attachment_plate_index: 3
+    ring_collision_bottom_offset_m: -0.27
+    ring_collision_outer_diameter_m: 0.51
+    ring_collision_top_offset_m: 0.0
+    ring_plate_count: 12
+    ring_plate_diameter_m: 0.06
+    ring_plate_pitch_diameter_m: 0.45
+    ring_structure_height_m: 0.07
+    shared_trajectory_backdate_s: 0.04
+    shared_trajectory_control_interval_s: 0.5
+    shared_trajectory_duration_s: 30.0
+    shared_trajectory_refresh_period_s: 1.0
+    trail_seconds: 0.0
+    use_sim_time: true

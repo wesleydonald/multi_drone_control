@@ -1,0 +1,6 @@
+# drop_and_land_hold5.yaml with int_k_xy 0, simulation (exploratory, 31 Oct, the chosen setting on the attach cell).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+traj_hold_s: 5.0
+int_k_xy: 0.0

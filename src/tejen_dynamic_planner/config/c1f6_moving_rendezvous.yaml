@@ -29,7 +29,7 @@ dynamic_planner_transfer_backend:
     fixed_splice_lookahead_s: 0.10
     # Independent wall-clock backstop for the Octopus search. This is a solver
     # budget, not a trajectory-time reserve.
-    octopus_max_runtime_s: 0.05
+    octopus_max_runtime_s: 0.10   # 13 Nov (Te-Jen, RIG-1113-fm9hc_5): 30 of 62 failed replans hit the 0.05 s limit (RUNTIME_REACHED); was 0.05
 
     # C1F.6 / M2D commissioned timing. Hard-line M2D validation on 2026-09-13
     # showed that 2.5 produced repeated execution tracking-tube fallback on
@@ -133,7 +133,7 @@ dynamic_planner_transfer_backend:
     cooperative_committed_trajectory_topics:
       - /fake_obstacles/drone_0/committed_trajectory
       - /fake_obstacles/drone_1/committed_trajectory
-    cooperative_state_timeout_s: 0.30
+    cooperative_state_timeout_s: 1.0   # 13 Nov (Te-Jen, rig fm9h8_3): ring_bridge states reached 290-395 ms on the busy rig laptop; was 0.30
     # Retained only for explicit constant_velocity degraded/test mode.
     cooperative_prediction_horizon_s: 20.0
     cooperative_body_half_x_m: 0.105
@@ -144,6 +144,13 @@ dynamic_planner_transfer_backend:
     cooperative_tracking_half_x_m: 0.05
     cooperative_tracking_half_y_m: 0.05
     cooperative_tracking_half_z_m: 0.05
+    # The tracking_mismatch check's own bound (local, Wesley 5 Nov; was the 0.05
+    # above): a T hovering with int_k_xy 0 sits 0.05 m off its published path and
+    # latched the backend off (R3738). The 0.05 inflation stays: at 0.20 the
+    # carriers' tether boxes cover the low transit end (CHANGES_FROM_TEJEN.md 5 Nov).
+    cooperative_tracking_check_half_x_m: 0.20
+    cooperative_tracking_check_half_y_m: 0.20
+    cooperative_tracking_check_half_z_m: 0.20
 
     # M1 ring/net: the commitment is the true attachment-plane ring centre.
     # Collision geometry is a conservative 0.56 m square footprint spanning
@@ -163,7 +170,7 @@ dynamic_planner_transfer_backend:
     # closed-loop tracking. Three consecutive 30 Hz violations (~0.1 s) trigger
     # a checked brake-to-hover fallback. Velocity error is logged but does not
     # independently trip the gate while this limit is zero.
-    execution_tracking_safety_enabled: true
+    execution_tracking_safety_enabled: false   # 13 Nov (Te-Jen, per the supervisor: no tracking-error brakes); was true
     ego_tracking_half_x_m: 0.05
     ego_tracking_half_y_m: 0.05
     ego_tracking_half_z_m: 0.05

@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from tejen_mpc.command_execution import command_at_elapsed_time
+from tejen_mpc.throttle_bound import battery_compensated_channel
 from tejen_mpc.mpc_modes import payload_input_rate_bounds
 
 MAIN = Path(__file__).resolve().parents[1] / "tejen_mpc/main.py"
@@ -94,6 +95,7 @@ def _node(state, rate, partial, clock):
                            command_execution_last_publish_time=None,
                            mpc_command_stage_duration_s=.1 if partial else None,
                            _node_now_s=lambda: clock.now, control_history=[],
+                           battery_throttle_offset=lambda: 0.0,   # multi_drone_control 4 Nov: the battery term, off
                            cb=SimpleNamespace(cmd_publisher_=SimpleNamespace(publish=published.append)))
     return node, published
 
@@ -112,7 +114,8 @@ def test_actual_adapter_publishes_partial_step_and_stores_sent_command():
     node, published = _node(state, rate, True, clock)
     namespace = {"self": node, "np": np, "DT": 1 / 30,
                  "control_state": initial, "ELRSCommand": lambda **kw: SimpleNamespace(**kw),
-                 "command_at_elapsed_time": command_at_elapsed_time}
+                 "command_at_elapsed_time": command_at_elapsed_time,
+                 "battery_compensated_channel": battery_compensated_channel}
     exec(code, namespace)
     sent = _sent(published[-1])
     np.testing.assert_allclose(sent, initial + rate / 30, atol=.0005)
@@ -144,7 +147,8 @@ def test_oct10_sends_the_first_stage_endpoint_and_keeps_the_unrounded_history():
     clock = SimpleNamespace(now=10.)
     node, published = _node(state, rate, False, clock)
     namespace = {"self": node, "np": np, "DT": 1 / 30, "control_state": initial,
-                 "ELRSCommand": lambda **kw: SimpleNamespace(**kw)}   # no command_at_elapsed_time: never called
+                 "ELRSCommand": lambda **kw: SimpleNamespace(**kw),   # no command_at_elapsed_time: never called
+                 "battery_compensated_channel": battery_compensated_channel}
     for now in (10., 10.048):
         clock.now = now
         exec(code, namespace)

@@ -235,7 +235,8 @@ def test_tracking_check_off_turns_his_tracking_latch_off_and_nothing_else():
     def margins(**typed):
         ctx = LaunchContext()
         ctx.launch_configurations.update(
-            {'max_swing_angle_rad': '', 'cooperative_tracking_half_m': '', 'tracking_check': '', **typed})
+            {'max_swing_angle_rad': '', 'cooperative_tracking_half_m': '', 'tracking_check': '', 'spline_time_factor': '',
+             'workspace_xy': '', 'workspace_z_max': '', 'cooperative_body_half_m': '', 'swing_envelope': '', 'target_time_iterations': '', 'return_after_drop': '', 'return_climb': '', 'cpp_max_z': '', 'temporal_refinement': '', 'cpp_world_refresh': '', 'cpp_splice': '', **typed})
         return m._backend_margins(ctx)
     assert margins() == {}
     off = margins(tracking_check='off')
@@ -247,6 +248,75 @@ def test_tracking_check_off_turns_his_tracking_latch_off_and_nothing_else():
     assert 'cooperative_tracking_half_x_m' not in params                       # his inflation stays his
 
 
+def test_carriers_tracking_check_bound_is_wider_than_their_collision_inflation():
+    """Wesley 5 Nov: his carriers' tracking check at 0.20 m (was the 0.05 m inflation): the T flown with int_k_xy 0
+    hovers 0.050 m off its published path and latched his backend off (R3738, R3749, R3750). The inflation stays 0.05
+    (at 0.20 the carriers' tether boxes cover the low transit end); the backend's own default for the check follows
+    the inflation, and nothing in the launch's overrides touches it."""
+    dyn = Path(__file__).resolve().parents[2] / 'tejen_dynamic_planner'
+    cfg = yaml.safe_load((dyn / 'config' / 'c1f6_moving_rendezvous.yaml').read_text())
+    p = cfg['dynamic_planner_transfer_backend']['ros__parameters']
+    assert [p[f'cooperative_tracking_check_half_{a}_m'] for a in 'xyz'] == [0.20] * 3
+    assert [p[f'cooperative_tracking_half_{a}_m'] for a in 'xyz'] == [0.05] * 3
+    assert p.get('cooperative_tracking_safety_enabled', True) is True           # the check stays on (his default)
+    src = (dyn / 'src' / 'transfer_backend_node.cpp').read_text()
+    assert '"cooperative_tracking_check_half_x_m", -1.0' in src
+    assert 'const double bound = cooperative_tracking_check_half_extents_(axis);' in src
+    m = launch_module()
+    f = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin_L100_p115'], rod=1.04, floor_join=True,
+                             carrier_model='tether', margins={}).split(',')[1]
+    over = yaml.safe_load(Path(f).read_text())['dynamic_planner_transfer_backend']['ros__parameters']
+    assert not any(k.startswith('cooperative_tracking') for k in over)
+
+
 def test_ring_bridge_numbers_the_carriers_plates_as_his_planner_does():
     stub = SimpleNamespace(_carrier_azimuths=lambda: [270.0, 30.0, 150.0])   # rig_twin, counter-clockwise
     assert RingBridge.carrier_plates(stub) == [9, 1, 5]
+
+
+def _margins(**typed):
+    from launch import LaunchContext
+    ctx = LaunchContext()
+    ctx.launch_configurations.update({'max_swing_angle_rad': '', 'cooperative_tracking_half_m': '', 'tracking_check': '',
+                                      'spline_time_factor': '', 'workspace_xy': '', 'workspace_z_max': '',
+                                      'cooperative_body_half_m': '', 'swing_envelope': '', 'target_time_iterations': '', 'return_after_drop': '', 'return_climb': '', 'cpp_max_z': '', 'temporal_refinement': '', 'cpp_world_refresh': '', 'cpp_splice': '', **typed})
+    return launch_module()._backend_margins(ctx)
+
+
+def test_spline_time_and_workspace_only_when_typed():
+    """Te-Jen 12 Nov: his spline_time_factor and his workspace bounds (x, y +-workspace_xy, z 0 to workspace_z_max) reach
+    his backend only when typed; the workspace needs both values."""
+    assert _margins() == {}
+    m = _margins(spline_time_factor='4', workspace_xy='1.8', workspace_z_max='2.9', max_swing_angle_rad='0.0873',
+                 cooperative_tracking_half_m='0.06')
+    assert m['spline_time_factor'] == 4.0 and m['max_swing_angle_rad'] == 0.0873
+    assert m['workspace_bounds_enabled'] is True
+    assert m['workspace_min'] == [-1.8, -1.8, 0.0] and m['workspace_max'] == [1.8, 1.8, 2.9]
+    assert [m[f'cooperative_tracking_half_{a}_m'] for a in 'xyz'] == [0.06] * 3
+    with pytest.raises(RuntimeError, match='together'):
+        _margins(workspace_xy='1.8')
+
+
+def test_swing_envelope_only_when_typed():
+    """12 Nov: his swing_envelope_shape reaches his backend only when typed (his legacy_square stands otherwise)."""
+    assert 'swing_envelope_shape' not in _margins()
+    assert _margins(swing_envelope='outer_octagon')['swing_envelope_shape'] == 'outer_octagon'
+
+
+def test_target_time_iterations_only_when_typed():
+    """12 Nov: his target_time_fixed_point_iterations reaches his backend only when typed (his 6 otherwise)."""
+    assert 'target_time_fixed_point_iterations' not in _margins()
+    assert _margins(target_time_iterations='30')['target_time_fixed_point_iterations'] == 30
+
+
+def test_a_typed_carrier_body_box_wins_over_the_tether_model():
+    """12 Nov (Te-Jen's sweep limit 0.09 m): typed values go last in his backend's overrides."""
+    m = launch_module()
+    f = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin'], rod=0.59, floor_join=False, carrier_model='tether',
+                             margins=_margins(cooperative_body_half_m='0.09')).split(',')[1]
+    p = yaml.safe_load(Path(f).read_text())['dynamic_planner_transfer_backend']['ros__parameters']
+    assert p['cooperative_body_half_x_m'] == p['cooperative_body_half_y_m'] == 0.09 and p['cooperative_body_half_z_m'] == 0.06
+    f = m._backend_overrides('base.yaml', m.GEOMETRY['rig_twin'], rod=0.59, floor_join=False, carrier_model='tether',
+                             margins=_margins()).split(',')[1]
+    p = yaml.safe_load(Path(f).read_text())['dynamic_planner_transfer_backend']['ros__parameters']
+    assert p['cooperative_body_half_x_m'] == 0.105                                 # untyped: his tether model's

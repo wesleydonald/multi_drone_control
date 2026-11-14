@@ -10,19 +10,12 @@ inline std::pair<dynamic_planner::Vec3, dynamic_planner::Vec3> assemblyWorkspace
     const dynamic_planner::Vec3& lower, const dynamic_planner::Vec3& upper,
     const dynamic_planner::Vec3& body_half,
     const dynamic_planner::SuspendedGeometry& suspended,
-    const dynamic_planner::Vec3& tracking) {
-    using dynamic_planner::Vec3;
-    if (!lower.allFinite() || !upper.allFinite() || !tracking.allFinite() ||
-        (lower.array() >= upper.array()).any() || (tracking.array() < 0.).any())
-        throw std::invalid_argument("invalid experiment workspace/tracking bounds");
-    Vec3 relative_min = -body_half, relative_max = body_half;
-    for (const auto& component : dynamic_planner::assemblyComponents(body_half, suspended)) {
-        relative_min = relative_min.cwiseMin(component.vertices.colwise().minCoeff().transpose());
-        relative_max = relative_max.cwiseMax(component.vertices.colwise().maxCoeff().transpose());
-    }
-    Vec3 lo = lower-relative_min+tracking, hi = upper-relative_max-tracking;
-    if ((lo.array() >= hi.array()).any())
-        throw std::invalid_argument("assembly does not fit experiment workspace");
-    return {lo, hi};
+    const dynamic_planner::Vec3& tracking,
+    const Eigen::Matrix3d& rotation = Eigen::Matrix3d::Identity()) {
+    dynamic_planner::AssemblyWorkspace workspace;
+    workspace.enabled = true;
+    workspace.lower = lower;
+    workspace.upper = upper;
+    return dynamic_planner::assemblyCentreBounds(workspace, body_half, suspended, tracking, rotation);
 }
 } // namespace tejen_dynamic_planner

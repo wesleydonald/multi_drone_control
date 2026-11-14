@@ -1,0 +1,29 @@
+# X8, the paper's method through a loss (card docs/experiments/2026-10-30_x8_network_loss.md): the exact law (net_law quan at its current reading, R6c; quan_law.py R1-R10) on world C.
+# configs/twin/c_net_quan.yaml (the C table's arm, as flown) plus the loss rules below; nothing else changed.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_law: 'quan'
+quan_nodes: 'algebraic'
+quan_vcmd: 'measured'
+diss_ki_load: 0.0
+vel_kp_pos: 0.0
+vel_kv: 3.0
+vel_k_att: 8.0
+quan_k_ij: 0.5
+quan_c_ij: 0.25
+quan_k_i: 1.0
+quan_c_i: 1.0
+quan_fc: 0.5
+quan_node_mass: 1.0
+quan_rod_mass: 0.055
+quan_hc_m: 3.41
+quan_range_m: 2.0
+# X8's loss rule, the same text in every arm of the cell: drop_gap_deg 200 lets our planner fly on with the T a
+# loss of one of four leaves (its largest gap 180 deg; on the hub the cables meet at the ring's centre of mass, so
+# the T is no capsize there). Inert in the network phase (the planner's loss rules run only before the hand-over).
+drop_gap_deg: 200.0

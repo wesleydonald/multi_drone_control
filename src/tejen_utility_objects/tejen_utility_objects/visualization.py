@@ -174,27 +174,38 @@ class TrajectoryVisualizer:
         except Exception as e:
             self.node.get_logger().error(f"Error publishing actual path: {e}")
     
+    def mpc_plan_requested(self):
+        """Display interest only; never flight or reference readiness."""
+        return (self.mpc_plan_publisher.get_subscription_count() > 0
+                or self.marker_publisher.get_subscription_count() > 0)
+
     def publish_mpc_plan(self, mpc_trajectory: np.ndarray):
         try:
+            path_requested = self.mpc_plan_publisher.get_subscription_count() > 0
+            markers_requested = self.marker_publisher.get_subscription_count() > 0
+            if not (path_requested or markers_requested):
+                return
             if mpc_trajectory is None or mpc_trajectory.shape[1] < 2:
                 return
-            
-            path_msg = Path()
-            path_msg.header = self._create_header()
-            
+
             poses = self._trajectory_to_poses(mpc_trajectory)
-            
+            stamped_poses = []
             for pose in poses:
                 pose_stamped = PoseStamped()
                 pose_stamped.header = self._create_header()
                 pose_stamped.pose = pose
-                path_msg.poses.append(pose_stamped)
-            
-            self.mpc_plan_publisher.publish(path_msg)
+                stamped_poses.append(pose_stamped)
+
+            if path_requested:
+                path_msg = Path()
+                path_msg.header = self._create_header()
+                path_msg.poses = stamped_poses
+                self.mpc_plan_publisher.publish(path_msg)
             
             # Publish markers for solid purple line
-            self._publish_solid_path_markers(path_msg.poses, "mpc_plan", 
-                                           ColorRGBA(r=0.5, g=0.0, b=1.0, a=1.0))
+            if markers_requested:
+                self._publish_solid_path_markers(stamped_poses, "mpc_plan",
+                                               ColorRGBA(r=0.5, g=0.0, b=1.0, a=1.0))
             
         except Exception as e:
             self.node.get_logger().error(f"Error publishing MPC plan: {e}")

@@ -1,0 +1,20 @@
+nrtfc_2: OFF +22.83 s (script 22.83)
+nrtfc_2 detach: window 14.77 s (script 14.77), before 3.08 s; dip against the plain 5 s before: -9.88 mm
+   tilt peak deg              by hand    8.09   script    8.09
+   dip mm                     by hand   11.61   script   11.61
+   horizontal excursion cm    by hand   10.95   script   10.95
+nrtfc_2: fold-in +48.16 s (script 48.16)
+nrtfc_2 attach: window 8.65 s (script 8.65), before 5.00 s; dip against the plain 5 s before: 10.64 mm
+   tilt peak deg              by hand    6.86   script    6.87
+   dip mm                     by hand   10.64   script   10.78
+   horizontal excursion cm    by hand    5.47   script    5.47
+nrtfc_5: OFF +22.73 s (script 22.73)
+nrtfc_5 detach: window 15.00 s (script 15.0), before 3.32 s; dip against the plain 5 s before: 0.61 mm
+   tilt peak deg              by hand    9.33   script    9.34
+   dip mm                     by hand   15.67   script   15.73
+   horizontal excursion cm    by hand    8.08   script    8.10
+nrtfc_5: fold-in +51.40 s (script 51.4)
+nrtfc_5 attach: window 12.37 s (script 12.37), before 5.00 s; dip against the plain 5 s before: 7.85 mm
+   tilt peak deg              by hand    4.81   script    4.80
+   dip mm                     by hand    7.85   script    7.93
+   horizontal excursion cm    by hand    4.31   script    4.30

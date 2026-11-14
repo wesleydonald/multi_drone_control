@@ -1,0 +1,122 @@
+name: cda_b_k1s
+description: 'Card docs/experiments/2026-11-05_carriers_down_alone.md (5 Nov; exploratory, one run per arm and scenario, bars written before and judged after the run; rev 3): S2s the k1d case on hover with drone 1 stronger than its map by 0.03 (sim offset 0.155 against 0.185, as rev 4''s S4: A stopped it 26.6 cm up and it tipped, R3725; added after the critic, CARD 2: the band D relies on): QUAD4 alone picks up the object and drops it into the hovering ring, LAND, QUAD4 taken back and landed alone, the carriers wait; rig LAND path (land_unwind false) with land_rearm_touchdown off, as the rig flies; M2A ring, 1 m links; arm B, the base: land_descend_to_stall on (the rig default since 5 Nov ~15:15), carriers_down_alone off. Copied from cda_b_k1.yaml (from k1_m2a_orbit_drop.yaml) on the current tree and links.'
+world: three_rigid_ground_rig_attach_pickup_L100.sdf
+ball_start: [1.6, 2.0, 0.08]       # the M2A pickup world's object (tools/make_attach_worlds_L100.py BALL_XY)
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    land_unwind: false
+    land_rearm_touchdown: false
+    land_descend_to_stall: true
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.155,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.95
+    cable_notch_hz: 5.3
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.75
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 90,330,210
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.032
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 220.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin_L100 plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0]
+    contact_attach:=true carry_clearance:=0.25 confirm_pickup_release:=true mission_mode:=pickup_delivery commit_backdate:=0.04
+    tracking_check:=off cpp_authority:=false end_after_drop:=true drop_on_arrival:=true lift_full:=true mpc_throttle_max:=0.8 drop_height:=0.48 max_body_z:=2.8 line_up:=true climb_speed:=0.3
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 57.5                # LAND ~15 s after the drop on the low route (twin R2898: drop at 54.6 s sim; events after WAIT_LIFT run from LIFTED, ~12.3 s later: LAND at ~70 s)
+  do: LAND
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    iso:
+      pos:
+      - 3.46
+      - -3.16
+      - 4.66
+      look_at:
+      - 0.0
+      - 0.3
+      - 1.2
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

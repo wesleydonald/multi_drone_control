@@ -120,6 +120,7 @@ def world_geometry(sdf_path):
     arm = newcomer_arm(sdf_path)
     if arm is not None:
         g['attach_arm_len'], g['attach_arm_pivot_z'] = arm
+        g['arm_rod'] = newcomer_arm_rod(sdf_path, arm[0])
     return g
 
 
@@ -140,6 +141,25 @@ def newcomer_arm(sdf_path):
     if not links or not all(lengths):
         return None
     return sum(float(m.group(1)) for m in lengths), float(links[0][0].split()[2])
+
+
+def newcomer_arm_rod(sdf_path, length):
+    """(mass, centre of mass from the ring end) of the newcomer's arm with its magnet, as a rod once it is welded: the
+    arm's mass at its middle, the tip's at the ring end. A segmented arm has no one rod: mass 0, which no plan matches."""
+    m = re.search(r'<uri>(models/x3_(?:rig_)?drone\d_magnet[^<]*\.sdf)</uri>', pathlib.Path(sdf_path).read_text())
+    mf = pathlib.Path(sdf_path).parent / m.group(1)
+    if not mf.exists():
+        mf = REPO / 'simulation_assets' / m.group(1)
+    text = mf.read_text() if mf.exists() else ''
+
+    def mass(name):
+        lk = re.search(rf'<link name="{name}">(.*?)</link>', text, re.S)
+        mm = re.search(r'<mass>([0-9.eE+-]+)</mass>', lk.group(1)) if lk else None
+        return float(mm.group(1)) if mm else 0.0
+    arm, tip = mass('magnet_arm'), mass('magnet_tip_link')
+    if 'magnet_arm_lower' in text or arm + tip <= 0.0:
+        return (0.0, 0.0)
+    return (arm + tip, arm * 0.5 * length / (arm + tip))
 
 
 def _link_mass(link):
@@ -185,12 +205,14 @@ def _drone_and_rod_geometry(sdf_path, world):
         mm = re.fullmatch(r'tether_(\d+)', lk.get('name') or '')
         if mm:
             rods[int(mm.group(1))] = lk
-    pivots, rod_masses = [], []
+    pivots, rod_masses, rod_list = [], [], []
     for i, rod in rods.items():
         cyl = rod.find('visual/geometry/cylinder/length')
         if cyl is None or i not in drones:
             continue
         L = float(cyl.text)
+        # (mass, centre of mass from the ring end): the link's local z runs from the ring end to the drone end
+        rod_list.append((_link_mass(rod), 0.5 * L + _pose(rod.find('inertial'))[2]))
         x, y, z, _, pitch, yaw = _pose(rod)
         top = (x + 0.5 * L * math.sin(pitch) * math.cos(yaw),
                y + 0.5 * L * math.sin(pitch) * math.sin(yaw),
@@ -210,10 +232,11 @@ def _drone_and_rod_geometry(sdf_path, world):
     if pivots:
         out['pivot_dz'] = sum(pivots) / len(pivots)
         out['rod_mass'] = sum(rod_masses) / len(rod_masses)
+        out['rods'] = rod_list
         if max(pivots) - min(pivots) > TOL:
             out['_warn_pivot'] = f'pivot offsets differ: {[round(p, 4) for p in pivots]}'
         if 'drone_airframe_mass' in out:
-            # as the planner counts it: airframe + rod + magnet (rig: 0.475 + 0.075)
+            # as the planner counts it: airframe + rod + magnet (rig twin: 0.510 + 0.040)
             out['drone_mass'] = out['drone_airframe_mass'] + out['rod_mass']
     return out
 
@@ -336,6 +359,43 @@ def config_mismatches(world, launch_path=None, overrides=None):
     legacy_world = legacy or (not isinstance(world, dict) and is_legacy_world(world))
     if arm is not None and abs(arm[1] - arm[0]) > ARM_TOL and not (legacy_world and arm_untyped(d)):
         bad.append(('attach_cable_len',) + arm)
+    base = dict(launch_defaults(launch_path, (overrides or {}).get('mode'), legacy)) if launch_path else {}
+    bad.extend(rod_mismatches(g, rod_values(base, overrides)))
+    return bad
+
+
+ROD_MASS_TOL, ROD_COM_TOL = 0.002, 0.005      # kg, m: the planner has one rod for every slot
+
+
+def rod_values(d, overrides=None):
+    """The knobs rod_model reads: a launch's defaults, its params_file on top, the typed arguments last, as flown."""
+    sys.path.insert(0, str(REPO / 'src' / 'bringup'))
+    from bringup.profiles import _load, flatten
+    vals = dict(d)
+    pf = str((overrides or d).get('params_file') or '').strip()
+    if pf and pathlib.Path(pf).expanduser().exists():
+        vals.update(flatten(_load(str(pathlib.Path(pf).expanduser()))))
+    vals.update({k: v for k, v in (overrides or {}).items() if v is not None})
+    return vals
+
+
+def rod_mismatches(g, vals):
+    """[(key, world value, controller value)] where the rod the planner models is not every rod the world flies: its
+    tethers and a newcomer's arm. Nothing to check with no rod in the plan. A world with no rods, rods that differ, or a
+    segmented arm cannot be modelled by one rod, so it always comes out here."""
+    sys.path.insert(0, str(REPO / 'src' / 'bringup'))
+    from bringup.profiles import rod_model
+    level, mass, com = rod_model(vals)
+    if mass <= 0.0 and not level:
+        return []
+    rods = list(g.get('rods') or []) + ([g['arm_rod']] if g.get('arm_rod') else [])
+    if not rods:
+        return [('rod_mass', 0.0, mass)]
+    bad = []
+    for key, idx, value, tol in (('rod_mass', 0, mass, ROD_MASS_TOL), ('rod_com', 1, com, ROD_COM_TOL)):
+        worst = max((r[idx] for r in rods), key=lambda w: abs(w - value))
+        if abs(worst - value) > tol:
+            bad.append((key, worst, value))
     return bad
 
 

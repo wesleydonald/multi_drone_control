@@ -75,6 +75,9 @@ def _args():
                               description="Motive ring body id; '' = node default 8"),
         DeclareLaunchArgument('mocap_magnet_tip_body_id', default_value='',
                               description="Motive body on drone 3's magnet tip (weld detection); '' = none"),
+        DeclareLaunchArgument('mocap_tip_bodies', default_value='',
+                              description="more magnet tip bodies, '<id>:/<topic>,...', each a PoseStamped as the "
+                                          "one tip's /magnet_tip_pose (the 4 -> 2 -> 4 partners); '' = none"),
         DeclareLaunchArgument('mocap_extra_bodies', default_value='',
                               description="more Motive bodies, '<id>:/<topic>,...' (combined M1: his ball "
                                           "6:/pickup/motion_capture_state); '' = none"),
@@ -153,6 +156,9 @@ def launch_setup(context, *args, **kwargs):
     extra = LaunchConfiguration('mocap_extra_bodies').perform(context).strip()
     if extra:
         mocap_params['extra_bodies'] = extra
+    tips = LaunchConfiguration('mocap_tip_bodies').perform(context).strip()
+    if tips:
+        mocap_params['tip_bodies'] = tips
     vel = LaunchConfiguration('mocap_vel_drones').perform(context).strip()
     if vel:
         mocap_params['vel_filter_drones'] = [int(v) for v in vel.split(',')]

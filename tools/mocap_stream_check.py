@@ -10,7 +10,8 @@ uses (at most 8 at 240 Hz) and check here that each one arrives at the full came
     tools/mocap_stream_check.py                                   # 5 s, camera rate 240 Hz
     tools/mocap_stream_check.py --expect 6,8,11,12,13,14,24       # also flag missing / extra bodies
 
-Exit 0 when every body arrives within 2 % of --rate and the expected set matches, else 1.
+Exit 0 when every body arrives within 2 % of --rate, no streaming ID is shared by two bodies (11 Nov: a second body on
+ID 14 arrived as one body at 480 Hz, its pose jumping between the two) and the expected set matches, else 1.
 """
 import argparse, re, socket, sys, time
 from collections import Counter
@@ -57,8 +58,11 @@ def main():
     for b in bodies:
         hz = cnt[b] / T
         low = hz < 0.98 * a.rate
-        ok &= not low
-        print(f'  body {b:3d}: {hz:6.1f} Hz' + ('   <-- below the camera rate: the forwarder is falling behind' if low else ''))
+        shared = hz > 1.5 * a.rate          # two rigid bodies on one streaming ID arrive as one body at twice the rate
+        ok &= not (low or shared)
+        print(f'  body {b:3d}: {hz:6.1f} Hz' + ('   <-- below the camera rate: the forwarder is falling behind' if low else '')
+              + ('   <-- TWO BODIES SHARE THIS ID: its pose jumps between them; untick or renumber the other in Motive'
+                 if shared else ''))
     if cnt['bad']:
         print(f'  {cnt["bad"]} packets not in the "id|(x, y, z)|(qx, qy, qz, qw)" format')
     if a.expect:

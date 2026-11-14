@@ -803,11 +803,25 @@ def test_drop_waits_the_release_dwell_even_with_the_flag_clear():
 
 def test_drop_timeout_with_the_object_measured_on_the_magnet_is_a_give_up():
     p = _dropping([0.0, 0.0, -0.04])
-    p.clock.t += 0.5
+    p.clock.t += p.drop_wait_time_s + DROP_PUCK_WAIT_S + 0.1   # still on the magnet when the wait runs out
     p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
     tick(p)
     assert p.phase == P.TAKEN_BACK and p.contact_gave_up
     assert [m.data for m in p.give_up_publisher.messages] == [True]
+
+
+def test_an_object_still_on_the_magnet_after_the_dwell_gets_the_wait_to_fall():
+    """RIG-1111-fm9hc_8: after the coil OFF the object rode the magnet ~0.9 s, then fell into the net; the one check
+    at the end of the 0.4 s dwell gave up. It now waits drop_puck_wait_s for the object to leave."""
+    p = _dropping([0.0, 0.0, -0.04])
+    p.clock.t += 0.5
+    p.last_magnet_tip_pose_time = p.last_pickup_object_pose_time = p.clock.t
+    tick(p)
+    assert p.phase == P.DROP_OBJECT and not p.contact_gave_up
+    assert any('still on the magnet' in w for w in p.warnings)
+    p.pickup_object_position = p.measured_magnet_tip_position + np.array([0.0, 0.0, -0.3])   # it falls
+    tick(p, 0.5)
+    assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
 
 
 def test_drop_clears_once_the_object_is_measured_away():
@@ -843,9 +857,11 @@ def test_a_fresh_pose_away_from_the_magnet_within_the_wait_clears_the_drop():
     assert p.phase == P.CLEAR_DROP_ZONE and not p.contact_gave_up
 
 
-def test_a_fresh_pose_on_the_magnet_within_the_wait_is_a_give_up():
+def test_a_fresh_pose_on_the_magnet_keeps_waiting_until_the_wait_runs_out():
     p = _unmeasured_drop(1.0)
-    tick(p, 0.1)                                      # fresh again, the object still on the marker
+    tick(p, 0.1)                                      # fresh again, the object still on the marker: it may yet fall
+    assert p.phase == P.DROP_OBJECT and not p.contact_gave_up
+    tick(p, DROP_PUCK_WAIT_S)                         # the wait runs out with it still on: the give-up
     assert p.phase == P.TAKEN_BACK and p.contact_gave_up
 
 

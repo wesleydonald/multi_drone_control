@@ -1,0 +1,24 @@
+# The twin's partner records for the 4 -> 2 -> 4 square (simulation_assets/pair2_rigid_ground_rig_attach_welded_pickup_L100.sdf,
+# tools/make_attach_layout_worlds_L100.py 'pair2'): configs/rig/partners_424.yaml's schema with the twin's values, as
+# configs/experiments/rig_nrtf_twin.yaml types them for QUAD4 alone (the tip sphere's centre on the plate, 0.02 + 0.012; the
+# 1 m arm; no taut-length floor in the twin). The twin's tip comes from each partner's gz model, so tip_body is the rig's
+# Motive id, unused here.
+partners:
+  - drone: 3          # QUAD4, x3_drone3, ring weld /payload/*
+    plate: 9
+    tip_body: 24
+    weld_point_z: 0.032
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    attach_cable_len: 1.0
+    weld_radius: 0.01
+    proof_taut_len: 0.0
+  - drone: 2          # QUAD3, x3_drone2, ring weld /drone_2/payload/*
+    plate: 3
+    tip_body: 23
+    weld_point_z: 0.032
+    attach_x_offset: 0.0
+    attach_y_offset: -0.225
+    attach_cable_len: 1.0
+    weld_radius: 0.01
+    proof_taut_len: 0.0

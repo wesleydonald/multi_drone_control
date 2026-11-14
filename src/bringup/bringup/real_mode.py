@@ -125,6 +125,7 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'plan_sqp_iters': 'int', 'plan_fast_refs': 'bool', 'plan_res_every': 'int',
                     'load_ixx': 'float', 'load_izz': 'float', 'land_rearm_touchdown': 'bool',
                     'land_descend_to_stall': 'bool',
+                    'carriers_down_alone': 'bool',
                     'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
                     'int_settle_s': 'float', 'land_ff_ramp': 'bool',
                     'traj_hold_s': 'float', 'detach_step_out_m': 'float',
@@ -135,7 +136,11 @@ PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float
                     'drop_on_loss': 'bool', 'drop_takes_back': 'bool', 'drop_gap_deg': 'float',
                     'tip_detect_m': 'float', 'fig8_size': 'float', 'pos_limit_m': 'float',
                     'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float',
-                    'resize_delay_s': 'float'}
+                    'resize_delay_s': 'float', 'relay_task': 'bool', 'rod_len_reread': 'bool', 'attach_datum_shift': 'bool',
+                    'plan_rod_level': 'bool', 'partner_release_around': 'bool', 'partner_release_around_r': 'float',
+                    'attach_pause': 'bool', 'attach_pause_ramp_s': 'float', 'attach_pause_at': 'str', 'partner_rod_add_m': 'float', 'foldin_cap': 'str',
+                    'ring_low_land_m': 'float', 'ring_low_land_s': 'float',
+                    'take_back_avoid_pickup_m': 'float', 'attach_pause_through_landing': 'bool'}
 # the trackers' thrust map, which the disturbance estimate reads delivered thrust through
 DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
 
@@ -166,6 +171,11 @@ def planner_options(context, rejoin=False):
         if v:
             opts[k] = (truthy(context, k) if kind == 'bool' else float(v) if kind == 'float'
                        else int(v) if kind == 'int' else v.lower())
+    if opts.get('carriers_down_alone') and not opts.get('land_descend_to_stall'):
+        # under the reference stopped at z 0 the stall comes with the rig's carriers still 0.15-0.23 m up (RIG-1105-k1d)
+        raise RuntimeError('carriers_down_alone needs land_descend_to_stall: true (card 2026-11-05_carriers_down_alone); '
+                           'the rig has both on by default since 5 Nov, so a params_file that turns '
+                           'land_descend_to_stall off sets carriers_down_alone: false too')
     if opts.get('rejoin_departed') and not rejoin:
         raise RuntimeError("rejoin_departed flies only the twin's mode:=dissipative: it re-welds each tether's gz "
                            'joint (/drone_i/attach), which this launch does not bridge (code design B)')
@@ -178,8 +188,33 @@ def planner_options(context, rejoin=False):
     if opts.get('rejoin_task') and not (rejoin and opts.get('rejoin_departed')):
         raise RuntimeError("rejoin_task flies only with rejoin_departed, in the twin's mode:=dissipative (a task flies a "
                            'staged carrier)')
-    if opts.get('traj_laps', 1) != 1 and context.launch_configurations.get('real', 'false') == 'true':
+    if opts.get('relay_task') and not (rejoin and opts.get('rejoin_task')):
+        raise RuntimeError("relay_task flies only with rejoin_task, in the twin's mode:=dissipative (card "
+                           '2026-10-30_x4_endurance_relay)')
+    if opts.pop('plan_rod_level', False):
+        if context.launch_configurations.get('real', 'false') == 'true':
+            raise RuntimeError('plan_rod_level flies only in the twin (card 2026-10-31_rod_in_plan)')
+        from bringup.profiles import chosen_knobs, rod_model
+        level, mass, com = rod_model(context.launch_configurations)
+        if level and mass <= 0.0:
+            # the planner refuses this at construction; here the launch says why before any node starts
+            raise RuntimeError('plan_rod_level needs rod_mass and rod_com (card 2026-10-31_rod_in_plan)')
+        if level:
+            opts.update(plan_rod_level=True, rod_mass=mass, rod_com=com)
+            # the rod carries what the sideways integral learned (Wesley 31 Oct, 4 Nov): 0 unless this launch chose it
+            if 'int_k_xy' not in chosen_knobs(context.launch_configurations):
+                opts['int_k_xy'] = 0.0
+    # the rig's figure-eight with his re-attach (Wesley 12 Nov, the 13 Nov trials): laps only with contact_rig_fig8 typed
+    lc = context.launch_configurations
+    rig_fig8 = 'contact_rig_fig8' in lc.get(_TYPED_KEY, '').split(',') and \
+        lc.get('contact_rig_fig8', '').strip().lower() in ('1', 'true', 'yes') and lc.get('load_traj', '') == 'fig_8'
+    if opts.get('traj_laps', 1) != 1 and lc.get('real', 'false') == 'true' and not rig_fig8:
         raise RuntimeError('traj_laps flies only in the twin (card 2026-10-23_scalability, case 7)')
+    if opts.get('foldin_cap', 'off') not in ('off', 'level'):
+        raise RuntimeError(f"foldin_cap {opts['foldin_cap']!r}: 'off' or 'level' ('weld' was deleted 5 Nov, card "
+                           '2026-11-05_quad4_foldin_weld_cap)')
+    if opts.get('foldin_cap', 'off') != 'off' and context.launch_configurations.get('real', 'false') == 'true':
+        raise RuntimeError('foldin_cap flies only in the twin (card 2026-11-05_quad4_foldin_weld_cap)')
     if opts.get('traj_lap_hold_s', 0.0) > 0.0 and not (
             rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
         raise RuntimeError("traj_lap_hold_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (it holds "
@@ -221,17 +256,23 @@ def position_limit(context):
 # the trackers' half of drop and land (card 2026-10-08_drop_and_land): passed only when set
 TRACKER_DROP = {'drop_on_loss': 'bool', 'drop_tilt_deg': 'float', 'drop_samples': 'int',
                 'drop_glitch_step_deg': 'float'}
+# ...and the LAND knob the trackers read too (card 2026-11-05_carriers_down_alone), passed only when set
+TRACKER_LAND = {'carriers_down_alone': 'bool', 'carriers_down_band_m': 'float'}
 
 
 def tracker_drop_options(context):
-    """{knob: value} of the set TRACKER_DROP knobs, for a detach graph's trackers."""
+    """{knob: value} of the set TRACKER_DROP and TRACKER_LAND knobs, for a detach or attach graph's trackers."""
     from launch.substitutions import LaunchConfiguration
     out = {}
-    for k, kind in TRACKER_DROP.items():
+    for k, kind in {**TRACKER_DROP, **TRACKER_LAND}.items():
         v = LaunchConfiguration(k).perform(context).strip()
         if v:
             out[k] = (truthy(context, k) if kind == 'bool' else int(float(v)) if kind == 'int'
                       else float(v))
+    if not 0.03 <= out.get('carriers_down_band_m', 0.15) <= 0.20:
+        # the drop when a released carrier's idle cuts its throttle (the tracker refuses it too)
+        raise RuntimeError(f"carriers_down_band_m {out['carriers_down_band_m']:g}: 0.03 up to 0.20 m "
+                           '(card 2026-11-05_carriers_down_alone)')
     return out
 
 
@@ -293,14 +334,16 @@ def rig_magnet_latches(context, defaults):
 
 
 def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extra_bodies=None,
-           magnet_topic_overrides=None):
+           magnet_topic_overrides=None, tip_bodies=None, n_partners=1):
     """real_io_launch.py for drones 0..n_radio-1, scoped so its arguments do not leak.
 
     magnet_initial: one value per drone for its radio latch (rig_magnet_latches).
     Each drone's serial port is the launch argument drone<i>_serial (default
     /dev/QUAD<i+1>). extra_bodies: the mocap node's extra Motive bodies ('<id>:/<topic>,...';
-    None = whatever mocap_extra_bodies says). magnet_topic_overrides: '<i>:/<topic>' moves drone i's radio
-    latch to a private topic and hides its RViz MAGNET row (None = none).
+    None = whatever mocap_extra_bodies says). magnet_topic_overrides: '<i>:/<topic>[,...]' moves drone i's radio
+    latch to a private topic and hides its RViz MAGNET row (None = none). tip_bodies: more magnet tip bodies,
+    '<id>:/<topic>,...', each a PoseStamped like the one tip on /magnet_tip_pose (None = none). n_partners: the
+    last radios that attach mode hands to the partner's controller (they keep the ema velocity filter).
     """
     actions = []
     args = {'num_drones': str(n_radio),
@@ -311,10 +354,12 @@ def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extr
     if extra_bodies is not None:
         args['mocap_extra_bodies'] = extra_bodies
     if attach:
-        # the slope filter on the carriers only: QUAD4 (the last radio) feeds the partner's controller, which keeps ema
-        args['mocap_vel_drones'] = ','.join(str(i) for i in range(n_radio - 1))
+        # the slope filter on the carriers only: the partners (the last radios) feed his controller, which keeps ema
+        args['mocap_vel_drones'] = ','.join(str(i) for i in range(n_radio - n_partners))
     if magnet_topic_overrides is not None:
         args['magnet_topic_overrides'] = magnet_topic_overrides
+    if tip_bodies is not None:
+        args['mocap_tip_bodies'] = tip_bodies
     for i in range(n_radio):
         name = f'drone{i}_serial'
         actions.append(DeclareLaunchArgument(

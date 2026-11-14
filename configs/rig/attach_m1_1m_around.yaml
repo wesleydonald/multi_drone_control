@@ -1,0 +1,6 @@
+# configs/rig/attach_m1_1m.yaml plus the release round the outside of the carriers to another plate (Wesley 4 Nov; with reattach_plate)
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+partner_release_around: true

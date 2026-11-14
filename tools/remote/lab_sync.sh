@@ -9,6 +9,6 @@ DEST="${LAB_DIR:-mdc}"
 rsync -az --delete \
   --exclude=/build/ --exclude=/install/ --exclude=/log/ --exclude=/logs/ \
   --exclude=/results/ --exclude=/results_archive/ --exclude=/generated/ --exclude='c_generated_code*' \
-  --exclude=__pycache__ --exclude=.git \
+  --exclude=__pycache__ --exclude=.git --exclude=/.claude/ \
   -e "ssh -o BatchMode=yes" "$REPO/" "$LAB:$DEST/"
 echo "synced $REPO -> $LAB:$DEST"

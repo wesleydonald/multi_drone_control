@@ -208,18 +208,9 @@ def apex_direction(rho_ring, s_ring, rho_new):
     return v / np.linalg.norm(v)
 
 
-def balanced_tensions(rho, s_dirs, load_mass, g=9.81, t_min=0.1, rod_mass=0.0, rod_lam=0.0):
-    """Nominal cable tensions that hold the load LEVEL at hover for this attach layout.
-
-    Equal tensions balance an even ring only. On an uneven ring (30/90/150/270: the layout
-    that leaves a level triple after a detach) equal references carry a net moment, and
-    the OCP either flies the load tilted (SIL R0498, 12-27 deg) or flips between vertex
-    tension solutions and never lifts (R0497). Solve the static balance
-        sum_i t_i s_i = -m g z_hat,   sum_i rho_i x (t_i s_i) = 0
-    for the tensions closest (least squares) to the equal split, then floor at t_min.
-    Even rings return the equal split unchanged."""
+def _static_balance(rho, s, load_mass, g, rod_mass, rod_lam):
+    """(A, b) of the load's static balance A t = b for cable directions s: force rows 0-2, moment rows 3-5."""
     n = len(rho)
-    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
     r = [np.asarray(v, float).reshape(3) for v in rho]
     A = np.zeros((6, n))
     for i in range(n):
@@ -234,10 +225,58 @@ def balanced_tensions(rho, s_dirs, load_mass, g=9.81, t_min=0.1, rod_mass=0.0, r
             R_i = rod_mass * (rod_lam * float(G @ s[i]) * s[i] + (1.0 - rod_lam) * G)
             b[0:3] += R_i
             b[3:6] += np.cross(r[i], R_i)
+    return A, b
+
+
+def balanced_tensions(rho, s_dirs, load_mass, g=9.81, t_min=0.1, rod_mass=0.0, rod_lam=0.0, level=False):
+    """Nominal cable tensions that hold the load LEVEL at hover for this attach layout.
+
+    Equal tensions balance an even ring only. On an uneven ring (30/90/150/270: the layout
+    that leaves a level triple after a detach) equal references carry a net moment, and
+    the OCP either flies the load tilted (SIL R0498, 12-27 deg) or flips between vertex
+    tension solutions and never lifts (R0497). Solve the static balance
+        sum_i t_i s_i = -m g z_hat,   sum_i rho_i x (t_i s_i) = 0
+    for the tensions closest (least squares) to the equal split, then floor at t_min.
+    Even rings return the equal split unchanged.
+
+    level (plan_rod_level): one vector of N and N m rows lets the force rows win where they cannot all be met (a T with
+    rod_mass: the middle carrier 0.25 N, -0.11 N m left on the ring). Only lift and the level moments here: the cables
+    meet at one apex, so tensions cannot change the sideways force without a moment (level_rod_refs takes it)."""
+    n = len(rho)
+    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
+    A, b = _static_balance(rho, s, load_mass, g, rod_mass, rod_lam)
     sz = -np.mean([v[2] for v in s])
     t_eq = np.full(n, float(load_mass) * g / max(n * sz, 1e-9))
-    t = t_eq + np.linalg.pinv(A) @ (b - A @ t_eq)
+    if level:
+        rows = [2, 3, 4]
+        t = t_eq + np.linalg.pinv(A[rows]) @ (b - A @ t_eq)[rows]
+    else:
+        t = t_eq + np.linalg.pinv(A) @ (b - A @ t_eq)
     return [float(max(v, t_min)) for v in t]
+
+
+def level_rod_refs(rho, s_dirs, load_mass, rod_mass, rod_lam, g=9.81, t_min=0.1, iters=8):
+    """(directions, tensions) that balance a level load with massive rods exactly (plan_rod_level). The level tensions
+    can leave a sideways force no tension can take: on a T the middle rod's pull on its plate. The cables lean to take
+    it, each in proportion to its tension: the least total change of direction. A balanced layout (any even ring) keeps
+    its directions."""
+    s = [np.asarray(v, float).reshape(3) for v in s_dirs]
+    for _ in range(iters):
+        t = balanced_tensions(rho, s, load_mass, g, t_min, rod_mass, rod_lam, level=True)
+        A, b = _static_balance(rho, s, load_mass, g, rod_mass, rod_lam)
+        miss = np.r_[(b - A @ np.asarray(t))[:2], 0.0]
+        if float(np.linalg.norm(miss)) < 1e-9:
+            break
+        ts = np.asarray(t)
+        lean = [v + float(ti) * miss / float(ts @ ts) for v, ti in zip(s, ts)]
+        s = [v / float(np.linalg.norm(v)) for v in lean]
+    return s, balanced_tensions(rho, s, load_mass, g, t_min, rod_mass, rod_lam, level=True)
+
+
+def rod_neutral_tension(s, rod_mass, rod_lam, g=9.81):
+    """The tension along cable direction s at which a massive rod carries itself: no vertical force on its plate."""
+    sz = float(s[2])
+    return float(rod_mass * g * (rod_lam * sz * sz + 1.0 - rod_lam) / max(-sz, 1e-9))
 
 
 def azimuth_slot_assignment(drone_pos, load_xy, n, load_yaw=0.0, slot_az=None):

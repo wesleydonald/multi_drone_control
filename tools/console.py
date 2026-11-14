@@ -4,19 +4,29 @@
     python3 tools/console.py                 # rig: four drones, QUAD4 flown by Tejen's stack
     python3 tools/console.py --no-partner    # our fleet alone
     python3 tools/console.py --twin          # the twin (no radios, so no FC or pack checks)
+    python3 tools/console.py --partners 3,2  # 4 -> 2 -> 4: QUAD4 and QUAD3, each flown by its own instance of his stack
 
 READY (top) replaces the fixed wait after the T2 launch: every node up, every body's mocap fresh, a fresh pack
 voltage >= 22.6 V from every radio, every FC ready to arm (flight mode ending in '*', not '!ERR*'), no drone on its
 side, no mux latched. Each reason it is not ready is listed, with what to do.
-Buttons, in flight order: his ARM, ARM, TAKEOFF, his TAKEOFF, GIVE UP, LAND, his LAND, and his DISARM once every
-FC is disarmed. his LAND is his planner's own LAND (/join_planner/land_now): a straight-down descent where QUAD4 is,
+Buttons, in flight order: his ARM, ARM, TAKEOFF, his TAKEOFF, DETACH QUAD4, GIVE UP, LAND, his LAND, and his DISARM once
+every FC is disarmed; QUAD4 magnet OFF (two presses within 3 s: it drops whatever QUAD4 holds, plate or object, and
+holds the coil off) and ON, on the launches that type magnet_operator_topic (Wesley 10 Nov: every button on the console).
+FORCE DROP (Wesley 11 Nov): when his drop gates take too long: the first press makes him lower and release, a press
+in the lowering releases at once; his mission then goes on as after any drop. his LAND is his planner's own LAND (/join_planner/land_now): a straight-down descent where QUAD4 is,
 magnet OFF, so over a fallen ring it lands on it (with drop_takes_back on, a drop takes QUAD4 back by itself). A button that cannot be used says why. SPACE is DISARM from anywhere in the window and is never blocked,
 as in the RViz panel. The publishers live as long as the console, so every subscriber has matched long before a
 press (14 Oct's takeoff race came from a fresh `ros2 topic pub` each time).
 It reads only low-rate topics (/fleet/mocap_summary at 5 Hz, /drone_i/radio_health at 1 Hz, states and phases),
 so it costs little next to the controllers. tools/fleet_monitor.py stays the read-only view.
+--partners (two or more partners, each flown by its own instance of his stack; off by default): a row per partner
+(his ARM, his TAKEOFF, GIVE UP, his LAND, his DISARM, magnet OFF / ON, and its phase, armed, release, proof and
+attached) and the commands for all of them at once: DETACH BOTH (one set detach on /fleet/detach_set) and his TAKEOFF
+BOTH (every instance's TAKEOFF in the same press). Partner 3 (QUAD4) keeps today's topics; any other partner d has ours
+under /drone_<d> and his under /tejen_d<d> (partner_topics).
 """
 import argparse
+import copy
 import json
 import re
 import sys
@@ -27,6 +37,7 @@ from collections import deque
 from fleet_monitor import ALARM_WORDS, explain
 
 POSE_STALE_S = 0.25        # the rig trackers' pose timeout
+PLACE_MAX_M = 1.3          # m from the cage centre in x and y: QUAD4 and the object are asked to start inside it (11 Nov)
 SUMMARY_STALE_S = 1.0
 HEALTH_STALE_S = 2.5       # radio_health comes once a second
 MODE_STALE_S = 5.0         # QUAD1 sends a flight-mode frame only every 2-3 s
@@ -44,6 +55,12 @@ HIS_TAKEOFF_ACK_S = 2.0    # his planner must leave WAIT_FOR_TAKEOFF this soon a
 DISARM_REPEATS, DISARM_PERIOD_MS = 5, 100      # as the RViz panel: one message can be lost
 FLEET_CMD, HIS_CMD, GIVE_UP = '/fleet/command', '/tejen/drone_command', '/join_planner/give_up'
 HIS_LAND = '/join_planner/land_now'
+FORCE_DROP = '/join_planner/force_drop'     # std_msgs/Bool: his planner skips the drop gates (first press lowers, a press in the lowering releases)
+FORCE_DROP_PHASES = ('TRANSIT_TO_DROP_POINT', 'SETTLE_ABOVE_DROP_POINT', 'DESCEND_TO_DROP_HEIGHT')
+DETACH = '/fleet/detach'                # std_msgs/Int32: the drone to release (the RViz panel's DETACH)
+DETACH_SET = '/fleet/detach_set'        # std_msgs/String: the partners released together, '2,3' (--partners)
+MAG_OP = '/drone_{}/magnet_operator'     # QUAD4's operator OFF / ON (magnet_gate, magnet_operator_topic)
+MAG_OFF_CONFIRM_S = 3.0
 HIS_LAND_IGNORED = {'LANDING': 'his planner is already landing', 'LANDED_DISARMED': 'QUAD4 landed',
                     'RING_ATTACHED': 'ours flies QUAD4: LAND', 'TAKEN_BACK': 'ours flies QUAD4: LAND'}
 HIS_NODES = ('/tejen/tejen_mpc', '/online_join_planner')
@@ -53,6 +70,33 @@ ARM_RESET = ('DISARM', 'EMERGENCY STOP', 'ARM FAILED', 'ARM REFUSED', 'TAKEOFF R
 
 def quad(i):
     return f'QUAD{i + 1}'
+
+
+def partner_topics(d):
+    """--partners: partner d's topics. Drone 3 (QUAD4) keeps today's names; any other d has ours under /drone_<d>
+    and his instance's under /tejen_d<d>."""
+    if d == 3:
+        return {'cmd': HIS_CMD, 'give_up': GIVE_UP, 'land': HIS_LAND, 'phase': '/join_planner/phase',
+                'armed': '/tejen/drone_arming_state_feedback', 'release': '/partner/release',
+                'proof': '/magnet/attach_proof', 'contact': '/magnet/contact', 'attached': '/magnet/object_attached',
+                'mag_op': MAG_OP.format(3), 'nodes': HIS_NODES}
+    his, ours = f'/tejen_d{d}', f'/drone_{d}'
+    return {'cmd': f'{his}/drone_command', 'give_up': f'{his}/join_planner/give_up',
+            'land': f'{his}/join_planner/land_now', 'phase': f'{his}/join_planner/phase',
+            'armed': f'{his}/drone_arming_state_feedback', 'release': f'{ours}/partner/release',
+            'proof': f'{ours}/magnet/attach_proof', 'contact': f'{ours}/magnet/contact',
+            'attached': f'{ours}/magnet/object_attached', 'mag_op': MAG_OP.format(d),
+            'nodes': (f'{his}/tejen_mpc', f'{his}/online_join_planner')}
+
+
+def detach_set_text(ids):
+    """The set detach's message: the drone ids, ascending, comma separated ('2,3')."""
+    return ','.join(str(int(d)) for d in sorted(ids))
+
+
+def his_land_ignored(q):
+    """HIS_LAND_IGNORED for the partner named q."""
+    return {k: v.replace('QUAD4', q) for k, v in HIS_LAND_IGNORED.items()}
 
 
 def fc_mode_state(mode):
@@ -65,7 +109,7 @@ def fc_mode_state(mode):
     return 'ready' if mode.endswith('*') else 'armed'
 
 
-def expected_nodes(n, partner, twin):
+def expected_nodes(n, partner, twin, partners=()):
     """(what, accepted node names) the flight needs."""
     need = [('fleet manager', ('/fleet_manager',)), ('our planner', ('/dissipative_planner', '/mpc_planner')),
             ('fleet_viz (the mocap summary)', ('/fleet_viz',))]
@@ -75,14 +119,35 @@ def expected_nodes(n, partner, twin):
         need += [(f'{quad(i)} radio', (f'/drone_{i}/elrs_interface',)) for i in range(n)]
     if partner is not None:
         need += [('his MPC', (HIS_NODES[0],)), ('his planner', (HIS_NODES[1],))]
+    for d in partners:
+        mpc, planner = partner_topics(d)['nodes']
+        need += [(f'his MPC ({quad(d)})', (mpc,)), (f'his planner ({quad(d)})', (planner,))]
     return need
+
+
+class PartnerState:
+    """--partners: what the console knows of one partner and its instance of his stack."""
+
+    def __init__(self):
+        self.phase = ''
+        self.armed = None                    # his MPC's own flag
+        self.released = False                # its release heard this flight
+        self.proof = self.contact = self.attached = None
+        self.his_subs, self.his_matched = set(), 0
+        self.give_up_subs = self.his_land_subs = self.mag_op_subs = 0
 
 
 class ConsoleState:
     """What the window shows, filled by ROS callbacks and read by the GUI timer (under self.lock)."""
 
-    def __init__(self, n, partner=3, twin=False, small_angle=25.0, slot_gate=False):
+    def __init__(self, n, partner=3, twin=False, small_angle=25.0, slot_gate=False, partners=None):
         self.n, self.partner, self.twin, self.small_angle = n, partner, twin, small_angle
+        # --partners: two or more partners, a PartnerState each, and no single partner; [] = today's console
+        self.partners = list(partners or [])
+        self.pp = {d: PartnerState() for d in self.partners}
+        if self.partners:
+            self.partner = None
+        self.detach_set_subs = 0
         self.slot_gate = slot_gate
         self.slot_err = None                 # this launch's largest plate (slot) error, deg; None until logged
         self.lock = threading.Lock()
@@ -96,16 +161,23 @@ class ConsoleState:
         self.tracker_armed = [None] * n
         self.his_armed = None
         self.mux = [''] * n
+        self.released = False                # /partner/release heard (a welded QUAD4 handed to his mission)
         self.rest_z = {}
         self.nodes = set()
         self.his_subs, self.his_matched, self.give_up_subs = set(), 0, 0
         self.his_land_subs = 0
+        self.detach_subs = self.mag_op_subs = self.force_drop_subs = 0
+        self.detach_sent = False             # this flight's DETACH pressed (one per flight, as the RViz panel)
         self.alerts = deque(maxlen=200)      # (wall time, level, node, text, why)
 
     def on_manager(self, text):
         with self.lock:
             self.manager = text
             if ARM_DONE in text:
+                if not self.arm_complete:      # a new flight: its release and DETACH are still to come
+                    self.released = self.detach_sent = False
+                    for p in self.pp.values():
+                        p.released = False
                 self.arm_complete = True
             elif any(w in text for w in ARM_RESET):
                 self.arm_complete = False
@@ -176,17 +248,53 @@ class ConsoleState:
         with self.lock:
             self.mux[i] = text
 
-    def on_graph(self, nodes, his_subs, his_matched, give_up_subs, his_land_subs=0):
+    def on_release(self):
+        with self.lock:
+            self.released = True
+
+    def his_takeoff_held(self, d=None):
+        """A welded QUAD4 (--partners: partner d) not yet released: his planner holds his TAKEOFF until our release
+        (5 Nov)."""
+        if d is not None:
+            return not self.pp[d].released and 0 <= d < self.n and self.mux[d] == 'ours'
+        p = self.partner
+        return not self.released and p is not None and 0 <= p < self.n and self.mux[p] == 'ours'
+
+    def on_partner(self, d, field, value):
+        """--partners: one field of partner d (phase, armed, released, proof as its JSON, contact, attached)."""
+        if field == 'proof':
+            try:
+                value = json.loads(value)
+            except ValueError:
+                return
+        with self.lock:
+            setattr(self.pp[d], field, value)
+
+    def on_partner_graph(self, d, his_subs, his_matched, give_up_subs, his_land_subs, mag_op_subs):
+        with self.lock:
+            p = self.pp[d]
+            p.his_subs, p.his_matched = set(his_subs), int(his_matched)
+            p.give_up_subs, p.his_land_subs, p.mag_op_subs = int(give_up_subs), int(his_land_subs), int(mag_op_subs)
+
+    def on_graph(self, nodes, his_subs, his_matched, give_up_subs, his_land_subs=0, detach_subs=0, mag_op_subs=0,
+                 force_drop_subs=0, detach_set_subs=0):
         with self.lock:
             self.nodes, self.his_subs, self.his_matched, self.give_up_subs = (
                 set(nodes), set(his_subs), int(his_matched), int(give_up_subs))
             self.his_land_subs = int(his_land_subs)
+            self.detach_subs, self.mag_op_subs = int(detach_subs), int(mag_op_subs)
+            self.force_drop_subs = int(force_drop_subs)
+            self.detach_set_subs = int(detach_set_subs)
 
     def on_log(self, level, node, text):
         if '[planner] slot error' in text:     # once per launch (INFO): a relaunch replaces the last one
             errs = [abs(float(v)) for v in re.findall(r' d\d+ ([+-]?[0-9.]+) \(plate', text)]
             with self.lock:
                 self.slot_err = max(errs) if errs else None
+        if self.partners and 'UNLOAD CANCELLED' in text:
+            # a cancelled set unload left both magnets ON: DETACH BOTH may be pressed again
+            with self.lock:
+                self.detach_sent = False
         if level < 30:                         # rcl_interfaces/Log: 30 WARN, 40 ERROR, 50 FATAL
             return
         with self.lock:
@@ -199,6 +307,7 @@ class ConsoleState:
             s.__dict__.update({k: (list(v) if isinstance(v, (list, deque)) else
                                    dict(v) if isinstance(v, dict) else set(v) if isinstance(v, set) else v)
                                for k, v in self.__dict__.items() if k != 'lock'})
+            s.pp = {d: copy.copy(p) for d, p in self.pp.items()}
             return s
 
 
@@ -238,7 +347,7 @@ def fc_check(st, i, now):
             and tilt > st.small_angle):
         return False, (f'FC reads {tilt:.0f} deg of tilt > small_angle {st.small_angle:.0f}: it will refuse ARM '
                        '(replug it)')
-    if state == 'armed' and i != st.partner:
+    if state == 'armed' and i != st.partner and i not in st.partners:
         return False, f"FC armed ('{h['mode']}') before the fleet ARM"
     return True, h['mode']
 
@@ -259,7 +368,8 @@ def pack_check(st, i, now):
 def readiness(st, now):
     """Why the fleet is not ready to arm; empty = READY."""
     why = []
-    missing = [what for what, names in expected_nodes(st.n, st.partner, st.twin) if not st.nodes & set(names)]
+    missing = [what for what, names in expected_nodes(st.n, st.partner, st.twin, st.partners)
+               if not st.nodes & set(names)]
     if missing:
         why.append('not running: ' + ', '.join(missing))
     bs = bodies(st, now)
@@ -286,6 +396,22 @@ def readiness(st, now):
     if st.slot_gate and st.slot_err is not None and st.slot_err > SLOT_ERR_MAX_DEG:
         why.append(f'carriers {st.slot_err:.0f} deg off their plates (SLOT OFFSET): fix the layout, relaunch T2')
     return why
+
+
+def placement(st, now):
+    """Warnings, not reasons: QUAD4 or the pickup object more than PLACE_MAX_M from the cage centre in x or y (11 Nov:
+    motion capture lost QUAD4 only at |y| 1.7 m and beyond, and its last pose kept arriving; RIG-1111-fm9c_6)."""
+    bs = bodies(st, now) or {}
+    out = []
+    names = [('puck', 'the object')] + ([(f'drone_{st.partner}', quad(st.partner))] if st.partner is not None else [])
+    names += [(f'drone_{d}', quad(d)) for d in st.partners]
+    for key, what in names:
+        b = bs.get(key) or {}
+        if b.get('x') is None or b.get('y') is None or b.get('age_s') is None or b['age_s'] > POSE_STALE_S:
+            continue
+        if max(abs(b['x']), abs(b['y'])) > PLACE_MAX_M:
+            out.append(f'{what} at x {b["x"]:+.2f}, y {b["y"]:+.2f} m')
+    return out
 
 
 def airborne(st, now):
@@ -315,42 +441,55 @@ def ours_down(st, now):
 
 
 def in_flight(st, now):
-    return not ours_down(st, now) or bool(st.his_armed)
+    return not ours_down(st, now) or bool(st.his_armed) or any(p.armed for p in st.pp.values())
 
 
-def his_link(st):
-    """(ok, why): both his nodes subscribe to his command topic and our publisher has matched every subscriber."""
-    missing = [n for n in HIS_NODES if n not in st.his_subs]
+def his_link(st, d=None):
+    """(ok, why): both his nodes (--partners: partner d's instance) subscribe to his command topic and our publisher
+    has matched every subscriber."""
+    if d is None:
+        nodes, subs, matched = HIS_NODES, st.his_subs, st.his_matched
+    else:
+        nodes, subs, matched = partner_topics(d)['nodes'], st.pp[d].his_subs, st.pp[d].his_matched
+    missing = [n for n in nodes if n not in subs]
     if missing:
         return False, 'waiting for ' + ', '.join(m.rsplit('/', 1)[-1] for m in missing)
-    if st.his_matched < len(st.his_subs):
-        return False, f'matched {st.his_matched} of {len(st.his_subs)} subscribers'
+    if matched < len(subs):
+        return False, f'matched {matched} of {len(subs)} subscribers'
     return True, ''
 
 
-def partner_armed(st, now):
-    """QUAD4 armed: its FC on the rig, his MPC's own flag in the twin."""
-    if st.partner is None:
-        return False
+def partner_armed(st, now, d=None):
+    """QUAD4 (--partners: partner d) armed: its FC on the rig, his MPC's own flag in the twin."""
+    if d is None:
+        if st.partner is None:
+            return False
+        d, his_armed = st.partner, st.his_armed
+    else:
+        his_armed = st.pp[d].armed
     if st.twin:
-        return bool(st.his_armed)
-    return fc_state(st, st.partner, now) == 'armed'
+        return bool(his_armed)
+    return fc_state(st, d, now) == 'armed'
+
+
+def rule(*checks):
+    """(True, '') or the first failed check's (False, why)."""
+    for ok, why in checks:
+        if not ok:
+            return False, why
+    return True, ''
 
 
 def button_states(st, now, not_ready):
     """{button: (enabled, why not)} for the flight's buttons; DISARM is always enabled."""
+    if st.partners:
+        return partners_button_states(st, now, not_ready)
     his = st.partner is not None
     link_ok, link_why = his_link(st) if his else (False, 'no partner')
     p_armed = partner_armed(st, now)
     anything_armed = in_flight(st, now) or p_armed
     fleet_armed = st.arm_complete or manager_flying(st)
     manager = '/fleet_manager' in st.nodes
-
-    def rule(*checks):
-        for ok, why in checks:
-            if not ok:
-                return False, why
-        return True, ''
 
     b = {'disarm': (True, '')}
     b['his_arm'] = rule((his, 'no partner'), (not not_ready, 'not READY'), (link_ok, link_why),
@@ -361,6 +500,13 @@ def button_states(st, now, not_ready):
                         (all(a is not False for a in st.tracker_armed), 'a tracker is not armed'))
     b['his_takeoff'] = rule((his, 'no partner'), (fleet_armed, 'after the fleet ARM'),
                             (p_armed, 'QUAD4 not armed'), (link_ok, link_why))
+    b['detach'] = rule((his, 'no partner'), (st.detach_subs > 0, 'nothing listens on /fleet/detach'),
+                       (manager_flying(st), 'after TAKEOFF'),
+                       (not st.released and not st.detach_sent, 'QUAD4 already released this flight'))
+    b['force_drop'] = rule((his, 'no partner'), (st.force_drop_subs > 0, 'his planner not listening'),
+                           (st.his_phase in FORCE_DROP_PHASES, 'only on the way to the drop, over it or in the lowering'))
+    for k in ('q4_mag_off', 'q4_mag_on'):
+        b[k] = rule((his, 'no partner'), (st.mag_op_subs > 0, 'this launch has no magnet_operator_topic'))
     b['give_up'] = rule((his, 'no partner'), (st.give_up_subs > 0, 'our planner not listening'),
                         (anything_armed, 'nothing armed'))
     b['land'] = rule((anything_armed, 'nothing armed'))
@@ -372,20 +518,74 @@ def button_states(st, now, not_ready):
     return b
 
 
+def partners_button_states(st, now, not_ready):
+    """--partners: the fleet's buttons, DETACH BOTH and his TAKEOFF BOTH, and each partner's row ('<name>@<drone>')."""
+    armed = {d: partner_armed(st, now, d) for d in st.partners}
+    links = {d: his_link(st, d) for d in st.partners}
+    anything_armed = in_flight(st, now) or any(armed.values())
+    fleet_armed = st.arm_complete or manager_flying(st)
+    unarmed = ', '.join(quad(d) for d in st.partners if not armed[d])
+    released = ', '.join(quad(d) for d in st.partners if st.pp[d].released)
+    bad_link = next((f'{quad(d)}: {why}' for d, (ok, why) in links.items() if not ok), '')
+
+    b = {'disarm': (True, '')}
+    b['arm'] = rule((not not_ready, 'not READY'), ('/fleet_manager' in st.nodes, 'fleet manager not running'),
+                    (not st.arm_complete, 'armed'), (not unarmed, f'his ARM first: {unarmed}'))
+    b['takeoff'] = rule((st.arm_complete, f'after "{ARM_DONE}"'),
+                        (all(a is not False for a in st.tracker_armed), 'a tracker is not armed'))
+    b['his_takeoff_both'] = rule((fleet_armed, 'after the fleet ARM'), (not unarmed, f'{unarmed} not armed'),
+                                 (not bad_link, bad_link))
+    # one set detach per flight: after any release a second would name a partner already off the ring
+    b['detach_both'] = rule((st.detach_set_subs > 0, f'nothing listens on {DETACH_SET}'),
+                            (manager_flying(st), 'after TAKEOFF'),
+                            (not st.detach_sent, 'sent this flight'),
+                            (not released, f'{released} already released this flight'))
+    b['land'] = rule((anything_armed, 'nothing armed'))
+    for d in st.partners:
+        p, q = st.pp[d], quad(d)
+        link_ok, link_why = links[d]
+        ignored = his_land_ignored(q)
+        b[f'his_arm@{d}'] = rule((not not_ready, 'not READY'), (link_ok, link_why), (not armed[d], f'{q} armed'))
+        b[f'his_takeoff@{d}'] = rule((fleet_armed, 'after the fleet ARM'), (armed[d], f'{q} not armed'),
+                                     (link_ok, link_why))
+        b[f'give_up@{d}'] = rule((p.give_up_subs > 0, 'our planner not listening'), (anything_armed, 'nothing armed'))
+        b[f'his_land@{d}'] = rule((p.his_land_subs > 0, 'his planner not listening'), (armed[d], f'{q} not armed'),
+                                  (p.phase not in ignored, ignored.get(p.phase, '')))
+        b[f'his_disarm@{d}'] = rule((link_ok, link_why),
+                                    (ours_down(st, now), 'fleet still armed or up: LAND or DISARM first'))
+        for k in ('mag_off', 'mag_on'):
+            b[f'{k}@{d}'] = rule((p.mag_op_subs > 0, 'this launch has no magnet_operator_topic'))
+    return b
+
+
 def proof_line(st):
-    p = st.proof or {}
+    return proof_text(st.proof, st.contact, st.attached)
+
+
+def proof_text(proof, contact, attached):
+    p = proof or {}
 
     def mm(k):
         v = p.get(k)
         return '--' if v is None else f'{1000 * v:.1f} mm'
-    text = (f'Magnet: contact {"yes" if st.contact else "no" if st.contact is False else "--"}, '
+    text = (f'Magnet: contact {"yes" if contact else "no" if contact is False else "--"}, '
             f'proof {p.get("state", "--")}')
     if p.get('state') not in (None, 'off', 'watch'):
         text += (f' (try {p.get("tries")}: xy {mm("xy_m")}, normal {mm("normal_m")}, drift {mm("drift_m")}, '
                  f'tether {p.get("body_to_tip_m") or "--"} / free hang {p.get("l_hang_m") or "--"} m)')
     if p.get('fails'):
         text += f', failed {p["fails"]}x (last: {p.get("reason") or "--"})'
-    return text + f', attached {"yes" if st.attached else "no" if st.attached is False else "--"}'
+    return text + f', attached {"yes" if attached else "no" if attached is False else "--"}'
+
+
+def partner_line(st, d, now):
+    """--partners: one partner's readiness line: his phase, armed, our release, the contact proof, attached."""
+    p = st.pp[d]
+    ok, why = his_link(st, d)
+    return (f'{quad(d)} (drone {d}): his phase {p.phase or "--"}, '
+            f'{"armed" if partner_armed(st, now, d) else "not armed"}, '
+            f'release {"sent" if p.released else "not yet"}. ' + proof_text(p.proof, p.contact, p.attached)
+            + ('' if ok else f'. His link: {why}'))
 
 
 class RosLink:
@@ -395,8 +595,8 @@ class RosLink:
         import rclpy
         from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
         from rcl_interfaces.msg import Log
-        from std_msgs.msg import Bool, String
-        self.Bool, self.String = Bool, String
+        from std_msgs.msg import Bool, Int32, String
+        self.Bool, self.Int32, self.String = Bool, Int32, String
         rclpy.init()
         self.rclpy = rclpy
         node = self.node = rclpy.create_node('rig_console')
@@ -409,29 +609,76 @@ class RosLink:
                                      lambda m, i=i: state.on_tracker_armed(i, m.data), 10)
             node.create_subscription(String, f'{ns}/radio_health', lambda m, i=i: state.on_health(i, m.data, now()), 5)
             node.create_subscription(String, f'{ns}/mux_state', lambda m, i=i: state.on_mux(i, m.data), latched)
-        node.create_subscription(Bool, '/tejen/drone_arming_state_feedback', lambda m: state.on_his_armed(m.data), 5)
+        contact_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        if state.partners:
+            self._partners_io(state, latched, contact_qos)
+        else:
+            node.create_subscription(Bool, '/tejen/drone_arming_state_feedback',
+                                     lambda m: state.on_his_armed(m.data), 5)
         node.create_subscription(String, '/fleet/mocap_summary', lambda m: state.on_summary(m.data, now()), 2)
         node.create_subscription(String, '/fleet/manager_status', lambda m: state.on_manager(m.data), latched)
         node.create_subscription(String, '/fleet/phase', lambda m: state.on_phase(m.data), latched)
-        node.create_subscription(String, '/join_planner/phase', lambda m: state.on_his_phase(m.data), latched)
-        node.create_subscription(String, '/magnet/attach_proof', lambda m: state.on_proof(m.data), 2)
-        node.create_subscription(Bool, '/magnet/contact', lambda m: state.on_contact(m.data),
-                                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
-        node.create_subscription(Bool, '/magnet/object_attached', lambda m: state.on_attached(m.data), 5)
+        if not state.partners:
+            node.create_subscription(String, '/join_planner/phase', lambda m: state.on_his_phase(m.data), latched)
+            node.create_subscription(String, '/partner/release',
+                                     lambda m: state.on_release() if '"running": true' in m.data else None, 5)
+            node.create_subscription(String, '/magnet/attach_proof', lambda m: state.on_proof(m.data), 2)
+            node.create_subscription(Bool, '/magnet/contact', lambda m: state.on_contact(m.data), contact_qos)
+            node.create_subscription(Bool, '/magnet/object_attached', lambda m: state.on_attached(m.data), 5)
         node.create_subscription(Log, '/rosout', lambda m: state.on_log(m.level, m.name, m.msg), 50)
         self.fleet_pub = node.create_publisher(String, FLEET_CMD, 10)
-        self.his_pub = node.create_publisher(String, HIS_CMD, 10)
-        self.give_up_pub = node.create_publisher(Bool, GIVE_UP, 10)
-        self.his_land_pub = node.create_publisher(Bool, HIS_LAND, 10)
+        if not state.partners:
+            self.his_pub = node.create_publisher(String, HIS_CMD, 10)
+            self.give_up_pub = node.create_publisher(Bool, GIVE_UP, 10)
+            self.his_land_pub = node.create_publisher(Bool, HIS_LAND, 10)
+            self.detach_pub = node.create_publisher(Int32, DETACH, 10)
+            self.force_drop_pub = node.create_publisher(Bool, FORCE_DROP, 10)
+            self.mag_op_pub = (node.create_publisher(String, MAG_OP.format(state.partner), 10)
+                               if state.partner is not None else None)
         self.state = state
         node.create_timer(1.0, self._graph)
 
+    def _partners_io(self, state, latched, contact_qos):
+        """--partners: each partner's subscriptions and publishers on its own topics, and the set detach."""
+        node, Bool, String = self.node, self.Bool, self.String
+        self.his_pubs, self.give_up_pubs, self.his_land_pubs, self.mag_op_pubs = {}, {}, {}, {}
+        for d in state.partners:
+            t = partner_topics(d)
+            node.create_subscription(Bool, t['armed'], lambda m, d=d: state.on_partner(d, 'armed', bool(m.data)), 5)
+            node.create_subscription(String, t['phase'], lambda m, d=d: state.on_partner(d, 'phase', m.data), latched)
+            node.create_subscription(String, t['release'], lambda m, d=d: (
+                state.on_partner(d, 'released', True) if '"running": true' in m.data else None), 5)
+            node.create_subscription(String, t['proof'], lambda m, d=d: state.on_partner(d, 'proof', m.data), 2)
+            node.create_subscription(Bool, t['contact'], lambda m, d=d: state.on_partner(d, 'contact', bool(m.data)),
+                                     contact_qos)
+            node.create_subscription(Bool, t['attached'],
+                                     lambda m, d=d: state.on_partner(d, 'attached', bool(m.data)), 5)
+            self.his_pubs[d] = node.create_publisher(String, t['cmd'], 10)
+            self.give_up_pubs[d] = node.create_publisher(Bool, t['give_up'], 10)
+            self.his_land_pubs[d] = node.create_publisher(Bool, t['land'], 10)
+            self.mag_op_pubs[d] = node.create_publisher(String, t['mag_op'], 10)
+        self.detach_set_pub = node.create_publisher(String, DETACH_SET, 10)
+
     def _graph(self):
         names = {f"{ns.rstrip('/')}/{name}" for name, ns in self.node.get_node_names_and_namespaces()}
+        if self.state.partners:
+            self.state.on_graph(names, set(), 0, 0, detach_set_subs=self.detach_set_pub.get_subscription_count())
+            for d in self.state.partners:
+                t = partner_topics(d)
+                subs = {f"{e.node_namespace.rstrip('/')}/{e.node_name}"
+                        for e in self.node.get_subscriptions_info_by_topic(t['cmd'])}
+                self.state.on_partner_graph(d, subs, self.his_pubs[d].get_subscription_count(),
+                                            self.node.count_subscribers(t['give_up']),
+                                            self.node.count_subscribers(t['land']),
+                                            self.mag_op_pubs[d].get_subscription_count())
+            return
         subs = {f"{e.node_namespace.rstrip('/')}/{e.node_name}"
                 for e in self.node.get_subscriptions_info_by_topic(HIS_CMD)}
         self.state.on_graph(names, subs, self.his_pub.get_subscription_count(),
-                            self.node.count_subscribers(GIVE_UP), self.node.count_subscribers(HIS_LAND))
+                            self.node.count_subscribers(GIVE_UP), self.node.count_subscribers(HIS_LAND),
+                            self.detach_pub.get_subscription_count(),
+                            self.mag_op_pub.get_subscription_count() if self.mag_op_pub else 0,
+                            self.force_drop_pub.get_subscription_count())
 
     def spin(self):
         try:
@@ -458,11 +705,55 @@ class RosLink:
     def his_land(self):
         self.his_land_pub.publish(self.Bool(data=True))
 
+    def force_drop(self):
+        self.force_drop_pub.publish(self.Bool(data=True))
+
+    def detach(self, i):
+        self.detach_pub.publish(self.Int32(data=int(i)))
+
+    def magnet_operator(self, cmd):
+        self.mag_op_pub.publish(self.String(data=cmd))
+
+    def his_to(self, d, cmd):
+        self.his_pubs[d].publish(self.String(data=cmd))
+
+    def give_up_to(self, d):
+        self.give_up_pubs[d].publish(self.Bool(data=True))
+
+    def his_land_to(self, d):
+        self.his_land_pubs[d].publish(self.Bool(data=True))
+
+    def magnet_operator_to(self, d, cmd):
+        self.mag_op_pubs[d].publish(self.String(data=cmd))
+
+    def detach_set(self, ids):
+        self.detach_set_pub.publish(self.String(data=detach_set_text(ids)))
+
 
 BUTTONS = [('his_arm', 'his ARM', '#7048e8'), ('arm', 'ARM', '#2f9e44'), ('takeoff', 'TAKEOFF', '#1c7ed6'),
-           ('his_takeoff', 'his TAKEOFF', '#7048e8'), ('give_up', 'GIVE UP', '#495057'),
-           ('land', 'LAND', '#e8590c'), ('his_land', 'his LAND (straight down)', '#7048e8'),
-           ('disarm', 'DISARM  (space)', '#c92a2a'), ('his_disarm', 'his DISARM', '#7048e8')]
+           ('his_takeoff', 'his TAKEOFF', '#7048e8'), ('detach', 'DETACH QUAD4', '#cc5de8'),
+           ('give_up', 'GIVE UP', '#495057'), ('land', 'LAND', '#e8590c'),
+           ('his_land', 'his LAND (straight down)', '#7048e8'), ('disarm', 'DISARM  (space)', '#c92a2a'),
+           ('his_disarm', 'his DISARM', '#7048e8'), ('force_drop', 'FORCE DROP', '#d9480f'), ('q4_mag_off', 'QUAD4 magnet OFF (press twice)', '#862e9c'),
+           ('q4_mag_on', 'QUAD4 magnet ON', '#862e9c')]
+
+
+def partners_buttons(partners):
+    """--partners: (the fleet's buttons, {drone: its row's buttons}), each (key, label, colour), in flight order."""
+    names = '+'.join(quad(d) for d in sorted(partners))
+    both = 'BOTH' if len(partners) == 2 else 'ALL'
+    fleet = [('arm', 'ARM', '#2f9e44'), ('takeoff', 'TAKEOFF', '#1c7ed6'),
+             ('his_takeoff_both', f'his TAKEOFF {both} ({names})', '#7048e8'),
+             ('detach_both', f'DETACH {both} ({names})', '#cc5de8'), ('land', 'LAND', '#e8590c'),
+             ('disarm', 'DISARM  (space)', '#c92a2a')]
+    rows = {d: [(f'his_arm@{d}', f'{quad(d)} his ARM', '#7048e8'),
+                (f'his_takeoff@{d}', f'{quad(d)} his TAKEOFF', '#7048e8'),
+                (f'give_up@{d}', f'{quad(d)} GIVE UP', '#495057'),
+                (f'his_land@{d}', f'{quad(d)} his LAND (straight down)', '#7048e8'),
+                (f'his_disarm@{d}', f'{quad(d)} his DISARM', '#7048e8'),
+                (f'mag_off@{d}', f'{quad(d)} magnet OFF (press twice)', '#862e9c'),
+                (f'mag_on@{d}', f'{quad(d)} magnet ON', '#862e9c')] for d in partners}
+    return fleet, rows
 
 
 def gui(state, send, exit_after_ms=None, on_ready=None):
@@ -487,15 +778,34 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
     lay.addWidget(table)
     grid = QtWidgets.QGridLayout()
     btns = {}
-    for k, (key, label, colour) in enumerate(BUTTONS):
+
+    def button(key, label, colour, height=64):
         b = QtWidgets.QPushButton(label)
         b.setFocusPolicy(QtCore.Qt.NoFocus)     # SPACE must never press a focused button
-        b.setMinimumHeight(64)
+        b.setMinimumHeight(height)
         b.setStyleSheet(f'QPushButton {{ background: {colour}; color: white; font-weight: bold; font-size: 14px; }}'
                         'QPushButton:disabled { background: #e9ecef; color: #868e96; font-weight: normal; }')
-        grid.addWidget(b, k // 4, k % 4)
         btns[key] = (b, label)
-    lay.addLayout(grid)
+        return b
+    rows = {}                                  # --partners: each partner's readiness line
+    if not state.partners:
+        for k, (key, label, colour) in enumerate(BUTTONS):
+            grid.addWidget(button(key, label, colour), k // 4, k % 4)
+        lay.addLayout(grid)
+    else:
+        fleet_buttons, partner_buttons = partners_buttons(state.partners)
+        for k, (key, label, colour) in enumerate(fleet_buttons):
+            grid.addWidget(button(key, label, colour), k // 3, k % 3)
+        lay.addLayout(grid)
+        for d in state.partners:
+            rows[d] = QtWidgets.QLabel()
+            rows[d].setWordWrap(True)
+            rows[d].setStyleSheet('font-size: 14px; padding: 4px; font-weight: bold; border-left: 6px solid #7048e8;')
+            lay.addWidget(rows[d])
+            row = QtWidgets.QGridLayout()
+            for k, (key, label, colour) in enumerate(partner_buttons[d]):
+                row.addWidget(button(key, label, colour, height=48), k // 4, k % 4)
+            lay.addLayout(row)
     action = QtWidgets.QLabel('')
     action.setStyleSheet('font-size: 13px; padding: 4px;')
     lay.addWidget(action)
@@ -523,6 +833,7 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
         action.setStyleSheet('font-size: 13px; padding: 4px;' + (' background: #e03131; color: white;' if alarm else ''))
 
     disarm_left = {'n': 0}
+    mag_off = {'until': None}               # the first OFF press: send on a second one before this time
     disarm_timer = QtCore.QTimer()
     disarm_timer.setInterval(DISARM_PERIOD_MS)
 
@@ -556,6 +867,9 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
         if not ok:                             # the state moved since the last refresh
             note(f'{dict((k, lab) for k, (_, lab) in btns.items())[key]} not sent: {why}', alarm=True)
             return
+        if '@' in key or key in ('detach_both', 'his_takeoff_both'):
+            press_partners(key, st, now)
+            return
         if key == 'arm':
             send.fleet('ARM')
         elif key == 'takeoff':
@@ -566,11 +880,70 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
             send.give_up()
         elif key == 'his_land':
             send.his_land()
+        elif key == 'force_drop':
+            send.force_drop()
+        elif key == 'detach':
+            send.detach(st.partner)
+            with state.lock:
+                state.detach_sent = True
+        elif key == 'q4_mag_off':
+            if mag_off['until'] is None or now > mag_off['until']:
+                mag_off['until'] = now + MAG_OFF_CONFIRM_S
+                note(f'QUAD4 magnet OFF: press again within {MAG_OFF_CONFIRM_S:.0f} s to send (it drops whatever QUAD4 '
+                     'holds and keeps the coil off until ON)', alarm=True)
+                return
+            mag_off['until'] = None
+            send.magnet_operator('OFF')
+        elif key == 'q4_mag_on':
+            send.magnet_operator('ON')
         else:
             send.his({'his_arm': 'ARM', 'his_takeoff': 'TAKEOFF', 'his_disarm': 'DISARM'}[key])
             if key == 'his_takeoff':
                 ack['t'] = now
+                if st.his_takeoff_held():
+                    note('his TAKEOFF: his planner holds it until our release, then climbs from where QUAD4 is')
         note(f'sent {btns[key][1]}')
+
+    def press_partners(key, st, now):
+        """--partners: DETACH BOTH, his TAKEOFF BOTH, or a button of partner d's row ('<name>@<d>')."""
+        label = btns[key][1]
+        if key == 'detach_both':
+            send.detach_set(st.partners)
+            with state.lock:
+                state.detach_sent = True
+            note(f'sent {label}: {DETACH_SET} "{detach_set_text(st.partners)}"')
+            return
+        if key == 'his_takeoff_both':
+            for d in st.partners:              # every instance's TAKEOFF in this one press
+                send.his_to(d, 'TAKEOFF')
+                ack[d] = now
+            held = [quad(d) for d in st.partners if st.his_takeoff_held(d)]
+            note(f'sent {label}' + (f': his planners hold {", ".join(held)} until our release' if held else ''))
+            return
+        name, d = key.split('@')
+        d, q = int(d), quad(int(d))
+        if name == 'mag_off':
+            if mag_off.get(d) is None or now > mag_off[d]:
+                mag_off[d] = now + MAG_OFF_CONFIRM_S
+                note(f'{q} magnet OFF: press again within {MAG_OFF_CONFIRM_S:.0f} s to send (it drops whatever {q} '
+                     'holds and keeps the coil off until ON)', alarm=True)
+                return
+            mag_off[d] = None
+            send.magnet_operator_to(d, 'OFF')
+        elif name == 'mag_on':
+            send.magnet_operator_to(d, 'ON')
+        elif name == 'give_up':
+            send.give_up_to(d)
+        elif name == 'his_land':
+            send.his_land_to(d)
+        else:
+            send.his_to(d, {'his_arm': 'ARM', 'his_takeoff': 'TAKEOFF', 'his_disarm': 'DISARM'}[name])
+            if name == 'his_takeoff':
+                ack[d] = now
+                if st.his_takeoff_held(d):
+                    note(f'sent {label}: his planner holds it until our release, then climbs from where {q} is')
+                    return
+        note(f'sent {label}')
 
     for key, (b, _) in btns.items():
         b.clicked.connect(lambda _=False, key=key: press(key))
@@ -583,14 +956,31 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
         st = state.snapshot()
         if ack['t'] is not None and st.his_phase not in ('', 'WAIT_FOR_TAKEOFF'):
             ack['t'] = None
+        elif ack['t'] is not None and st.his_takeoff_held():
+            ack['t'] = now                     # held by his planner until our release: timed from the release
         elif ack['t'] is not None and now - ack['t'] > HIS_TAKEOFF_ACK_S:
             ack['t'] = None
             note(f'his planner did not enter TAKEOFF within {HIS_TAKEOFF_ACK_S:.0f} s of his TAKEOFF (still '
                  f'{st.his_phase or "--"}): his MPC may lift alone. LAND if QUAD4 leaves its mat', alarm=True)
+        for d in st.partners:
+            phase, q = st.pp[d].phase, quad(d)
+            if ack.get(d) is None:
+                continue
+            if phase not in ('', 'WAIT_FOR_TAKEOFF'):
+                ack[d] = None
+            elif st.his_takeoff_held(d):
+                ack[d] = now
+            elif now - ack[d] > HIS_TAKEOFF_ACK_S:
+                ack[d] = None
+                note(f'his planner ({q}) did not enter TAKEOFF within {HIS_TAKEOFF_ACK_S:.0f} s of his TAKEOFF (still '
+                     f'{phase or "--"}): his MPC may lift alone. LAND if {q} leaves its mat', alarm=True)
         why = readiness(st, now)
         if in_flight(st, now):
             ready.setText('IN FLIGHT (armed)')
             ready.setStyleSheet('font-size: 18px; padding: 6px; font-weight: bold; background: #ffe066;')
+        elif not why and placement(st, now):
+            ready.setText(f'READY to arm, but move inside {PLACE_MAX_M:.1f} m: ' + '; '.join(placement(st, now)))
+            ready.setStyleSheet('font-size: 15px; padding: 6px; font-weight: bold; background: #f08c00; color: white;')
         elif not why:
             ready.setText('READY to arm')
             ready.setStyleSheet('font-size: 18px; padding: 6px; font-weight: bold; background: #2f9e44; color: white;')
@@ -604,13 +994,21 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
         status.setText(f'Fleet manager: {st.manager or "--"}')
         status.setStyleSheet('font-size: 14px; padding: 4px; font-weight: bold; '
                              + ('background: #e03131; color: white;' if bad else 'background: #f1f3f5;'))
-        phases.setText(f'Our phase: {st.phase or "--"}    his phase: {st.his_phase or "--"}')
         bs = bodies(st, now) or {}
         ring = bs.get('payload') or {}
-        attach.setText(proof_line(st) + ('' if ring.get('z') is None else
-                                         f'    ring z {ring["z"]:.2f} m, tilt {ring.get("tilt_deg") or 0:.1f} deg'))
+        ring_text = ('' if ring.get('z') is None else
+                     f'    ring z {ring["z"]:.2f} m, tilt {ring.get("tilt_deg") or 0:.1f} deg')
+        if st.partners:
+            phases.setText(f'Our phase: {st.phase or "--"}    his phases: '
+                           + ', '.join(f'{quad(d)} {st.pp[d].phase or "--"}' for d in st.partners))
+            attach.setText(ring_text.strip() or 'ring --')
+            for d, line in rows.items():
+                line.setText(partner_line(st, d, now))
+        else:
+            phases.setText(f'Our phase: {st.phase or "--"}    his phase: {st.his_phase or "--"}')
+            attach.setText(proof_line(st) + ring_text)
         for i in range(st.n):
-            cell(i, 0, quad(i) + (' (his)' if i == st.partner else ''))
+            cell(i, 0, quad(i) + (' (his)' if i == st.partner or i in st.partners else ''))
             a = st.tracker_armed[i]
             cell(i, 1, '--' if a is None else 'ARMED' if a else 'disarmed', amber if a else None)
             hh = st.health[i] or {}
@@ -662,7 +1060,7 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
     timer = QtCore.QTimer()
     timer.timeout.connect(refresh)
     timer.start(200)
-    w.resize(1250, 820)
+    w.resize(1250, 980 if state.partners else 820)
     w.show()
     refresh()
     if on_ready:                               # tests: drive the window once it is up
@@ -672,10 +1070,14 @@ def gui(state, send, exit_after_ms=None, on_ready=None):
     return app.exec_()
 
 
-def main(argv=None):
+def make_state(argv=None):
+    """(ConsoleState, drones) from the command line."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--drones', type=int, default=4)
     ap.add_argument('--partner', type=int, default=3, help="the drone Tejen's stack flies (default 3 = QUAD4)")
+    ap.add_argument('--partners', default='',
+                    help='two or more drones, each flown by its own instance of his stack, e.g. 3,2 (4 -> 2 -> 4): a '
+                         'row each, DETACH BOTH and his TAKEOFF BOTH. 3 alone is the default console')
     ap.add_argument('--no-partner', action='store_true', help='our fleet alone')
     ap.add_argument('--twin', action='store_true', help='the twin: no radios, so no FC or pack checks')
     ap.add_argument('--slot-gate', action='store_true',
@@ -683,8 +1085,29 @@ def main(argv=None):
     ap.add_argument('--small-angle', type=float, default=25.0,
                     help="the FCs' small_angle (Betaflight default 25; 180 once docs/rig/fc_request.md is done)")
     a = ap.parse_args(argv)
-    state = ConsoleState(a.drones, None if a.no_partner else a.partner, a.twin, a.small_angle, a.slot_gate)
-    link = RosLink(state, a.drones)
+    partners = []
+    if a.partners.strip():
+        try:
+            partners = [int(t) for t in a.partners.split(',') if t.strip()]
+        except ValueError:
+            ap.error(f'--partners {a.partners!r}: drone ids, comma separated (e.g. 3,2)')
+        if a.no_partner:
+            ap.error('--partners and --no-partner')
+        if len(set(partners)) != len(partners) or not all(0 <= d < a.drones for d in partners):
+            ap.error(f'--partners {a.partners!r}: distinct drone ids below --drones {a.drones}')
+        if partners == [3]:                    # today's console exactly
+            partners, a.partner = [], 3
+        elif len(partners) < 2:
+            ap.error(f'--partners {a.partners!r}: two or more partners (3 alone is today\'s console; --partner <d> '
+                     'flies one partner on today\'s topics)')
+    state = ConsoleState(a.drones, None if a.no_partner or partners else a.partner, a.twin, a.small_angle,
+                         a.slot_gate, partners=partners)
+    return state, a.drones
+
+
+def main(argv=None):
+    state, drones = make_state(argv)
+    link = RosLink(state, drones)
     spinner = threading.Thread(target=link.spin, daemon=True)
     spinner.start()
     try:

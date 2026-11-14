@@ -51,8 +51,21 @@ trajectory:
   plan_sqp_iters: ''           # '' = 5: warm-start SQP iterations per planner tick (same card)
   plan_fast_refs: ''           # '' = off: each drone's references from one mapped call (bit for bit) and a warm solve's logged residual after they went out (card 2026-10-23_scalability; the twin's default after its smoke run, the rig's after the reviewer)
   plan_res_every: ''           # '' = 1: a warm tick logs its KKT residual every k-th tick; 0 = only where the publish gate needs it
+  rod_len_reread: ''           # '' = off: each rod's length read again in the pretension's full-pull hold, then a ramp to it as the lift starts (card 2026-10-31_rod_len_reread)
+  partner_release_around: ''   # '' = off: a released partner drone that re-attaches on another plate first flies round the outside of the carriers (Wesley 4 Nov)
+  partner_release_around_r: '' # m from the ring centre for that circle ('' = 1.2)
+  attach_pause: ''              # '' = off: once his TAKEOFF follows a release, the path slows to rest and waits for QUAD4's re-attach, then resumes (Wesley 4 Nov, the orbit)
+  attach_pause_ramp_s: ''       # s to slow to rest and to speed back up ('' = 3.0)
+  attach_pause_at: ''           # '' = takeoff (the pause from his TAKEOFF); 'reattach': only from his re-attach leg, so the path runs on through his pickup and drop (Wesley 10 Nov, the full mission on the circle); 'pickup_reattach': also at rest for his pickup until it is confirmed (Wesley 11 Nov)
+  partner_rod_add_m: ''         # '' = 0: m added to a start-welded QUAD4's hand-over rod reading (11 Nov: it reads 7-14 mm short and its cable runs slack; docs/analysis/quad4_bounce_2026-11-11.md)
+  foldin_cap: ''                # '' = off; 'level': QUAD4's fold-in blend capped where a level ring puts it on its rod (twin only; card 2026-11-05_quad4_foldin_weld_cap; 'weld' deleted 5 Nov)
+  plan_rod_level: ''           # '' = off, twin only (sim.yaml): level tension and leaning direction references for the rod in the plan (card 2026-10-31_rod_in_plan)
+  rod_level_mass: ''           # kg: the world's rod that plan_rod_level plans with when rod_mass is untyped (sim.yaml)
+  rod_level_com_frac: ''       # its centre of mass from the ring end, as a share of cable_len
   land_rearm_touchdown: ''     # '' = off: re-arm the LAND stall test at ring touchdown (card 2026-10-17_touchdown_height_gate)
   land_descend_to_stall: ''    # '' = off: after ring touchdown the LAND reference descends past z 0 until the stall (card 2026-10-17_land_ref_below_rest)
+  carriers_down_alone: ''      # '' = off: while the LAND waits for a departed drone (QUAD4 taken back), the carriers stalled on the floor idle and are disarmed alone; needs land_descend_to_stall (card 2026-11-05_carriers_down_alone)
+  carriers_down_band_m: ''     # m over its own rest a released carrier may idle and be disarmed at ('' = 0.15, Wesley 5 Nov; 0.03-0.20)
   int_mode: 'auto'             # auto = model where allowed, else reference (bringup real_mode.planner_options; Wesley 5 Oct)
   int_k_xy: 5.26               # N/m, model mode: ring force per metre of integral (rig twin, card 2026-10-04_z_int_model)
   int_k_z: 7.13
@@ -85,6 +98,7 @@ tracker:
   cable_lp_order: 1               # 1 or 2 first-order stages of that low-pass in series (2: RIG-1029-ch1)
   cable_notch_hz: 0.0             # cable_source measured / mocap only: band-stop on the measured pull at this frequency (Hz), 0 = off
   cable_notch_q: 1.0              # its quality (1: -3 dB from ~3 to ~8 Hz around 5.3)
+  cable_pull_up_max: 0.0          # bound on the measured pull's upward z (m/s^2); 0 = a rod only pulls down (docs/analysis/tracker_clamp_2026-10-31.md)
   w_thr_ref: 0.0                  # tracker weight on the planner's thrust feedforward; 0 = compiled 2e-4
   x0_relax_frac: 0.0              # tracker node-0 box half-width, fraction of the state (0: node 0 = the measurement; was 0.025, Wesley 4 Oct, R0957/R0960)
   ref_time_shift: false           # tracker advances the planner horizon by the time since it arrived
@@ -98,6 +112,10 @@ watchdogs:
   # disarm), and every reference and landing point is kept inside it (Wesley 22 Oct: 1.75; off until the critic,
   # card 2026-10-22_position_limit)
   pos_limit_m: ''
+  ring_low_land_m: ''           # '' = off: the ring this far (m) under its height reference after the lift lands the fleet (R3444)
+  ring_low_land_s: ''           # for this long in a row (s; '' = 3.0)
+  take_back_avoid_pickup_m: ''  # a take-back never comes down within this of his pickup point (m; '' = off; Wesley 13 Nov, the stand)
+  attach_pause_through_landing: ''  # his LANDING keeps the attach pause until he is down ('' = off; 13 Nov, the drop-off over a paused ring)
 fleet_resize:
   reconfig_hold_s: 1.5
   min_survivors: 3
@@ -116,6 +134,7 @@ fleet_resize:
   drop_gap_deg: ''             # deg, '' = off (a 180 deg gap drops): after the lift a loss keeps flying while the survivors' largest empty arc (a pair: its larger arc) is at most this; 200 flies the T and the opposite pair (Wesley 21 Oct; the pair needs min_survivors 2; card 2026-10-21_chain_release)
   rejoin_departed: ''          # '' = off: a carrier that leaves holds at a ring-frame staging point, and /fleet/attach <d> flies it back to its own plate and re-welds its tether (twin mode:=dissipative only; needs departed_land false and io tether_tips; code design B, card 2026-10-23_rejoin_departed)
   rejoin_task: ''              # '' = off: /fleet/task "d x,y,z,dwell; ..." flies a staged carrier to each waypoint and back to its staging point (twin mode:=dissipative only; needs rejoin_departed; card 2026-10-23_scalability case 6)
+  relay_task: ''               # '' = off: tasks fly on a lapped path (a carrier's TASK waits for its leave, a leave for a full ring, the path held while the drone is inside the lap's keep-out, parked at its last waypoint until an ATTACH flies it back; twin mode:=dissipative only; needs rejoin_task; card 2026-10-30_x4_endurance_relay)
   drop_tilt_deg: ''            # deg, '' = 30: the trackers' ring-tilt drop threshold
   drop_samples: ''             # '' = 2: consecutive ring samples over it
   drop_glitch_step_deg: ''     # deg, '' = 15: a frame-to-frame ring attitude step above this is a pose glitch (rig bags: real capsizes stay under it)
@@ -214,6 +233,7 @@ attach:
 partner:
   partner: false
   partner_attached: false
+  reattach_plate: ''           # '' = off; k: QUAD4 attaches (or re-attaches after its release) on plate k, the typed attach point turned there, his plate:= with it
   partner_m2: false
   partner_m2_part: 'all'
   sim_interface: true
@@ -230,6 +250,7 @@ partner:
   # dry hold (critic 15 Oct, F6): QUAD4's coil held OFF for the whole flight; his bottom hold, our contacts and proofs
   # run and are logged, a proof that passes is a logged false proof and never an attach
   dry_hold: false
+  magnet_operator_topic: ''    # combined M1: '' = off; a topic (the rig sheet: /drone_3/magnet_operator) whose OFF always reaches QUAD4's coil and holds every ON until an operator ON (Wesley 4 Nov, k1m_3/_4)
   # the manager's contact and proof thresholds, '' = its default (E1 sets loose ones, then they are frozen)
   contact_dwell_s: ''
   proof_d_ok: ''
@@ -247,6 +268,15 @@ partner:
   comotion_speed_window_s: ''
   comotion_lost: ''
   comotion_sep_xy: ''
+  comotion_normal_max: ''      # m: the contact's highest tip above the plate point ('' = 0.012)
+  comotion_normal_ok: ''       # m: the proof's |normal| ('' = 0.010)
+  comotion_sep_normal: ''      # m: after the lift, a tip this far above the plate has separated ('' = 0.010)
+  comotion_normal_min: ''      # m: the contact's lowest tip below the plate point ('' = -0.015)
+  comotion_speed: ''           # m/s: the contact's relative speed ('' = 0.03)
+  comotion_speed_ok: ''        # m/s: the proof's relative speed ('' = 0.03)
+  comotion_proof_dwell_s: ''   # s the proof's conditions hold ('' = 1.0)
+  comotion_inconclusive_s: ''  # s after the lift before an unproven catch fails ('' = 3.0)
+  comotion_taut_margin: ''     # m below the free-hang length that still reads taut ('' = the manager's 0.003; Wesley 4 Nov)
   tip_skip_repeats: false
   # the contact's c0 from the dwell's last contact_c0_tail_s and a vertical-speed gate contact_vz_max ('' = the
   # manager's 0.05 s / 0.02 m/s), so a tip still arriving sets no c0 (critic F7; on by default, Wesley 11 Oct)

@@ -3,7 +3,7 @@
 
 This node never calls Gazebo and never claims to sense physical attachment. It
 commands the electromagnet through a magnet-only ELRSCommand override and
-publishes /magnet/object_attached=True only after all of the following hold:
+normally publishes /magnet/object_attached=True after all of the following hold:
   - high-level /magnet/command is ON,
   - the tracked pickup object and measured magnet tip are both fresh,
   - their configured physical contact points are sufficiently close,
@@ -14,6 +14,10 @@ The Bool is therefore inferred commissioning state, not a measured contact
 sensor. After attachment is declared, live geometry is re-checked continuously;
 sustained separation or stale pose data de-latches the state. A declared loss
 remains false until magnet OFF rearms the next pickup attempt.
+
+The explicitly enabled preloaded-navigation exception assumes the operator's
+load during fresh TAKEOFF with magnet ON. It clears a setup-loss latch without
+releasing the magnet; normal maintenance/loss checks resume on phase exit.
 """
 from __future__ import annotations
 
@@ -85,6 +89,10 @@ class MagnetAttachmentManagerIRL(Node):
         self.pose_timeout_s = max(
             0.01, float(self.declare_parameter('pose_timeout_s', 0.25).value)
         )
+        self.preloaded_takeoff_attachment_override = bool(self.declare_parameter(
+            'preloaded_takeoff_attachment_override', False).value)
+        self.mission_phase = ''
+        self.last_phase_time: Optional[float] = None
 
         # Magnet-only ELRS output. Until the physical Betaflight AUX mapping is
         # positively identified, fan the same magnet command across the known-unused
@@ -149,6 +157,8 @@ class MagnetAttachmentManagerIRL(Node):
         self.create_subscription(
             PoseArray, self.pickup_object_pose_topic, self.pickup_cb, 10
         )
+        if self.preloaded_takeoff_attachment_override:
+            self.create_subscription(String, '/join_planner/phase', self.phase_cb, 10)
         self.attached_pub = self.create_publisher(Bool, self.object_attached_topic, 10)
         self.state_pub = self.create_publisher(String, self.attachment_state_topic, 10)
         self.elrs_pub = self.create_publisher(ELRSCommand, self.elrs_magnet_command_topic, 5)
@@ -164,6 +174,11 @@ class MagnetAttachmentManagerIRL(Node):
             'Missing/stale pickup mocap fails closed. '
             f'ELRS magnet fan-out channels={self.elrs_magnet_channels}.'
         )
+        if self.preloaded_takeoff_attachment_override:
+            self.get_logger().warn(
+                'Operator-preloaded TAKEOFF attachment override enabled: magnet ON '
+                'assumes the load during fresh TAKEOFF only; NOT attachment proof.'
+            )
 
     @staticmethod
     def _set_channel(msg: ELRSCommand, channel_index: int, value: float) -> bool:
@@ -234,6 +249,10 @@ class MagnetAttachmentManagerIRL(Node):
         self.elrs_pub.publish(msg)
         self._last_elrs_state = self.magnet_on
         self._last_elrs_publish_time = now
+
+    def phase_cb(self, msg: String) -> None:
+        self.mission_phase = str(msg.data).strip()
+        self.last_phase_time = time.time()
 
     def command_cb(self, msg: String) -> None:
         command = str(msg.data).strip().upper()
@@ -328,7 +347,19 @@ class MagnetAttachmentManagerIRL(Node):
             slow = relative_speed <= self.attach_speed_threshold_mps
 
         attachment_maintained = self.magnet_on and both_fresh and close
-        if self.assumed_attached:
+        takeoff_override = bool(
+            self.preloaded_takeoff_attachment_override and self.magnet_on
+            and self.mission_phase == 'TAKEOFF' and self.last_phase_time is not None
+            and 0 <= now - self.last_phase_time <= self.pose_timeout_s
+        )
+        if takeoff_override:
+            # One shared assumption feeds mission readiness AND conservative
+            # carried-payload geometry. Never issue OFF/ON or claim lift proof.
+            self.assumed_attached = True
+            self.attachment_loss_latched = False
+            self.attach_condition_start = None
+            self.detach_condition_start = None
+        elif self.assumed_attached:
             self.attach_condition_start = None
             if attachment_maintained:
                 self.detach_condition_start = None
@@ -386,6 +417,7 @@ class MagnetAttachmentManagerIRL(Node):
             f'attach_dwell_s={attach_dwell:.2f}/{self.attach_dwell_s:.2f} '
             f'detach_dwell_s={detach_dwell:.2f}/{self.detach_dwell_s:.2f} '
             f'loss_latched={self.attachment_loss_latched} '
+            f'preloaded_takeoff_override={takeoff_override} '
             'ATTACHMENT_IS_NOT_SENSOR_VERIFIED'
         )
         self.state_pub.publish(state)

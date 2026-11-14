@@ -180,6 +180,7 @@ def slots_up():
 
 class Job:
     warm_from_config = False         # --warm-from-config: the planner warm-up builds what this config's planner loads
+    keep_record = False              # --keep-record: this job's Gazebo replay comes back too (set on the first job per config)
 
     def __init__(self, cfg_path, cfg, rid, local_dir, date):
         self.cfg_path, self.cfg, self.rid, self.local_dir, self.date = cfg_path, cfg, rid, local_dir, date
@@ -227,6 +228,18 @@ class Job:
                 '--git-state-file', f'{scratch}/git_state.json', '--gz-nice', str(gz_nice)]
 
 
+def planner_has_rod(cfg_path):
+    """The config's planner models the rod (plan_rod_level or a typed rod_mass): a different compiled model, which a
+    warm-up by fleet size and masses alone does not build."""
+    try:
+        from prebuild_planner import config_builds
+        opts = config_builds(cfg_path)[1]
+        return bool(opts and opts['rod_mass'] > 0.0)
+    except Exception as e:  # noqa: BLE001
+        print(f'WARNING {os.path.relpath(cfg_path, REPO)}: rod model not resolved ({e})', file=sys.stderr)
+        return False
+
+
 def planner_sizes(cfg_path):
     """Every fleet size the config's planner builds at its start (prebuild_planner.config_builds), [] if that fails
     here (said loudly). A slot's cache holds one solver per size, so after a batch on another ring (S's 0.9 kg) a size
@@ -262,7 +275,10 @@ def reserve(configs, date, dry):
 def fetch(job, slot):
     """rsync the staged result into the reserved directory; True if a manifest arrived."""
     src = f'{LAB}:{job.host_dir(slot)}/'
-    r = subprocess.run(['rsync', '-az', '-e', 'ssh -o BatchMode=yes', src, job.local_dir + '/'],
+    # the Gazebo replay (~0.6 GB a 30-min run) stays behind: nothing scores from it (Wesley 6 Nov); --keep-record
+    # fetches it for the first run of each config, for a video (tools/render_video.py)
+    skip = [] if job.keep_record else ['--exclude', 'gz_record/']
+    r = subprocess.run(['rsync', '-az', *skip, '-e', 'ssh -o BatchMode=yes', src, job.local_dir + '/'],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if r.returncode != 0:
         job.note = f'rsync failed: {r.stdout.decode(errors="replace").strip()[-200:]}'
@@ -341,6 +357,8 @@ def main(argv=None):
                     help='check, read the lab load and print the plan; reserve, sync and run nothing')
     ap.add_argument('--no-sync', action='store_true', help='skip lab_sync.sh (tree already there)')
     ap.add_argument('--no-build', action='store_true', help='skip the colcon build on the lab')
+    ap.add_argument('--keep-record', action='store_true',
+                    help="fetch the Gazebo replay (gz_record/) of each config's first run, for a video")
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)     # keep order with the sync/build output
     if not 3 <= a.cpus <= 12:
@@ -384,9 +402,15 @@ def main(argv=None):
         if not a.no_build:
             subprocess.run([os.path.join(HERE, 'lab_build.sh'), '--ws'], check=True)
     jobs = reserve(configs, date, a.dry_run)
+    if a.keep_record:
+        seen = set()
+        for job in jobs:
+            if job.cfg.name not in seen:
+                seen.add(job.cfg.name)
+                job.keep_record = True
     for job in jobs:
         sizes = planner_sizes(job.cfg_path)
-        job.warm_from_config = a.warm_from_config or len(sizes) > 1
+        job.warm_from_config = a.warm_from_config or len(sizes) > 1 or planner_has_rod(job.cfg_path)
         if len(sizes) > 1 and not a.warm_from_config:
             print(f'  {job.rid}: the warm-up builds every size its planner resizes through, {sizes} '
                   f'(prebuild_planner.py --from-config)')

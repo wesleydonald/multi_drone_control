@@ -78,7 +78,7 @@ def _contact_attach_specs(specs):
     ]
 
 
-def pickup_delivery_mission(contact_attach: bool = False) -> MissionDefinition:
+def pickup_delivery_mission(contact_attach: bool = False, return_to_start: bool = False) -> MissionDefinition:
     specs = [
         _spec(
             MissionPhase.WAIT_FOR_TAKEOFF,
@@ -217,6 +217,24 @@ def pickup_delivery_mission(contact_attach: bool = False) -> MissionDefinition:
             authority=ControllerAuthority.DISARMED,
         ),
     ]
+    if return_to_start:
+        # return_after_drop (multi_drone_control 12 Nov): the supervisor's drop-off ends back at the start
+        specs = specs + [
+            _spec(
+                MissionPhase.RETURN_TO_START,
+                ReferenceType.TRANSFER,
+                TargetSource.CURRENT_POSE,
+                "OFF",
+                "return_after_drop: transfer back to the start hover (the C++ planner, or direct).",
+            ),
+            _spec(
+                MissionPhase.AT_START,
+                ReferenceType.TRANSFER,
+                TargetSource.CURRENT_POSE,
+                "OFF",
+                "return_after_drop: hold the start hover until the operator's LAND.",
+            ),
+        ]
     if contact_attach:
         specs = _contact_attach_specs(specs)
     return MissionDefinition(
@@ -256,7 +274,7 @@ def floor_join_mission(contact_attach: bool = False, cpp_transit: bool = False) 
     )
 
 
-def delivery_rejoin_mission(contact_attach: bool = False) -> MissionDefinition:
+def delivery_rejoin_mission(contact_attach: bool = False, return_to_start: bool = False) -> MissionDefinition:
     """delivery_rejoin (Wesley 14 Oct 2026): pickup_delivery without the pickup. The object starts on the magnet on
     the mat, so the magnet is ON from boot; the planner's takeoff ends where a loaded lift ends and prepares the
     loaded transit there, as LIFT_OBJECT does after a pickup."""
@@ -267,7 +285,7 @@ def delivery_rejoin_mission(contact_attach: bool = False) -> MissionDefinition:
     }
     phases = {
         phase: replace(spec, magnet_command="ON", description=held[phase]) if phase in held else spec
-        for phase, spec in pickup_delivery_mission(contact_attach).phases.items()
+        for phase, spec in pickup_delivery_mission(contact_attach, return_to_start).phases.items()
         if phase not in PICKUP_PHASES
     }
     return MissionDefinition(
@@ -375,23 +393,24 @@ def m2b_single_attachment_mission(attachment_policy: str = "legacy") -> MissionD
     )
 
 def mission_for_mode(mode: str, *, attachment_policy: str = "legacy",
-                     contact_attach: bool = False, attach_cpp_transit: bool = False) -> MissionDefinition:
+                     contact_attach: bool = False, attach_cpp_transit: bool = False,
+                     return_to_start: bool = False) -> MissionDefinition:
     normalized = str(mode).strip().lower()
     if normalized == "preloaded_navigation":
-        base = pickup_delivery_mission()
+        base = pickup_delivery_mission(return_to_start=return_to_start)
         phases = dict(base.phases)
         for phase in (MissionPhase.WAIT_FOR_TAKEOFF, MissionPhase.TAKEOFF):
             phases[phase] = replace(phases[phase], magnet_command="ON",
                 description="Operator-preloaded navigation; preserve magnet ON, no pickup/proof claim.")
         return replace(base, name="preloaded_navigation", phases=phases)
     if normalized in {"pickup_delivery", "pickup-delivery", "full"}:
-        return pickup_delivery_mission(contact_attach)
+        return pickup_delivery_mission(contact_attach, return_to_start)
     if normalized in {"join", "join_only", "reattach"}:
         return join_only_mission(contact_attach)
     if normalized in {"floor_join", "floor-join"}:
         return floor_join_mission(contact_attach, attach_cpp_transit)
     if normalized in {"delivery_rejoin", "delivery-rejoin"}:
-        return delivery_rejoin_mission(contact_attach)
+        return delivery_rejoin_mission(contact_attach, return_to_start)
     if normalized in {"m2b", "m2b_single_attachment", "single_attachment"}:
         if contact_attach:
             raise ValueError("contact_attach is an M1 rejoin mode; m2b has its own attachment phases.")

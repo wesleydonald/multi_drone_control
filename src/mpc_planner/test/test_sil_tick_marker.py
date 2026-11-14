@@ -21,7 +21,7 @@ class _Clock:
 
 
 def _node(plan):
-    n = types.SimpleNamespace(_tick_pub=_Pub(), get_clock=_Clock, _plan=plan)
+    n = types.SimpleNamespace(_tick_pub=_Pub(), get_clock=_Clock, _plan=plan, _ring_low_check=lambda: None)
     return n
 
 

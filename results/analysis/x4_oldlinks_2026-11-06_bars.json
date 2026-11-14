@@ -1,0 +1,99 @@
+{
+ "fixed_mean_lap_m": 0.01539449183908253,
+ "lap_bar_m": 0.019243114798853163,
+ "runs": [
+  {
+   "run": "R3910_sim_gz_x4_relay_30min_v3_norod",
+   "role": "relay",
+   "void": [],
+   "R1": true,
+   "R1_falsified": false,
+   "R1_items": {
+    "swaps": "26/26 of 26",
+    "mission_s": 1764.126,
+    "faults": {}
+   },
+   "R2": true,
+   "R2_items": {
+    "carriers": [
+     7,
+     8
+    ],
+    "planner_n_min": 7
+   },
+   "R3": true,
+   "R4": true,
+   "R4_lap_bar": false,
+   "R4_worst_lap_m": 0.034048681051916115,
+   "R5": true,
+   "R6": true,
+   "R7": true
+  },
+  {
+   "run": "R3911_sim_gz_x4_relay_30min_v3_norod",
+   "role": "relay",
+   "void": [],
+   "R1": false,
+   "R1_falsified": true,
+   "R1_items": {
+    "swaps": "25/26 of 26",
+    "mission_s": 1761.353,
+    "faults": {}
+   },
+   "R2": true,
+   "R2_items": {
+    "carriers": [
+     7,
+     8
+    ],
+    "planner_n_min": 7
+   },
+   "R3": true,
+   "R4": true,
+   "R4_lap_bar": false,
+   "R4_worst_lap_m": 0.03140912141454453,
+   "R5": true,
+   "R6": true,
+   "R7": true
+  },
+  {
+   "run": "R3912_sim_gz_x4_relay_30min_m115_v3_norod",
+   "role": "relay",
+   "void": [],
+   "R1": false,
+   "R1_falsified": true,
+   "R1_items": {
+    "swaps": "25/26 of 26",
+    "mission_s": 1750.638,
+    "faults": {}
+   },
+   "R2": true,
+   "R2_items": {
+    "carriers": [
+     7,
+     8
+    ],
+    "planner_n_min": 7
+   },
+   "R3": true,
+   "R4": true,
+   "R4_lap_bar": false,
+   "R4_worst_lap_m": 0.03163521919084965,
+   "R5": true,
+   "R6": true,
+   "R7": true
+  },
+  {
+   "run": "R3913_sim_gz_x4_fixed_B_v3_norod",
+   "role": "fixed",
+   "void": [],
+   "F1": true
+  },
+  {
+   "run": "R3914_sim_gz_x4_fixed_B_v3_norod",
+   "role": "fixed",
+   "void": [],
+   "F1": true
+  }
+ ]
+}

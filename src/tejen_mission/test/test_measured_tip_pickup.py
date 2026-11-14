@@ -260,3 +260,47 @@ def test_descend_state_machine_does_not_complete_from_elapsed_time_in_opt_in():
     obj.pickup_tier_descent.complete=False
     fn(obj)
     assert len(transitions)==2
+
+
+def test_low_hold_freezes_the_last_centimetres_off_centre_without_a_dwell():
+    """multi_drone_control 11 Nov (RIG-1111-fm9c*): in LOW the height holds while the tip is beyond low_hold_xy_m and
+    advances again the moment it is inside (no dwell: the tip swings); the crossing into LOW keeps low_xy_m."""
+    from tejen_mission.measured_tip_alignment import TieredDescent, TipAlignment, TipAlignmentConfig
+    cfg = TipAlignmentConfig(low_xy_m=.10, low_dwell_s=1.0)
+    d = TieredDescent(TipAlignment(cfg), start_height_m=.20, floor_m=-.017, speed_mps=.04, high_xy_m=.12,
+                      low_hold_xy_m=.04)
+    def step(t, error, normal):
+        d.step(now_s=t, error_world_xy=np.array([error, 0]), clearance_m=normal, relative_speed_mps=.01, fresh=True)
+    t = 0.0
+    while d.band != 'LOW' and t < 30:            # 7 cm off: inside the 10 cm crossing, so LOW is still reached
+        step(t, .07, d.height_m); t += 1 / 30
+    assert d.band == 'LOW'
+    held = d.height_m
+    for _ in range(60):                          # 7 cm off in LOW: held
+        step(t, .07, d.height_m); t += 1 / 30
+    assert d.height_m == held and d.reason == 'Z frozen while XY catches up'
+    step(t, .03, d.height_m); t += 1 / 30        # inside 4 cm for one tick: it advances at once
+    assert d.height_m < held
+    lower = d.height_m
+    step(t, .05, d.height_m); t += 1 / 30        # out again: held again
+    assert d.height_m == lower
+    for _ in range(300):
+        step(t, .02, d.height_m); t += 1 / 30
+    assert d.complete
+
+
+def test_low_hold_off_keeps_his_low_tolerance_and_a_bad_value_is_refused():
+    from tejen_mission.measured_tip_alignment import TieredDescent, TipAlignment, TipAlignmentConfig
+    cfg = TipAlignmentConfig(low_xy_m=.10, low_dwell_s=1.0)
+    d = TieredDescent(TipAlignment(cfg), start_height_m=.20, floor_m=-.017, speed_mps=.04, high_xy_m=.12)
+    t = 0.0
+    while d.band != 'LOW' and t < 30:
+        d.step(now_s=t, error_world_xy=np.array([.07, 0]), clearance_m=d.height_m, relative_speed_mps=.01, fresh=True)
+        t += 1 / 30
+    held = d.height_m
+    d.step(now_s=t, error_world_xy=np.array([.07, 0]), clearance_m=d.height_m, relative_speed_mps=.01, fresh=True)
+    assert d.height_m < held                     # 7 cm off still descends, as flown on 11 Nov
+    for bad in (0.0, -0.01, 0.11):
+        with pytest.raises(ValueError):
+            TieredDescent(TipAlignment(cfg), start_height_m=.20, floor_m=-.017, speed_mps=.04, high_xy_m=.12,
+                          low_hold_xy_m=bad)

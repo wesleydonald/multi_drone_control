@@ -153,7 +153,9 @@ class ElrsMux(Node):
                                  self._tejen_cb, 1)
         self.create_subscription(ELRSCommand, f'/drone_{drone_id}/ELRSCommand_diss',
                                  self._diss_cb, 1)
-        self.create_subscription(Bool, '/magnet/object_attached', self._attached_cb, 10)
+        # the weld (or proven contact) that hands this drone to ours: one per partner when two fly (4 -> 2 -> 4)
+        self._attached_topic = str(self.declare_parameter('attached_topic', '/magnet/object_attached').value)
+        self.create_subscription(Bool, self._attached_topic, self._attached_cb, 10)
         # partner handover (his /join_planner/handoff_ready at ATTACH_READY): our tracker
         # takes over for the last descent onto the plate, through the same live-takeover
         # rule as the weld ('' = off)
@@ -197,7 +199,7 @@ class ElrsMux(Node):
         self.get_logger().info(
             f'[elrs_mux] drone {drone_id}: '
             + ('OURS from boot until /partner/release' if self._start_ours
-               else 'forwarding APPROACH until /magnet/object_attached')
+               else f'forwarding APPROACH until {self._attached_topic}')
             + f' (latch={self.policy.latch}, require_live={self.policy.require_live})')
 
     def _now(self):

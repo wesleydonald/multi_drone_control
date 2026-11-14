@@ -494,3 +494,23 @@ routing round. C8 weak: 1 of the 2 repeats. C9 FAIL on the avoidance bar. C10 su
 3.6-4.0 min after LIFTED in all five long runs, all ending in DROP AND LAND (R2848, R2854, R2860 2-3.5 s into the LAND
 after WELD_TIMEOUT; the card listed R2848 and R2854 as no abort). Scorer gap: `attach_clearance.py` counts aborts only to
 LAND and tilt only to the weld (R2853, R2859 missed).
+
+## The claim re-fly on the final tree and masses (7 Nov, R4094-R4107; feed F080)
+Chunk 8b of docs/claim_batch_2026-11-07.md, one tree (code hash 5e7b1d3bd133; diff_sha256 4d10fad5b123), no void. This
+card's three cells flew as the `_noxy` copies (int_k_xy 0 by Wesley's T rule of 5 Nov): A0 as
+`sq_floorjoin_hover_L100_p115_noxy_low` (R4096/97), V5 as `..._v1a30s_zt_xy08_bd_noxy` (R4098/99), the pickup as
+`sq_pickup_..._cppreattach_bd_noxy_over` (R4094/95, over the carriers). Bars as written above (set by the lab chat on
+Wesley's goals of 28 Oct; F075: judged after the run by Wesley):
+- A0: welds in both (31.8 / 31.9 s), rod min 0.286-0.287 m, proof on try 1: holds in the card's window. V5: transit 8.0 s,
+  tip 0.285-0.286 m at MATCH, welds 31.9 / 31.7 s, rod 0.287 m: holds in the card's window.
+- The pickup: the avoidance-fix bars hold (welds 96.7 / 99.1 s, re-attach transit 2.1-2.3 s, rod 0.284-0.285 m); the
+  original 0.25 m bar stays missed at the drop (object-cable 0.197-0.200 m).
+- Outside the card's window: both floor-join cells end in a FLEET ABORT 7.0-8.0 s after LAND in both repeats (QUAD4,
+  welded to the grounded ring, tips to 74-92 deg 1.9-2.8 s after the ring is down; the carriers disarmed 0.61-0.77 m up).
+  The pickup cell lands. The scorer gap the 29 Oct reviewer named (aborts counted only to LAND) is why the scorer's
+  safety column reads PASS for them.
+
+**Reviewer of the 7 Nov re-fly (feed F081):** join numbers hold. The four floor-join landing aborts are TB14 (the known
+twin effect, decisions 11 / 22 Oct; R3765c), preceded by QUAD4's yaw diverging after touchdown; as this card writes the
+safety bar (no abort or envelope fault, no window) A0 and V5 miss it in all four (judged after the run, F075). R4101 took
+3 contacts; the G + frozen-marker cell 29-34 s. Bar values the lab chat's; V1 centre heights Wesley's.

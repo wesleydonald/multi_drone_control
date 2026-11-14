@@ -155,6 +155,41 @@ struct SeparatorPostcheck {
     double min_slack = -std::numeric_limits<double>::infinity();
 };
 
+// First-span plane inequalities constrain the scalar n_hat dot q3, with all
+// q0/q1/q2 coordinates fixed. An empty interval proves this plane's QP rows
+// alone contradict the immutable prefix, independently of dynamics/costs.
+bool firstSpanAdmitsPrefix(const ControlPoints& cps, const Matrix4& map,
+                          const SeparatingPlane& plane, const RefinementConfig& config) {
+    const double norm = plane.normal.norm();
+    if (!plane.normal.allFinite() || !std::isfinite(norm) || !(norm > 0.) ||
+        !std::isfinite(plane.offset))
+        throw std::invalid_argument("invalid first-span separator plane");
+    const Vec3 unit = plane.normal / norm;
+    const double allowed = (1. - plane.offset) / norm - config.separator_margin_m;
+    const double tolerance = config.validation_tolerance / norm;
+    double lower = -std::numeric_limits<double>::infinity();
+    double upper = std::numeric_limits<double>::infinity();
+    for (int vertex = 0; vertex < 4; ++vertex) {
+        double fixed = 0.;
+        for (int cp = 0; cp < 3; ++cp) fixed += map(vertex, cp) * cps.row(cp).dot(unit);
+        const double rhs = allowed + tolerance - fixed;
+        const double coefficient = map(vertex, 3);
+        if (coefficient > 0.) upper = std::min(upper, rhs / coefficient);
+        else if (coefficient < 0.) lower = std::max(lower, rhs / coefficient);
+        else if (rhs < 0.) return false;
+    }
+    return lower <= upper;
+}
+
+const Eigen::MatrixXd* separatorObstacleHull(
+    const IntervalSeparator& item, const std::vector<TimeIndexedObstacle>& obstacles) {
+    if (item.obstacle_vertices) return &*item.obstacle_vertices;
+    const auto obstacle = std::find_if(obstacles.begin(), obstacles.end(),
+        [&item](const auto& o) { return o.name == item.obstacle_name; });
+    if (obstacle == obstacles.end()) return nullptr;
+    return &obstacle->interval_vertices.at(static_cast<std::size_t>(item.interval_index));
+}
+
 SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
                                       const OctopusResult& raw_result,
                                       const std::vector<TimeIndexedObstacle>& obstacles,
@@ -173,21 +208,8 @@ SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
             return {false, -std::numeric_limits<double>::infinity()};
         }
 
-        const Eigen::MatrixXd* obstacle_vertices = nullptr;
-        if (item.obstacle_vertices.has_value()) {
-            obstacle_vertices = &*item.obstacle_vertices;
-        } else {
-            const auto obstacle_it = std::find_if(
-                obstacles.begin(), obstacles.end(),
-                [&item](const TimeIndexedObstacle& obstacle) {
-                    return obstacle.name == item.obstacle_name;
-                });
-            if (obstacle_it == obstacles.end()) {
-                return {false, -std::numeric_limits<double>::infinity()};
-            }
-            obstacle_vertices = &obstacle_it->interval_vertices.at(
-                static_cast<std::size_t>(interval));
-        }
+        const Eigen::MatrixXd* obstacle_vertices = separatorObstacleHull(item, obstacles);
+        if (obstacle_vertices == nullptr) return {false, -std::numeric_limits<double>::infinity()};
         if (obstacle_vertices->rows() < 1 || obstacle_vertices->cols() != 3 ||
             !obstacle_vertices->allFinite()) {
             return {false, -std::numeric_limits<double>::infinity()};
@@ -206,9 +228,14 @@ SeparatorPostcheck separatorPostcheck(const ControlPoints& cps,
             return {false, min_slack};
         }
 
-        const SeparationResult recheck = separator.solve(
-            vertices,
-            *obstacle_vertices);
+        // Refinement may move past the raw hull's canonical -1 support while
+        // still respecting its fixed QP margin. Recompute BOTH current-hull
+        // supports along the known direction; never reuse the raw verdict.
+        auto recheck = certifyProjectedSeparation(
+            vertices, *obstacle_vertices, plane.normal, margin_m);
+        if (!recheck.feasible) {
+            recheck = separator.solve(vertices, *obstacle_vertices);
+        }
         if (!recheck.feasible) {
             return {false, min_slack};
         }
@@ -451,7 +478,42 @@ RefinementResult refineOctopusTrajectory(const OctopusResult& raw_result,
     const auto [raw_objective, raw_jerk] = objectiveTerms(raw_cps, knots, goal, config);
     output.raw_objective = raw_objective;
     output.raw_jerk_cost = raw_jerk;
-    output.qp = buildRefinementQP(raw_result, knots, goal, config, terminal_boundary);
+    validateConfig(config);
+    std::optional<OctopusResult> repaired;
+    std::size_t repaired_planes = 0;
+    if (raw_cps.rows() >= 4 && !raw_result.separators.empty()) {
+        const Matrix4 default_map = positionConverters(
+            static_cast<int>(raw_cps.rows()) - 3).front().transpose();
+        Separator separator;
+        for (std::size_t i = 0; i < raw_result.separators.size(); ++i) {
+            const auto& item = raw_result.separators[i];
+            if (item.interval_index != 0 || !item.result.feasible || !item.result.plane) continue;
+            const Matrix4 map = item.ego_vertex_map.value_or(default_map);
+            if (firstSpanAdmitsPrefix(raw_cps, map, *item.result.plane, config)) continue;
+            const auto* obstacle = separatorObstacleHull(item, obstacles);
+            SeparationResult replacement;
+            if (obstacle != nullptr) {
+                const FourPoints vertices = map * raw_cps.topRows(4);
+                replacement = separator.solveWithMinimumGap(
+                    vertices, *obstacle, config.separator_margin_m, item.result.plane->normal);
+            }
+            if (!replacement.feasible || !replacement.plane ||
+                !firstSpanAdmitsPrefix(raw_cps, map, *replacement.plane, config)) {
+                output.status = "PREFIX_CORRIDOR_INCOMPATIBLE";
+                output.message = "first-span corridor contradicts fixed prefix; obstacle=" +
+                    item.obstacle_name + "; interval=0; no validated replacement at inset_m=" +
+                    std::to_string(config.separator_margin_m);
+                return output;
+            }
+            if (!repaired) repaired = raw_result;
+            repaired->separators[i].result = std::move(replacement);
+            ++repaired_planes;
+        }
+    }
+    // Do not mutate search diagnostics. The QP and its postcheck must use the
+    // same prepared planes; otherwise a valid repair would be rejected later.
+    const auto& corridor = repaired ? *repaired : raw_result;
+    output.qp = buildRefinementQP(corridor, knots, goal, config, terminal_boundary);
 
     const QuadraticProgram& qp = output.qp;
     const int nvar = static_cast<int>(qp.linear.size());
@@ -521,7 +583,20 @@ RefinementResult refineOctopusTrajectory(const OctopusResult& raw_result,
     for (int i = 0; i < nvar; ++i) {
         x(i) = solution[static_cast<std::size_t>(i)];
     }
-    const ControlPoints candidate = unflattenControlPoints(x);
+    ControlPoints candidate = unflattenControlPoints(x);
+
+    const double raw_eq_residual = neq > 0
+        ? (qp.a_eq * x - qp.b_eq).cwiseAbs().maxCoeff() : 0.0;
+    if (terminal_boundary.mode == TerminalMode::Stopped && candidate.rows() >= 6 &&
+        candidate.allFinite() && raw_eq_residual <= config.validation_tolerance) {
+        // The QP asks for qN=qN-1=qN-2, but its numerical residual can exceed
+        // the stricter committed-stop/companion predicate after differentiation.
+        // Preserve the endpoint and immutable initial prefix; validate the
+        // normalized curve below (including every inequality and separator).
+        const Vec3 endpoint = candidate.bottomRows(1).transpose();
+        candidate.bottomRows(3).rowwise() = endpoint.transpose();
+        x = flattenControlPoints(candidate);
+    }
 
     const double eq_residual = neq > 0
         ? (qp.a_eq * x - qp.b_eq).cwiseAbs().maxCoeff() : 0.0;
@@ -547,12 +622,13 @@ RefinementResult refineOctopusTrajectory(const OctopusResult& raw_result,
     output.max_inequality_violation = max_ineq_violation;
 
     const SeparatorPostcheck separator_check = separatorPostcheck(
-        candidate, raw_result, obstacles, config.separator_margin_m);
+        candidate, corridor, obstacles, config.separator_margin_m);
     output.separator_recheck_passed = separator_check.passed;
     output.min_fixed_separator_slack = separator_check.min_slack;
 
     const bool finite = candidate.allFinite();
-    const bool numerically_valid = eq_residual <= config.validation_tolerance
+    const bool numerically_valid = raw_eq_residual <= config.validation_tolerance
+        && eq_residual <= config.validation_tolerance
         && max_ineq_violation <= config.validation_tolerance
         && separator_check.passed;
     output.success = finite && numerically_valid;
@@ -569,6 +645,7 @@ RefinementResult refineOctopusTrajectory(const OctopusResult& raw_result,
             << "; eq_res=" << eq_residual
             << "; ineq_violation=" << max_ineq_violation
             << "; fixed_separator_ok=" << std::boolalpha << separator_check.passed;
+    if (repaired_planes != 0) message << "; prefix_corridor_repairs=" << repaired_planes;
     output.message = message.str();
     output.status = output.success ? "SUCCESS" : "POSTCHECK_FAILED";
     if (output.success) {

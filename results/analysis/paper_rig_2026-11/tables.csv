@@ -1,0 +1,317 @@
+table,metric,key,condition,cell,mean,min,max,n
+tab:detach_performance,Flights,flights,"Unannounced, static, triangle",0,0,,,0
+tab:detach_performance,Flights,flights,"Unannounced, moving, triangle",0,0,,,0
+tab:detach_performance,Flights,flights,"Planned, static, triangle",11,11,,,11
+tab:detach_performance,Flights,flights,"Planned, moving, triangle",5,5,,,5
+tab:detach_performance,Flights,flights,"Planned, static, square",1,1,,,1
+tab:detach_performance,Success rate,success,"Unannounced, static, triangle",-,,,,0
+tab:detach_performance,Success rate,success,"Unannounced, moving, triangle",-,,,,0
+tab:detach_performance,Success rate,success,"Planned, static, triangle",11/11,1,,,11
+tab:detach_performance,Success rate,success,"Planned, moving, triangle",5/5,1,,,5
+tab:detach_performance,Success rate,success,"Planned, static, square",1/1,1,,,1
+tab:detach_performance,Detection delay after the magnet OFF (s),detect_delay_s,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Detection delay after the magnet OFF (s),detect_delay_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Planner resize after the OFF (s),resize_s,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Planner resize after the OFF (s),resize_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Planner resize after the OFF (s),resize_s,"Planned, static, triangle","-0.10 (-0.12 to -0.10), n=11",-0.1033,-0.115,-0.096,11
+tab:detach_performance,Planner resize after the OFF (s),resize_s,"Planned, moving, triangle","-0.10 (-0.11 to -0.10), n=5",-0.103,-0.106,-0.097,5
+tab:detach_performance,Planner resize after the OFF (s),resize_s,"Planned, static, square","-0.11, n=1",-0.108,-0.108,-0.108,1
+tab:detach_performance,Magnet off its plate after the OFF (s),separation_s,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Magnet off its plate after the OFF (s),separation_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Magnet off its plate after the OFF (s),separation_s,"Planned, static, triangle","0.20 (0.14 to 0.30), n=11",0.1972,0.14,0.303,11
+tab:detach_performance,Magnet off its plate after the OFF (s),separation_s,"Planned, moving, triangle","0.25 (0.17 to 0.45), n=5",0.248,0.167,0.449,5
+tab:detach_performance,Magnet off its plate after the OFF (s),separation_s,"Planned, static, square","0.15, n=1",0.151,0.151,0.151,1
+tab:detach_performance,Unload before the OFF (s),unload_s,"Planned, static, triangle","3.3 (3.2 to 3.6), n=11",3.324,3.17,3.56,11
+tab:detach_performance,Unload before the OFF (s),unload_s,"Planned, moving, triangle","3.4 (3.1 to 3.6), n=5",3.378,3.14,3.56,5
+tab:detach_performance,Unload before the OFF (s),unload_s,"Planned, static, square","3.3, n=1",3.32,3.32,3.32,1
+tab:detach_performance,Ring tilt before (deg),tilt_pre_deg,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Ring tilt before (deg),tilt_pre_deg,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Ring tilt before (deg),tilt_pre_deg,"Planned, static, triangle","4.3 (2.9 to 5.2), n=10",4.251,2.885,5.164,10
+tab:detach_performance,Ring tilt before (deg),tilt_pre_deg,"Planned, moving, triangle","3.6 (1.8 to 5.5), n=4",3.626,1.84,5.47,4
+tab:detach_performance,Ring tilt before (deg),tilt_pre_deg,"Planned, static, square","1.2, n=1",1.201,1.201,1.201,1
+tab:detach_performance,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Planned, static, triangle","6.0 (3.9 to 11.6), n=10",5.998,3.908,11.59,10
+tab:detach_performance,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Planned, moving, triangle","4.8 (3.8 to 6.2), n=4",4.829,3.787,6.158,4
+tab:detach_performance,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Planned, static, square","23.8, n=1",23.76,23.76,23.76,1
+tab:detach_performance,Ring tilt peak (deg),tilt_peak_deg,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Ring tilt peak (deg),tilt_peak_deg,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Ring tilt peak (deg),tilt_peak_deg,"Planned, static, triangle","7.8 (3.8 to 15.3), n=11",7.759,3.839,15.28,11
+tab:detach_performance,Ring tilt peak (deg),tilt_peak_deg,"Planned, moving, triangle","7.0 (4.9 to 8.7), n=5",7.032,4.927,8.713,5
+tab:detach_performance,Ring tilt peak (deg),tilt_peak_deg,"Planned, static, square","24.5, n=1",24.52,24.52,24.52,1
+tab:detach_performance,Time to settle back to the tilt before (s),settle_s,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Time to settle back to the tilt before (s),settle_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Time to settle back to the tilt before (s),settle_s,"Planned, static, triangle","2.3 (1.6 to 2.9), n=2; settled 2/10",2.273,1.599,2.947,2
+tab:detach_performance,Time to settle back to the tilt before (s),settle_s,"Planned, moving, triangle","6.7, n=1; settled 1/4",6.656,6.656,6.656,1
+tab:detach_performance,Time to settle back to the tilt before (s),settle_s,"Planned, static, square",-; settled 0/1,,,,
+tab:detach_performance,Time to settle at the new tilt (s),settle_new_s,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Time to settle at the new tilt (s),settle_new_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Time to settle at the new tilt (s),settle_new_s,"Planned, static, triangle","4.5 (1.3 to 6.6), n=9; settled 9/10",4.549,1.298,6.596,9
+tab:detach_performance,Time to settle at the new tilt (s),settle_new_s,"Planned, moving, triangle","2.2 (0.7 to 5.1), n=4; settled 4/4",2.22,0.676,5.115,4
+tab:detach_performance,Time to settle at the new tilt (s),settle_new_s,"Planned, static, square","8.9, n=1; settled 1/1",8.907,8.907,8.907,1
+tab:detach_performance,Tilt after minus before (deg),tilt_shift_deg,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Tilt after minus before (deg),tilt_shift_deg,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Tilt after minus before (deg),tilt_shift_deg,"Planned, static, triangle","-1.5 (-2.9 to 1.6), n=10",-1.452,-2.949,1.616,10
+tab:detach_performance,Tilt after minus before (deg),tilt_shift_deg,"Planned, moving, triangle","0.3 (-1.5 to 1.5), n=4",0.3422,-1.455,1.509,4
+tab:detach_performance,Tilt after minus before (deg),tilt_shift_deg,"Planned, static, square","12.4, n=1",12.41,12.41,12.41,1
+tab:detach_performance,Height dip (mm),dip_mm,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Height dip (mm),dip_mm,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,Height dip (mm),dip_mm,"Planned, static, triangle","18 (4 to 50), n=10",18.3,3.626,50.23,10
+tab:detach_performance,Height dip (mm),dip_mm,"Planned, moving, triangle","16 (3 to 40), n=4",16.26,3.172,40.47,4
+tab:detach_performance,Height dip (mm),dip_mm,"Planned, static, square","39, n=1",39.09,39.09,39.09,1
+tab:detach_performance,Horizontal excursion (cm),xy_excursion_cm,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,Horizontal excursion (cm),xy_excursion_cm,"Planned, static, triangle","10.8 (8.1 to 18.0), n=10",10.79,8.099,18,10
+tab:detach_performance,Horizontal excursion (cm),xy_excursion_cm,"Planned, static, square","17.3, n=1",17.31,17.31,17.31,1
+tab:detach_performance,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Planned, static, triangle","6.5 (4.6 to 11.0), n=10",6.503,4.559,10.96,10
+tab:detach_performance,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Planned, moving, triangle","7.7 (3.7 to 14.2), n=4",7.65,3.652,14.19,4
+tab:detach_performance,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Planned, static, square","2.9, n=1",2.938,2.938,2.938,1
+tab:detach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Unannounced, static, triangle",-,,,,
+tab:detach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Planned, static, triangle","4.1 (3.2 to 8.0), n=11",4.132,3.194,8.013,11
+tab:detach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Planned, moving, triangle","5.0 (2.9 to 10.7), n=5",5.02,2.88,10.66,5
+tab:detach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Planned, static, square","8.2, n=1",8.217,8.217,8.217,1
+tab:detach_performance,"Path deviation 10 s after, RMS (cm)",path_rms_cm,"Unannounced, moving, triangle",-,,,,
+tab:detach_performance,"Path deviation 10 s after, RMS (cm)",path_rms_cm,"Planned, moving, triangle","3.4 (2.6 to 5.2), n=5",3.377,2.614,5.247,5
+tab:attach_performance,Flights,flights,"Re-attach, static, triangle, no funnel",5,5,,,5
+tab:attach_performance,Flights,flights,"Re-attach, static, triangle, funnel",3,3,,,3
+tab:attach_performance,Flights,flights,"Re-attach, moving, triangle, no funnel",1,1,,,1
+tab:attach_performance,Flights,flights,"Re-attach, moving, triangle, funnel",0,0,,,0
+tab:attach_performance,Flights,flights,"Re-attach, static, triangle, no funnel, plate 1",2,2,,,2
+tab:attach_performance,Flights,flights,"Re-attach, static, square, no funnel",2,2,,,2
+tab:attach_performance,Flights,flights,"After the pickup, static, triangle, no funnel",1,1,,,1
+tab:attach_performance,Flights,flights,"From the mat, static, triangle, no funnel",1,1,,,1
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, static, triangle, no funnel",0/5,0,,,5
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, static, triangle, funnel",2/3,0.6667,,,3
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, moving, triangle, no funnel",0/1,0,,,1
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, moving, triangle, funnel",-,,,,0
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, static, triangle, no funnel, plate 1",0/2,0,,,2
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"Re-attach, static, square, no funnel",1/2,0.5,,,2
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"After the pickup, static, triangle, no funnel",0/1,0,,,1
+tab:attach_performance,"Success rate (proven, folded in, held 15 s)",success,"From the mat, static, triangle, no funnel",1/1,1,,,1
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, static, triangle, no funnel",0/4,0,,,4
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, static, triangle, funnel",2/3,0.6667,,,3
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, moving, triangle, no funnel",0/1,0,,,1
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, moving, triangle, funnel",-,,,,0
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, static, triangle, no funnel, plate 1",0/1,0,,,1
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"Re-attach, static, square, no funnel",1/1,1,,,1
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"After the pickup, static, triangle, no funnel",0/1,0,,,1
+tab:attach_performance,"Success rate, flights with a descent",success_desc,"From the mat, static, triangle, no funnel",1/1,1,,,1
+tab:attach_performance,Descents per flight,descents,"Re-attach, static, triangle, no funnel","4.6 (0.0 to 9.0), n=5",4.6,0,9,5
+tab:attach_performance,Descents per flight,descents,"Re-attach, static, triangle, funnel","1.0 (1.0 to 1.0), n=3",1,1,1,3
+tab:attach_performance,Descents per flight,descents,"Re-attach, moving, triangle, no funnel","4.0, n=1",4,4,4,1
+tab:attach_performance,Descents per flight,descents,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Descents per flight,descents,"Re-attach, static, triangle, no funnel, plate 1","4.0 (0.0 to 8.0), n=2",4,0,8,2
+tab:attach_performance,Descents per flight,descents,"Re-attach, static, square, no funnel","1.0 (0.0 to 2.0), n=2",1,0,2,2
+tab:attach_performance,Descents per flight,descents,"After the pickup, static, triangle, no funnel","3.0, n=1",3,3,3,1
+tab:attach_performance,Descents per flight,descents,"From the mat, static, triangle, no funnel","2.0, n=1",2,2,2,1
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, static, triangle, funnel","1.0 (1.0 to 1.0), n=2",1,1,1,2
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Descents to the catch,descents_to_catch,"Re-attach, static, square, no funnel","2.0, n=1",2,2,2,1
+tab:attach_performance,Descents to the catch,descents_to_catch,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Descents to the catch,descents_to_catch,"From the mat, static, triangle, no funnel","2.0, n=1",2,2,2,1
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, static, triangle, no funnel",20/23,0.8696,,,23
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, static, triangle, funnel",3/3,1,,,3
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, moving, triangle, no funnel",2/4,0.5,,,4
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, moving, triangle, funnel",-,,,,0
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, static, triangle, no funnel, plate 1",5/8,0.625,,,8
+tab:attach_performance,Descents reaching the plate height,d_at_height,"Re-attach, static, square, no funnel",1/2,0.5,,,2
+tab:attach_performance,Descents reaching the plate height,d_at_height,"After the pickup, static, triangle, no funnel",3/3,1,,,3
+tab:attach_performance,Descents reaching the plate height,d_at_height,"From the mat, static, triangle, no funnel",2/2,1,,,2
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, static, triangle, no funnel",6/23,0.2609,,,23
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, static, triangle, funnel",3/3,1,,,3
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, moving, triangle, no funnel",0/4,0,,,4
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, moving, triangle, funnel",-,,,,0
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, static, triangle, no funnel, plate 1",2/8,0.25,,,8
+tab:attach_performance,Descents with a contact,d_contact,"Re-attach, static, square, no funnel",1/2,0.5,,,2
+tab:attach_performance,Descents with a contact,d_contact,"After the pickup, static, triangle, no funnel",0/3,0,,,3
+tab:attach_performance,Descents with a contact,d_contact,"From the mat, static, triangle, no funnel",2/2,1,,,2
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, static, triangle, no funnel","6.4 (3.1 to 9.7), n=20",6.427,3.078,9.672,20
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, static, triangle, funnel","0.8 (0.5 to 1.3), n=3",0.77,0.491,1.325,3
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, moving, triangle, no funnel","8.6 (8.3 to 8.9), n=2",8.588,8.317,8.859,2
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, static, triangle, no funnel, plate 1","8.2 (3.4 to 11.0), n=5",8.185,3.373,10.98,5
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"Re-attach, static, square, no funnel","1.6, n=1",1.576,1.576,1.576,1
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"After the pickup, static, triangle, no funnel","5.7 (5.1 to 10.7), n=3",5.683,5.073,10.65,3
+tab:attach_performance,"Miss at plate height, per descent (cm; median)",miss,"From the mat, static, triangle, no funnel","2.4 (1.9 to 2.8), n=2",2.365,1.906,2.823,2
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, static, triangle, funnel","19.2 (16.7 to 21.9), n=3",19.17,16.7,21.9,3
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"Re-attach, static, square, no funnel","14.3, n=1",14.3,14.3,14.3,1
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Release to proven attach (s),start_to_proven_s,"From the mat, static, triangle, no funnel","24.8, n=1",24.8,24.8,24.8,1
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, static, triangle, funnel","19.2 (16.7 to 21.9), n=3",19.2,16.7,21.9,3
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"Re-attach, static, square, no funnel","14.4, n=1",14.4,14.4,14.4,1
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Release to fold-in (s),start_to_foldin_s,"From the mat, static, triangle, no funnel","24.9, n=1",24.9,24.9,24.9,1
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, static, triangle, funnel","2.6 (2.1 to 3.2), n=3",2.637,2.13,3.18,3
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"Re-attach, static, square, no funnel","2.5, n=1",2.52,2.52,2.52,1
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Contact to fold-in (s),contact_to_foldin_s,"From the mat, static, triangle, no funnel","2.0, n=1",2.01,2.01,2.01,1
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, static, triangle, funnel","2.2 (1.6 to 3.4), n=3",2.24,1.641,3.407,3
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"Re-attach, static, square, no funnel","26.7, n=1",26.67,26.67,26.67,1
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt before the fold-in (deg),tilt_pre_deg,"From the mat, static, triangle, no funnel","2.0, n=1",1.992,1.992,1.992,1
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, static, triangle, funnel","1.8, n=1",1.82,1.82,1.82,1
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"Re-attach, static, square, no funnel","4.2, n=1",4.18,4.18,4.18,1
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt after the fold-in (deg),tilt_after_deg,"From the mat, static, triangle, no funnel","3.1, n=1",3.134,3.134,3.134,1
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, static, triangle, funnel","6.7 (4.8 to 8.5), n=3",6.729,4.796,8.521,3
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"Re-attach, static, square, no funnel","30.7, n=1",30.69,30.69,30.69,1
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Ring tilt peak (deg),tilt_peak_deg,"From the mat, static, triangle, no funnel","5.5, n=1",5.531,5.531,5.531,1
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, static, triangle, funnel","2.3, n=1; settled 1/1",2.278,2.278,2.278,1
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"Re-attach, static, square, no funnel","6.7, n=1; settled 1/1",6.694,6.694,6.694,1
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Time to settle at the new tilt (s),settle_new_s,"From the mat, static, triangle, no funnel","8.2, n=1; settled 1/1",8.174,8.174,8.174,1
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, static, triangle, funnel","12 (8 to 16), n=3",11.68,7.93,16.32,3
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"Re-attach, static, square, no funnel","4, n=1",3.988,3.988,3.988,1
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,Height dip at the fold-in (mm),dip_mm,"From the mat, static, triangle, no funnel","0, n=1",0,0,0,1
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, static, triangle, no funnel",-,,,,
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, static, triangle, funnel","3.3 (2.9 to 3.5), n=3",3.275,2.929,3.526,3
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, moving, triangle, funnel",-,,,,
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, static, triangle, no funnel, plate 1",-,,,,
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Re-attach, static, square, no funnel","9.2, n=1",9.189,9.189,9.189,1
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"After the pickup, static, triangle, no funnel",-,,,,
+tab:attach_performance,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"From the mat, static, triangle, no funnel","2.3, n=1",2.29,2.29,2.29,1
+tab:attach_performance,"Path deviation 10 s after, RMS (cm)",path_rms_cm,"Re-attach, moving, triangle, no funnel",-,,,,
+tab:attach_performance,"Path deviation 10 s after, RMS (cm)",path_rms_cm,"Re-attach, moving, triangle, funnel",-,,,,
+tab:application,Flights,flights,"Application, static",4,4,,,4
+tab:application,Flights,flights,"Application, moving",4,4,,,4
+tab:application,Flights,flights,"Pickup and drop only, static",5,5,,,5
+tab:application,Flights,flights,"Pickup and drop only, moving",4,4,,,4
+tab:application,Flights,flights,"Delivery and rejoin (object held), moving",1,1,,,1
+tab:application,"Missions completed (landed, nothing lost)",completed,"Application, static",0/4,0,,,4
+tab:application,"Missions completed (landed, nothing lost)",completed,"Application, moving",0/4,0,,,4
+tab:application,"Missions completed (landed, nothing lost)",completed,"Pickup and drop only, static",1/5,0.2,,,5
+tab:application,"Missions completed (landed, nothing lost)",completed,"Pickup and drop only, moving",1/4,0.25,,,4
+tab:application,"Missions completed (landed, nothing lost)",completed,"Delivery and rejoin (object held), moving",0/1,0,,,1
+tab:application,Lift phase (s),lift,"Application, static","3/4 done; 17.6 (14.4 to 19.2), n=3",17.57,14.4,19.2,3
+tab:application,Lift phase (s),lift,"Application, moving","4/4 done; 21.7 (21.0 to 22.4), n=4",21.7,21,22.4,4
+tab:application,Lift phase (s),lift,"Pickup and drop only, static","5/5 done; 19.4 (19.3 to 19.6), n=5",19.38,19.3,19.6,5
+tab:application,Lift phase (s),lift,"Pickup and drop only, moving","4/4 done; 19.9 (19.2 to 20.7), n=4",19.93,19.2,20.7,4
+tab:application,Lift phase (s),lift,"Delivery and rejoin (object held), moving","1/1 done; 20.8, n=1",20.8,20.8,20.8,1
+tab:application,Detach phase (s),detach,"Application, static","1/1 done; 12.4, n=1",12.4,12.4,12.4,1
+tab:application,Detach phase (s),detach,"Application, moving","4/4 done; 12.1 (9.5 to 17.3), n=4",12.1,9.5,17.3,4
+tab:application,Pickup phase (s),pickup,"Application, static","1/1 done; 99.3, n=1",99.3,99.3,99.3,1
+tab:application,Pickup phase (s),pickup,"Application, moving","1/4 done; 100.0, n=1",100,100,100,1
+tab:application,Pickup phase (s),pickup,"Pickup and drop only, static","4/5 done; 36.0 (20.3 to 47.1), n=4",36,20.3,47.1,4
+tab:application,Pickup phase (s),pickup,"Pickup and drop only, moving","3/4 done; 31.8 (30.6 to 33.0), n=3",31.8,30.6,33,3
+tab:application,Transit phase (s),transit,"Application, static","1/1 done; 6.8, n=1",6.8,6.8,6.8,1
+tab:application,Transit phase (s),transit,"Application, moving",0/1 done; -,,,,
+tab:application,Transit phase (s),transit,"Pickup and drop only, static","1/4 done; 7.0, n=1",7,7,7,1
+tab:application,Transit phase (s),transit,"Pickup and drop only, moving","3/3 done; 16.5 (6.9 to 22.6), n=3",16.47,6.9,22.6,3
+tab:application,Transit phase (s),transit,"Delivery and rejoin (object held), moving","1/1 done; 17.3, n=1",17.3,17.3,17.3,1
+tab:application,Drop phase (s),drop,"Application, static","1/1 done; 0.4, n=1",0.4,0.4,0.4,1
+tab:application,Drop phase (s),drop,"Application, moving",-,,,,
+tab:application,Drop phase (s),drop,"Pickup and drop only, static","1/1 done; 0.4, n=1",0.4,0.4,0.4,1
+tab:application,Drop phase (s),drop,"Pickup and drop only, moving","3/3 done; 0.4 (0.4 to 0.4), n=3",0.4,0.4,0.4,3
+tab:application,Drop phase (s),drop,"Delivery and rejoin (object held), moving","1/1 done; 0.4, n=1",0.4,0.4,0.4,1
+tab:application,Re-attach phase (s),re-attach,"Application, static",0/1 done; -,,,,
+tab:application,Re-attach phase (s),re-attach,"Application, moving",-,,,,
+tab:application,Re-attach phase (s),re-attach,"Delivery and rejoin (object held), moving",0/1 done; -,,,,
+tab:application,Land phase (s),land,"Application, static","4/4 done; 11.7 (8.6 to 16.5), n=4",11.72,8.6,16.5,4
+tab:application,Land phase (s),land,"Application, moving","4/4 done; 17.3 (7.0 to 28.1), n=4",17.3,7,28.1,4
+tab:application,Land phase (s),land,"Pickup and drop only, static","5/5 done; 15.3 (10.7 to 20.7), n=5",15.34,10.7,20.7,5
+tab:application,Land phase (s),land,"Pickup and drop only, moving","4/4 done; 12.8 (6.3 to 17.0), n=4",12.85,6.3,17,4
+tab:application,Land phase (s),land,"Delivery and rejoin (object held), moving","1/1 done; 12.7, n=1",12.7,12.7,12.7,1
+tab:application,Pickup attempts,pickup_attempts,"Application, static","3.0, n=1",3,3,3,1
+tab:application,Pickup attempts,pickup_attempts,"Application, moving","2.2 (1.0 to 3.0), n=4",2.25,1,3,4
+tab:application,Pickup attempts,pickup_attempts,"Pickup and drop only, static","1.4 (1.0 to 2.0), n=5",1.4,1,2,5
+tab:application,Pickup attempts,pickup_attempts,"Pickup and drop only, moving","1.8 (1.0 to 4.0), n=4",1.75,1,4,4
+tab:application,Object into the net,in_net,"Application, static",1/1,1,,,1
+tab:application,Object into the net,in_net,"Application, moving",-,,,,0
+tab:application,Object into the net,in_net,"Pickup and drop only, static",1/1,1,,,1
+tab:application,Object into the net,in_net,"Pickup and drop only, moving",1/1,1,,,1
+tab:application,Object into the net,in_net,"Delivery and rejoin (object held), moving",-,,,,0
+tab:application,"Mission time, completed (s)",total_s,"Application, static",-,,,,
+tab:application,"Mission time, completed (s)",total_s,"Application, moving",-,,,,
+tab:application,"Mission time, completed (s)",total_s,"Pickup and drop only, static","81.0, n=1",81,81,81,1
+tab:application,"Mission time, completed (s)",total_s,"Pickup and drop only, moving","90.0, n=1",90,90,90,1
+tab:application,"Mission time, completed (s)",total_s,"Delivery and rejoin (object held), moving",-,,,,
+tab:application,Where the others stopped,failed_in,"Application, static","lift 3, re-attach 1",,,,
+tab:application,Where the others stopped,failed_in,"Application, moving","pickup 3, transit 1",,,,
+tab:application,Where the others stopped,failed_in,"Pickup and drop only, static","pickup 1, transit 3",,,,
+tab:application,Where the others stopped,failed_in,"Pickup and drop only, moving","drop 2, pickup 1",,,,
+tab:application,Where the others stopped,failed_in,"Delivery and rejoin (object held), moving",re-attach 1,,,,
+tab:detach_context_0p55,Flights,flights,"Unannounced, moving, triangle",1,1,,,1
+tab:detach_context_0p55,Flights,flights,"Unannounced, static, plates 3/6/11",1,1,,,1
+tab:detach_context_0p55,Flights,flights,"Unannounced, static, triangle",1,1,,,1
+tab:detach_context_0p55,Success rate,success,"Unannounced, moving, triangle",1/1,1,,,1
+tab:detach_context_0p55,Success rate,success,"Unannounced, static, plates 3/6/11",1/1,1,,,1
+tab:detach_context_0p55,Success rate,success,"Unannounced, static, triangle",1/1,1,,,1
+tab:detach_context_0p55,Detection delay after the magnet OFF (s),detect_delay_s,"Unannounced, moving, triangle","0.34, n=1",0.345,0.345,0.345,1
+tab:detach_context_0p55,Detection delay after the magnet OFF (s),detect_delay_s,"Unannounced, static, plates 3/6/11","0.33, n=1",0.332,0.332,0.332,1
+tab:detach_context_0p55,Detection delay after the magnet OFF (s),detect_delay_s,"Unannounced, static, triangle","0.42, n=1",0.418,0.418,0.418,1
+tab:detach_context_0p55,Planner resize after the OFF (s),resize_s,"Unannounced, moving, triangle","0.35, n=1",0.347,0.347,0.347,1
+tab:detach_context_0p55,Planner resize after the OFF (s),resize_s,"Unannounced, static, plates 3/6/11","0.33, n=1",0.333,0.333,0.333,1
+tab:detach_context_0p55,Planner resize after the OFF (s),resize_s,"Unannounced, static, triangle","0.42, n=1",0.42,0.42,0.42,1
+tab:detach_context_0p55,Magnet off its plate after the OFF (s),separation_s,"Unannounced, moving, triangle",-,,,,
+tab:detach_context_0p55,Magnet off its plate after the OFF (s),separation_s,"Unannounced, static, plates 3/6/11",-,,,,
+tab:detach_context_0p55,Magnet off its plate after the OFF (s),separation_s,"Unannounced, static, triangle",-,,,,
+tab:detach_context_0p55,Ring tilt before (deg),tilt_pre_deg,"Unannounced, moving, triangle","2.6, n=1",2.604,2.604,2.604,1
+tab:detach_context_0p55,Ring tilt before (deg),tilt_pre_deg,"Unannounced, static, plates 3/6/11","1.6, n=1",1.594,1.594,1.594,1
+tab:detach_context_0p55,Ring tilt before (deg),tilt_pre_deg,"Unannounced, static, triangle","2.6, n=1",2.638,2.638,2.638,1
+tab:detach_context_0p55,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Unannounced, moving, triangle","8.0, n=1",8.013,8.013,8.013,1
+tab:detach_context_0p55,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Unannounced, static, plates 3/6/11","16.9, n=1",16.88,16.88,16.88,1
+tab:detach_context_0p55,"Ring swing: tilt change from before, peak (deg)",swing_deg,"Unannounced, static, triangle","5.3, n=1",5.275,5.275,5.275,1
+tab:detach_context_0p55,Ring tilt peak (deg),tilt_peak_deg,"Unannounced, moving, triangle","8.1, n=1",8.105,8.105,8.105,1
+tab:detach_context_0p55,Ring tilt peak (deg),tilt_peak_deg,"Unannounced, static, plates 3/6/11","17.8, n=1",17.82,17.82,17.82,1
+tab:detach_context_0p55,Ring tilt peak (deg),tilt_peak_deg,"Unannounced, static, triangle","6.5, n=1",6.507,6.507,6.507,1
+tab:detach_context_0p55,Time to settle back to the tilt before (s),settle_s,"Unannounced, moving, triangle","1.5, n=1; settled 1/1",1.547,1.547,1.547,1
+tab:detach_context_0p55,Time to settle back to the tilt before (s),settle_s,"Unannounced, static, plates 3/6/11","4.7, n=1; settled 1/1",4.672,4.672,4.672,1
+tab:detach_context_0p55,Time to settle back to the tilt before (s),settle_s,"Unannounced, static, triangle","6.0, n=1; settled 1/1",6.03,6.03,6.03,1
+tab:detach_context_0p55,Time to settle at the new tilt (s),settle_new_s,"Unannounced, moving, triangle","3.9, n=1; settled 1/1",3.927,3.927,3.927,1
+tab:detach_context_0p55,Time to settle at the new tilt (s),settle_new_s,"Unannounced, static, plates 3/6/11",-,,,,
+tab:detach_context_0p55,Time to settle at the new tilt (s),settle_new_s,"Unannounced, static, triangle",-,,,,
+tab:detach_context_0p55,Tilt after minus before (deg),tilt_shift_deg,"Unannounced, moving, triangle","0.3, n=1",0.317,0.317,0.317,1
+tab:detach_context_0p55,Tilt after minus before (deg),tilt_shift_deg,"Unannounced, static, plates 3/6/11",-,,,,
+tab:detach_context_0p55,Tilt after minus before (deg),tilt_shift_deg,"Unannounced, static, triangle",-,,,,
+tab:detach_context_0p55,Height dip (mm),dip_mm,"Unannounced, moving, triangle","37, n=1",37.05,37.05,37.05,1
+tab:detach_context_0p55,Height dip (mm),dip_mm,"Unannounced, static, plates 3/6/11","53, n=1",53.01,53.01,53.01,1
+tab:detach_context_0p55,Height dip (mm),dip_mm,"Unannounced, static, triangle","31, n=1",31.33,31.33,31.33,1
+tab:detach_context_0p55,Horizontal excursion (cm),xy_excursion_cm,"Unannounced, static, plates 3/6/11","16.1, n=1",16.09,16.09,16.09,1
+tab:detach_context_0p55,Horizontal excursion (cm),xy_excursion_cm,"Unannounced, static, triangle","10.9, n=1",10.87,10.87,10.87,1
+tab:detach_context_0p55,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Unannounced, moving, triangle","7.3, n=1",7.339,7.339,7.339,1
+tab:detach_context_0p55,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Unannounced, static, plates 3/6/11","5.3, n=1",5.33,5.33,5.33,1
+tab:detach_context_0p55,"Set-point deviation before, RMS (cm)",sp_pre_rms_cm,"Unannounced, static, triangle","5.9, n=1",5.912,5.912,5.912,1
+tab:detach_context_0p55,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Unannounced, moving, triangle","7.4, n=1",7.394,7.394,7.394,1
+tab:detach_context_0p55,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Unannounced, static, plates 3/6/11","7.9, n=1",7.878,7.878,7.878,1
+tab:detach_context_0p55,"Set-point deviation 10 s after, RMS (cm)",sp_rms_cm,"Unannounced, static, triangle","6.3, n=1",6.273,6.273,6.273,1
+tab:detach_context_0p55,"Path deviation 10 s after, RMS (cm)",path_rms_cm,"Unannounced, moving, triangle","4.1, n=1",4.069,4.069,4.069,1

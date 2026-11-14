@@ -14,6 +14,7 @@
 # draws figures/<name>_summary.png in the background, ~20 s (RIG_FLIGHT_SUMMARY=0 skips it).
 # Refuses unless ROS_LOCALHOST_ONLY=1 and ROS_DOMAIN_ID are set; mode:=attach refuses while T1 is up; refuses when a
 # fleet manager already answers in this domain, and stops the launch if its own never answers (tools/fleet_reach.py).
+# partners_file:=<yaml> (4 -> 2 -> 4): one radio per partner, and the bag adds every partner's and his instances' topics.
 set -uo pipefail
 
 usage() { sed -n '2,15p' "$0"; exit 2; }
@@ -36,17 +37,45 @@ base="$F"; k=2
 while [ -e "$D/$F.log" ] || [ -e "$D/$F" ] || [ -e "$D/${F}_logs" ]; do F="${base}_$k"; k=$((k + 1)); done
 [ "$F" != "$base" ] && echo "rig_flight: $base already exists today: this run is $F"
 
-N=""; MODE=""; REAL_IO=true; COMBINED=false
+N=""; MODE=""; REAL_IO=true; COMBINED=false; PFILE=""
 for a in "$@"; do case "$a" in
   num_drones:=*) N="${a#num_drones:=}" ;; mode:=*) MODE="${a#mode:=}" ;; real_io:=false) REAL_IO=false ;;
-  partner_contact:=true) COMBINED=true ;;
+  partner_contact:=true) COMBINED=true ;; partners_file:=*) PFILE="${a#partners_file:=}" ;;
 esac; done
-# mode:=attach counts only the tethered drones (default 3); the newcomer is one more radio
-if [ "$MODE" = attach ]; then N=$(( ${N:-3} + 1 )); else N=${N:-4}; fi
+PARTNERS=""; NEW=1
+if [ -n "$PFILE" ]; then
+  PARTNERS=$(python3 -c 'import sys, yaml
+print(" ".join(str(int(p["drone"])) for p in (yaml.safe_load(open(sys.argv[1])) or {}).get("partners") or []))' "$PFILE") \
+    && [ -n "$PARTNERS" ] || { echo "rig_flight: partners_file $PFILE: no partner read" >&2; exit 2; }
+  NEW=$(wc -w <<< "$PARTNERS")
+fi
+# mode:=attach counts only the tethered drones (default 3); the newcomer (partners_file: each partner) is one more radio
+if [ "$MODE" = attach ]; then N=$(( ${N:-3} + NEW )); else N=${N:-4}; fi
+# partners_file: the set detach, each operator topic, and every partner but drone 3 (QUAD4 keeps today's names, in the
+# lists below): ours under /drone_<d>, his instance under /tejen_d<d>
+partner_topics() {
+  local d h
+  [ -n "$PARTNERS" ] || return 0
+  echo /fleet/detach_set
+  for d in $PARTNERS; do
+    echo "/drone_$d/magnet_operator"
+    [ "$d" = 3 ] && continue
+    h="/tejen_d$d"
+    echo "/drone_$d/magnet_tip_pose /drone_$d/magnet/command /drone_$d/magnet/object_attached"
+    echo "/drone_$d/magnet/attachment_state /drone_$d/partner/release $h/join_planner/handoff_ready"
+    [ "$COMBINED" = true ] || continue
+    echo "/drone_$d/magnet/contact /drone_$d/magnet/attach_proof $h/join_planner/phase $h/join_planner/give_up"
+    echo "$h/join_planner/reference $h/join_planner/land_now /drone_$d/take_back /drone_$d/magnet_ours"
+    echo "/drone_$d/magnet_gate /drone_$d/magnet_coil /drone_$d/ELRSCommand_tejen $h/magnet/command"
+    echo "$h/object_attached $h/magnet_tip_pose $h/drone_command $h/join_planner/proof_lift_complete"
+    echo "$h/fake_attachment_point/twist $h/fake_attachment_point/pose"
+  done
+}
 
 # the planner on the P-cores (card 2026-10-23_scalability): the bringup graphs prefix it with taskset -c <cpus>
 [ -n "${MDC_PLANNER_CPUS:-}" ] && echo "rig_flight: MDC_PLANNER_CPUS=$MDC_PLANNER_CPUS (the planner's CPUs)"
 if [ "${RIG_FLIGHT_DRY_RUN:-0}" = 1 ]; then
+  [ -n "$PARTNERS" ] && echo "rig_flight: DRY RUN partners $PARTNERS; the bag adds" $(partner_topics)
   echo "rig_flight: DRY RUN F=$F LAUNCH=$LAUNCH N=$N DIR=$D ARGS=$*"; exit 0
 fi
 # one DDS domain for T1, T2, T3 and RViz, local only (Wesley 8 Oct: everything on this laptop;
@@ -100,10 +129,12 @@ if [ "$COMBINED" = true ]; then
            /join_planner/land_now /drone_3/take_back /drone_3/magnet_ours /drone_3/magnet_gate /drone_3/magnet_coil
            /drone_3/ELRSCommand_tejen /tejen/magnet/command /tejen/object_attached
            /tejen/magnet_tip_pose /pickup/motion_capture_state /payload/trajectory_state /tejen/drone_command
-           /join_planner/proof_lift_complete /fleet/mocap_summary /fake_attachment_point/twist)
-  # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose, /fake_attachment_point/pose,
-  # 75 + 46 + 46 Hz copies made from our mocap that no tool reads
+           /join_planner/proof_lift_complete /fleet/mocap_summary /fake_attachment_point/twist
+           /fake_attachment_point/pose)   # back 12 Nov: Te-Jen checks his moving reference against it (RIG-1112-nro)
+  # not recorded (14 Oct load cut): /tejen/pendulum_swing_state, /fake_payload/pose (75 + 46 Hz copies made from our
+  # mocap that no tool reads)
 fi
+topics+=($(partner_topics))
 ros2 bag record -o "$D/$F" "${topics[@]}" > "$D/${F}_bag.txt" 2>&1 &
 BAG=$!
 stop_bag() { kill -INT "$BAG" 2>/dev/null; wait "$BAG" 2>/dev/null; echo "rig_flight: bag $D/$F closed"; }

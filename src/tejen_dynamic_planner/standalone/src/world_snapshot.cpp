@@ -12,7 +12,8 @@ namespace dynamic_planner {
 namespace {
 
 bool sameSuspendedGeometry(const SuspendedGeometry& a, const SuspendedGeometry& b) {
-    return a.enabled == b.enabled && a.cable_length_m == b.cable_length_m &&
+    return a.enabled == b.enabled && a.swing_envelope == b.swing_envelope &&
+        a.cable_length_m == b.cable_length_m &&
         a.cable_radius_m == b.cable_radius_m && a.max_swing_angle_rad == b.max_swing_angle_rad &&
         a.magnet_half_extents == b.magnet_half_extents &&
         a.magnet_center_below_cable_end_m == b.magnet_center_below_cable_end_m &&
@@ -39,6 +40,17 @@ bool sameCooperativeObstacle(const CooperativeObstacleTrajectory& a,
             ap.knots != bp.knots || ap.control_points.rows() != bp.control_points.rows() ||
             ap.control_points.cols() != bp.control_points.cols() ||
             !(ap.control_points.array() == bp.control_points.array()).all()) return false;
+    }
+    return true;
+}
+
+bool sameStaticObstacles(const std::vector<StaticConvexObstacle>& a,
+                         const std::vector<StaticConvexObstacle>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (a[i].name != b[i].name || a[i].vertices.rows() != b[i].vertices.rows() ||
+            a[i].vertices.cols() != b[i].vertices.cols() ||
+            !(a[i].vertices.array() == b[i].vertices.array()).all()) return false;
     }
     return true;
 }
@@ -161,6 +173,38 @@ void CooperativeObstacleTrajectory::validate() const {
     attached_tether_geometry.validate();
 }
 
+bool CollisionCheckSelection::checksPeer(const std::string& name) const {
+    return full_check || std::find(cooperative_names.begin(), cooperative_names.end(), name) != cooperative_names.end();
+}
+
+CollisionCheckSelection WorldSnapshot::collisionChangesSince(const WorldSnapshot& previous) const {
+    validate();
+    previous.validate();
+    CollisionCheckSelection changes;
+    if (ego_half_extents != previous.ego_half_extents ||
+        ego_tracking_error_half_extents != previous.ego_tracking_error_half_extents ||
+        !sameSuspendedGeometry(ego_suspended_geometry, previous.ego_suspended_geometry) ||
+        workspace.enabled != previous.workspace.enabled || workspace.lower != previous.workspace.lower ||
+        workspace.upper != previous.workspace.upper ||
+        !sameStaticObstacles(static_obstacles, previous.static_obstacles) ||
+        !sameStaticObstacles(physical_static_obstacles, previous.physical_static_obstacles)) return changes;
+    // Removal/renaming falls back to a full check. Added or changed peers can be
+    // checked independently against every active ego component.
+    for (const auto& old : previous.cooperative_obstacles) {
+        if (std::none_of(cooperative_obstacles.begin(), cooperative_obstacles.end(),
+                [&](const auto& peer) { return old.name == peer.name; })) return changes;
+    }
+    changes.full_check = false;
+    changes.ego_body_changed = ego_body_rotation != previous.ego_body_rotation;
+    for (const auto& peer : cooperative_obstacles) {
+        const auto old = std::find_if(previous.cooperative_obstacles.begin(), previous.cooperative_obstacles.end(),
+            [&](const auto& entry) { return entry.name == peer.name; });
+        if (old == previous.cooperative_obstacles.end() || !sameCooperativeObstacle(peer, *old))
+            changes.cooperative_names.push_back(peer.name);
+    }
+    return changes;
+}
+
 void WorldSnapshot::validate() const {
     if (!std::isfinite(captured_at_s)) {
         throw std::invalid_argument("world snapshot capture time must be finite");
@@ -168,6 +212,8 @@ void WorldSnapshot::validate() const {
     validateHalfExtents(ego_half_extents, "ego");
     validateHalfExtents(ego_tracking_error_half_extents, "ego tracking-error");
     ego_suspended_geometry.validate();
+    validateBodyRotation(ego_body_rotation);
+    workspace.validate();
     validateUniqueNames(static_obstacles, physical_static_obstacles, cooperative_obstacles);
 }
 
@@ -182,7 +228,12 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
     }
 
     const auto ego_components = assemblyComponents(
-        ego_half_extents, ego_suspended_geometry);
+        ego_half_extents, ego_suspended_geometry, ego_body_rotation);
+    const bool convex_pairs = ego_suspended_geometry.swing_envelope == SwingEnvelope::OuterOctagon;
+    std::optional<std::pair<Vec3, Vec3>> assembly_centre_bounds;
+    if (convex_pairs && workspace.enabled && !physical_static_obstacles.empty())
+        assembly_centre_bounds = assemblyCentreBounds(workspace, ego_half_extents,
+            ego_suspended_geometry, ego_tracking_error_half_extents, ego_body_rotation);
 
     std::vector<TimeIndexedObstacle> result;
     const std::size_t rough_component_count = ego_components.size();
@@ -208,8 +259,15 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
             ConvexComponent tracked_ego = ego_component;
             tracked_ego.vertices = inflateVerticesByAabb(
                 tracked_ego.vertices, ego_tracking_error_half_extents);
-            const Eigen::MatrixXd cspace = physicalObstacleToConfigurationSpace(
+            Eigen::MatrixXd cspace = physicalObstacleToConfigurationSpace(
                 obstacle.vertices, tracked_ego);
+            // Legacy layer compaction preserves the complete convex set. The
+            // selected full-height prism projection is globally enclosing and
+            // collision-equivalent inside this snapshot's legal workspace only.
+            cspace = assembly_centre_bounds
+                ? compactStaticConfigurationSpace(cspace, obstacle.vertices, tracked_ego,
+                    workspace, *assembly_centre_bounds)
+                : compactHorizontalLayers(cspace);
             timed.interval_vertices.assign(
                 static_cast<std::size_t>(num_segments), cspace);
             result.push_back(std::move(timed));
@@ -238,7 +296,8 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
 
         // Preserve the validated B.3 exact body-only path byte-for-byte in
         // semantics and naming when neither assembly has suspended geometry.
-        if (!ego_suspended_geometry.enabled && !obstacle.suspended_geometry.enabled &&
+        if (ego_body_rotation == Eigen::Matrix3d::Identity() &&
+            !ego_suspended_geometry.enabled && !obstacle.suspended_geometry.enabled &&
             !obstacle.attached_tether_geometry.enabled) {
             TimeIndexedObstacle timed;
             timed.name = obstacle.name;
@@ -290,29 +349,40 @@ std::vector<TimeIndexedObstacle> WorldSnapshot::timeIndexedObstacles(
 
                 // For fixed/shared other-drone trajectories, B.4 keeps the exact
                 // cubic centre hull time-indexed. Component-pair geometry is an
-                // efficient AABB bound around each convex relative component; this
-                // avoids vertex explosion while still preserving body/cable/magnet/
+                // efficient AABB bound in legacy mode. Selected convex mode below
+                // retains the actual components. Both keep body/cable/magnet/
                 // payload as separate collision relations.
                 const Vec3 relative_shift = other_center - ego_center;
                 const Vec3 pair_half = other_half + ego_half +
                                        ego_tracking_error_half_extents +
                                        obstacle.tracking_error_half_extents;
+                // Selected convex mode retains exactly the same components as
+                // physical-static checks. Build O + (-E) + tracking once per
+                // relation, then translate/sweep it by each peer centre hull.
+                Eigen::MatrixXd pair_vertices;
+                if (convex_pairs) {
+                    pair_vertices = compactHorizontalLayers(inflateVerticesByAabb(
+                        physicalObstacleToConfigurationSpace(other_component.vertices, ego_component),
+                        ego_tracking_error_half_extents + obstacle.tracking_error_half_extents));
+                }
+                const auto hull_from_centres = [pair_vertices, relative_shift, pair_half](
+                        const Eigen::MatrixXd& centres) -> Eigen::MatrixXd {
+                    if (pair_vertices.rows() > 0)
+                        return compactHorizontalLayers(minkowskiSumVertices(centres, pair_vertices));
+                    return inflateVerticesByAabb(shiftedVertices(centres, relative_shift), pair_half);
+                };
                 for (int i = 0; i < num_segments; ++i) {
-                    timed.interval_vertices.push_back(inflateVerticesByAabb(
-                        shiftedVertices(
-                            center_hulls.at(static_cast<std::size_t>(i)), relative_shift),
-                        pair_half));
+                    timed.interval_vertices.push_back(hull_from_centres(
+                        center_hulls.at(static_cast<std::size_t>(i))));
                 }
                 const CommittedTrajectory trajectory = obstacle.trajectory;
                 attachTemporalHullSource(
                     &timed, trajectory, num_segments, t_start_s, t_end_s,
-                    [trajectory, relative_shift, pair_half](double start_s, double end_s) {
-                        return inflateVerticesByAabb(
-                            shiftedVertices(
-                                convexCurveHullVertices(trajectory, start_s, end_s),
-                                relative_shift),
-                            pair_half);
+                    [trajectory, hull_from_centres](double start_s, double end_s) {
+                        return hull_from_centres(convexCurveHullVertices(trajectory, start_s, end_s));
                     },
+                    // Retained AABB equal-time diagnostic, NOT convex clearance
+                    // or authority. Only hull separation certifies this mode.
                     [trajectory, ego_center, other_center, pair_half](
                             const TemporalEgoPosition& ego_position,
                             double start_s, double end_s) {
@@ -341,7 +411,8 @@ VersionedWorld::VersionedWorld(WorldSnapshot initial)
       cooperative_obstacles_(std::move(initial.cooperative_obstacles)),
       ego_half_extents_(initial.ego_half_extents),
       ego_tracking_error_half_extents_(initial.ego_tracking_error_half_extents),
-      ego_suspended_geometry_(initial.ego_suspended_geometry) {
+      ego_suspended_geometry_(initial.ego_suspended_geometry),
+      ego_body_rotation_(initial.ego_body_rotation), workspace_(initial.workspace) {
     initial.static_obstacles = static_obstacles_;
     initial.physical_static_obstacles = physical_static_obstacles_;
     initial.cooperative_obstacles = cooperative_obstacles_;
@@ -366,6 +437,8 @@ WorldSnapshot VersionedWorld::snapshot(double captured_at_s) const {
     result.ego_half_extents = ego_half_extents_;
     result.ego_tracking_error_half_extents = ego_tracking_error_half_extents_;
     result.ego_suspended_geometry = ego_suspended_geometry_;
+    result.ego_body_rotation = ego_body_rotation_;
+    result.workspace = workspace_;
     result.validate();
     return result;
 }
@@ -453,7 +526,19 @@ void VersionedWorld::setEgoTrackingErrorHalfExtents(const Vec3& half_extents) {
 void VersionedWorld::setEgoSuspendedGeometry(const SuspendedGeometry& geometry) {
     geometry.validate();
     std::lock_guard<std::mutex> lock(mutex_);
+    if (sameSuspendedGeometry(ego_suspended_geometry_, geometry)) return;
     ego_suspended_geometry_ = geometry;
+    ++version_;
+}
+
+void VersionedWorld::setEgoBodyOrientation(const Eigen::Quaterniond& orientation) {
+    if (!orientation.coeffs().allFinite() || !std::isfinite(orientation.norm()) || orientation.norm() < 1e-9)
+        throw std::invalid_argument("invalid measured body quaternion");
+    const Eigen::Matrix3d rotation = orientation.normalized().toRotationMatrix();
+    validateBodyRotation(rotation);
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (ego_body_rotation_ == rotation) return;
+    ego_body_rotation_ = rotation;
     ++version_;
 }
 

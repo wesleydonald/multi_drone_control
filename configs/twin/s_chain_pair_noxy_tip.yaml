@@ -1,0 +1,9 @@
+# s_chain_pair_noxy.yaml with the marker check typed, tip_detect_m 0.04 (the reviewer of 2 Nov: a no-rod chain the stretch check does not lose a release in).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 0.0
+tip_detect_m: 0.04

@@ -1,0 +1,4 @@
+# configs/rig/traj_hold.yaml plus the tick of configs/rig/hover_tick.yaml, for Thu 5 Nov's four-carrier paths.
+traj_hold_s: 5.0
+plan_fast_refs: true
+plan_res_every: 0

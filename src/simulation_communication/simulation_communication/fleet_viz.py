@@ -21,7 +21,7 @@ Publishes:
                                  and at marker_hz the swung magnet: the tip sphere (grey coil OFF,
                                  orange ON, green attached), the tether from QUAD4's body, the pickup
                                  plate (a box, ns 'puck')
-    /fleet/mocap_summary         std_msgs/String JSON at summary_hz for the console: per body z,
+    /fleet/mocap_summary         std_msgs/String JSON at summary_hz for the console: per body x, y, z,
                                  tilt_deg, speed_mps, age_s, rate_hz, max_gap_s
 
 Params:
@@ -237,7 +237,9 @@ class BodyTrack:
                     self.speed = math.dist((p.x, p.y, p.z), self._ref[1:]) / (t - self._ref[0])
                 if self._ref is None or t != self._ref[0]:
                     self._ref = (t, p.x, p.y, p.z)
-        return {'z': _r(None if self.pose is None else self.pose.position.z, 3),
+        return {'x': _r(None if self.pose is None else self.pose.position.x, 3),
+                'y': _r(None if self.pose is None else self.pose.position.y, 3),
+                'z': _r(None if self.pose is None else self.pose.position.z, 3),
                 'tilt_deg': _r(None if self.pose is None else tilt_deg(self.pose.orientation), 1),
                 'speed_mps': _r(self.speed, 3), 'age_s': _r(age, 3), 'rate_hz': _r(rate, 1),
                 'max_gap_s': _r(gap, 3)}

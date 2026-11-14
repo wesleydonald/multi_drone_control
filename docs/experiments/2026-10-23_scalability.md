@@ -1048,3 +1048,8 @@ on fleet size alone; the s8_*_it5 configs' descriptions still say '1 SQP iterati
 8 quads' or '8 in real time' without 'twin only'; 3/4/4 as flown; 'the chain holds' or N4 'holds from +5 s' (post-hoc);
 'not the iteration count' as established (one exploratory it1 run on an earlier tree: 'consistent with'); R2770 as a pass
 without its walk-off (airborne quads to |x| 2.00 m, |y| 2.41 m).
+
+## Wesley's judgement after the earlier-mass re-fly (7 Nov 10:10)
+"Those results are fine, you can just change the bars because they are arbitrary." The bars above stay as they were
+written, and the misses stay recorded as scored (registry R3922-R3979, R3922c; feed F065, F066). Wesley's judgement after
+the runs replaces the verdicts: X3 on the earlier masses is ACCEPTED (judged after the run, decisions.md 7 Nov).

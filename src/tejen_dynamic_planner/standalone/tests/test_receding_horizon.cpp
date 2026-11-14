@@ -27,8 +27,9 @@ LocalPlannerConfig makeLocalConfig() {
     return config;
 }
 
-void testStoppedPartialRetainsSelectedEndpoint() {
-    LocalPlanner local(makeLocalConfig());
+void testStoppedPartialRetainsForwardSoftGoal() {
+    const auto config = makeLocalConfig();
+    LocalPlanner local(config);
     LocalPlanRequest request;
     request.initial_state = {Vec3(0.0, 0.0, 1.5), Vec3::Zero(), Vec3::Zero()};
     request.local_goal = Vec3(2.0, 0.0, 1.5);
@@ -41,14 +42,246 @@ void testStoppedPartialRetainsSelectedEndpoint() {
     requireTrue(result.success && result.partial,
                 "stopped partial fixture failed: " + result.status);
     const Vec3 selected_endpoint = result.search.control_points->bottomRows(1).transpose();
-    requireMatrixNear(result.effective_terminal_boundary.position, selected_endpoint, 1e-10,
-                      "stopped partial still refines toward the distant nominal goal");
+    const auto expected = buildRefinementQP(result.search, result.knots, request.local_goal,
+        config.refinement, result.effective_terminal_boundary);
+    requireMatrixNear(result.refinement->qp.linear, expected.linear, 1e-10,
+                      "ordinary stopped partial lost MADER's forward soft objective");
     const State terminal = evaluateCubicState(
         *result.control_points, result.knots, request.duration_s);
-    requireMatrixNear(terminal.position, selected_endpoint, 1e-7,
-                      "refinement moved the selected stationary evasive endpoint");
+    requireTrue((terminal.position-selected_endpoint).norm() > .25,
+                "ordinary stopped root partial still rewards remaining at its selected endpoint");
     requireMatrixNear(terminal.velocity, Vec3::Zero(), 1e-7,
                       "refined partial is not stopped");
+    requireMatrixNear(terminal.acceleration, Vec3::Zero(), 1e-7,
+                      "refined partial terminal acceleration is not stopped");
+}
+
+WorldSnapshot stalledChicaneWorld() {
+    // Frozen NAV3 S50 geometry, not a dependency on ignored runtime logs.
+    WorldSnapshot world;
+    world.ego_half_extents = Vec3(.105, .105, .1);
+    world.ego_tracking_error_half_extents = Vec3(.1, .1, .05);
+    world.ego_body_rotation = Eigen::Quaterniond(
+        .9999998111977018, .0001879449301379487,
+        -.00031321094221603557, .0004941458992396946).normalized().toRotationMatrix();
+    auto& geometry = world.ego_suspended_geometry;
+    geometry.enabled = geometry.payload_attached = true;
+    geometry.swing_envelope = SwingEnvelope::OuterOctagon;
+    geometry.cable_length_m = .49;
+    geometry.max_swing_angle_rad = 10. * std::acos(-1.) / 180.;
+    geometry.magnet_center_below_cable_end_m = 0.;
+    geometry.payload_half_extents = Vec3(.043, .043, .011);
+    geometry.payload_center_from_magnet_center = Vec3(0., 0., -.036);
+    world.workspace.enabled = true;
+    world.workspace.lower = Vec3(-2.5, -2.5, 0.);
+    world.workspace.upper = Vec3(2.5, 2.5, 1.6);
+    const Eigen::Matrix3d rotation = Eigen::AngleAxisd(
+        std::acos(-1.) / 4., Vec3::UnitZ()).toRotationMatrix();
+    const Vec3 centres[] = {
+        Vec3(.44898899713700224, -2.015655663803669, .8),
+        Vec3(-2.3692090543969435, .8025423877302764, .8),
+        Vec3(2.119209054396943, -1.0525423877302766, .8),
+        Vec3(-.6989889971370024, 1.7656556638036691, .8)};
+    const double half_widths[] = {1.8927669529663682, 1.3927669529663687,
+                                  1.3927669529663687, 1.8927669529663682};
+    for (int i = 0; i < 4; ++i) {
+        auto vertices = axisAlignedBoxVertices(Vec3::Zero(), Vec3(.05, half_widths[i], .8));
+        vertices = (vertices * rotation.transpose()).eval();
+        vertices.rowwise() += centres[i].transpose();
+        world.physical_static_obstacles.push_back({"panel_" + std::to_string(i), vertices});
+    }
+    return world;
+}
+
+void testStationaryTimeoutRefinesTowardSoftGoal() {
+    const auto world = stalledChicaneWorld();
+    auto config = makeLocalConfig();
+    config.octopus.max_runtime_s = 1e-9;  // deterministic natural timeout, no callback stop
+    config.octopus.planning_radius_m = 2.;
+    const auto bounds = assemblyCentreBounds(world.workspace, world.ego_half_extents,
+        world.ego_suspended_geometry, world.ego_tracking_error_half_extents, world.ego_body_rotation);
+    config.octopus.xyz_min = config.refinement.xyz_min = bounds.first;
+    config.octopus.xyz_max = config.refinement.xyz_max = bounds.second;
+    config.octopus.a_max = config.refinement.a_max = Vec3(1., 1., 1.5);
+    LocalPlanRequest request;
+    request.initial_state.position = Vec3(-1.28013386705375, -.838968705864613, 1.34999993469477);
+    request.local_goal = Vec3(.236942, .464289, 1.35);
+    request.duration_s = 7.55122711762503;
+    request.obstacles = world.timeIndexedObstacles(4, 0., request.duration_s);
+
+    for (auto mode : {TerminalMode::Stopped, TerminalMode::MovingRendezvous}) {
+        request.terminal_boundary.mode = mode;
+        request.terminal_boundary.position = request.local_goal;
+        request.terminal_boundary.velocity = Vec3(.2, 0., 0.);
+        // Include a near-hover prefix well outside the superseded 2um test.
+        request.initial_state.velocity = mode == TerminalMode::Stopped
+            ? Vec3::Zero().eval() : Vec3(1e-4, -1e-4, 0.);
+        request.initial_state.acceleration = mode == TerminalMode::Stopped
+            ? Vec3::Zero().eval() : Vec3(1e-4, 0., 0.);
+        const auto result = LocalPlanner(config).plan(request);
+        requireTrue(result.success && result.partial, "stationary timeout fixture failed");
+        requireTrue(result.search.termination_reason == "RUNTIME_REACHED",
+                    "fixture must exercise natural runtime expiry");
+        const Vec3 raw_end = result.search.control_points->bottomRows(1).transpose();
+        requireTrue(result.search.partial_fallback_selected_index == 2,
+                    "timeout fixture must select the unextended root");
+        requireTrue((raw_end - request.initial_state.position).norm() < .002,
+                    "raw near-hover seed moved farther than expected");
+        const State end = evaluateCubicState(*result.control_points, result.knots, request.duration_s);
+        requireTrue((end.position - raw_end).norm() > .25,
+                    "stationary timeout still rewards holding the current position");
+        requireTrue((end.position - request.local_goal).norm() < (raw_end - request.local_goal).norm(),
+                    "stationary timeout refinement did not make goal progress");
+        requireTrue((end.position - request.local_goal).norm() > .1,
+                    "obstructed nominal goal must remain soft, not pinned");
+        requireTrue(result.effective_terminal_boundary.mode == TerminalMode::Stopped,
+                    "timeout fallback must not retain a hard moving-rendezvous contract");
+        requireMatrixNear(end.velocity, Vec3::Zero(), 1e-7, "timeout progress terminal velocity");
+        requireMatrixNear(end.acceleration, Vec3::Zero(), 1e-7, "timeout progress terminal acceleration");
+        TrajectoryPiece piece;
+        piece.control_points = *result.control_points;
+        piece.knots = result.knots;
+        piece.valid_from = 0.; piece.valid_until = request.duration_s;
+        requireTrue(TrajectorySafetyChecker().checkPiece(piece, 0., request.duration_s, world).safe,
+                    "timeout progress must pass unchanged independent physical-space checking");
+    }
+}
+
+void testFrozenSecondWallPrefixRepair() {
+    auto world = stalledChicaneWorld();
+    // Reconstructed stationary S50 request at 90.2s. Original QP/planes were
+    // not logged; this reproduces the current-hull corner contradiction,
+    // not an exact replay or evidence of whole-route completion.
+    world.ego_body_rotation = Eigen::Quaterniond(
+        .9999997551742072, .00036121372879344577,
+        .00041405403763317144, .0004332844580647135).normalized().toRotationMatrix();
+    auto config = makeLocalConfig();
+    config.octopus.max_runtime_s = 1e-9;
+    config.octopus.planning_radius_m = 2.;
+    const auto bounds = assemblyCentreBounds(world.workspace, world.ego_half_extents,
+        world.ego_suspended_geometry, world.ego_tracking_error_half_extents, world.ego_body_rotation);
+    config.octopus.xyz_min = config.refinement.xyz_min = bounds.first;
+    config.octopus.xyz_max = config.refinement.xyz_max = bounds.second;
+    config.octopus.a_max = config.refinement.a_max = Vec3(1., 1., 1.5);
+    LocalPlanRequest request;
+    request.initial_state.position = Vec3(.388380788607035, .18582036847715, 1.34999999919687);
+    request.local_goal = request.initial_state.position + 2. *
+        (Vec3(1.85, 1.85, 1.35) - request.initial_state.position).normalized();
+    request.terminal_boundary.position = request.local_goal;
+    request.duration_s = 7.50811977143881;
+    request.obstacles = world.timeIndexedObstacles(4, 0., request.duration_s);
+    const auto result = LocalPlanner(config).plan(request);
+    requireTrue(result.success, "frozen second-wall repair failed: " + result.status +
+                "; " + (result.refinement ? result.refinement->message : "no refinement"));
+    requireTrue(result.refinement &&
+                result.refinement->message.find("prefix_corridor_repairs=") != std::string::npos,
+                "second-wall fixture did not exercise the incompatible-plane repair");
+    const auto initial = evaluateCubicState(*result.control_points, result.knots, 0.);
+    requireMatrixNear(initial.position, request.initial_state.position, 1e-8, "repair start P");
+    requireMatrixNear(initial.velocity, Vec3::Zero(), 1e-8, "repair start V");
+    requireMatrixNear(initial.acceleration, Vec3::Zero(), 1e-8, "repair start A");
+    const auto end = evaluateCubicState(*result.control_points, result.knots, request.duration_s);
+    requireMatrixNear(end.velocity, Vec3::Zero(), 1e-8, "repair stopped tail V");
+    requireMatrixNear(end.acceleration, Vec3::Zero(), 1e-8, "repair stopped tail A");
+    TrajectoryPiece piece;
+    piece.control_points = *result.control_points; piece.knots = result.knots;
+    piece.valid_from = 0.; piece.valid_until = request.duration_s;
+    requireTrue(TrajectorySafetyChecker().checkPiece(piece, 0., request.duration_s, world).safe,
+                "repaired second-wall curve failed independent physical-space checking");
+}
+
+void testUnextendedMovingSeedUsesSoftGoal() {
+    auto config = makeLocalConfig();
+    config.octopus.max_runtime_s = 1e-9;
+    LocalPlanRequest request;
+    request.initial_state = {Vec3(0., 0., 1.5), Vec3(.2, 0., 0.), Vec3::Zero()};
+    request.local_goal = Vec3(2., 0., 1.5);
+    request.duration_s = 4.;
+    request.terminal_boundary.position = request.local_goal;
+    const auto result = LocalPlanner(config).plan(request);
+    requireTrue(result.success && result.partial, "braking timeout fixture failed");
+    requireTrue(result.search.partial_fallback_selected_index == 2,
+                "moving fixture must select an unextended root seed");
+    const Vec3 selected = result.search.control_points->bottomRows(1).transpose();
+    requireTrue((selected - request.initial_state.position).norm() > .05,
+                "braking fixture must contain genuine motion");
+    requireMatrixNear(result.effective_terminal_boundary.position, request.local_goal, 1e-10,
+                      "unextended moving seed still rewards stopping at its own endpoint");
+    const State end = evaluateCubicState(*result.control_points, result.knots, request.duration_s);
+    requireTrue((end.position - request.local_goal).norm() < (selected - request.local_goal).norm(),
+                "moving root refinement did not make progress");
+    requireMatrixNear(end.velocity, Vec3::Zero(), 1e-7, "moving seed terminal velocity");
+    requireMatrixNear(end.acceleration, Vec3::Zero(), 1e-7, "moving seed terminal acceleration");
+    const State initial = evaluateCubicState(*result.control_points, result.knots, 0.);
+    requireMatrixNear(initial.velocity, request.initial_state.velocity, 1e-7,
+                      "seed refinement erased measured splice velocity");
+}
+
+void testMovingSeedCancellationKeepsStoppedEndpoint() {
+    auto config = makeLocalConfig();
+    LocalPlanRequest request;
+    request.initial_state = {Vec3(0., 0., 1.5), Vec3(.2, 0., 0.), Vec3::Zero()};
+    request.local_goal = Vec3(2., 0., 1.5);
+    request.duration_s = 4.;
+    request.terminal_boundary.mode = TerminalMode::MovingRendezvous;
+    request.terminal_boundary.position = request.local_goal;
+    request.octopus_stop_requested = [] { return true; };
+    const auto result = LocalPlanner(config).plan(request);
+    requireTrue(result.success && result.partial, "cancelled moving seed fixture failed");
+    const Vec3 selected = result.search.control_points->bottomRows(1).transpose();
+    requireMatrixNear(result.effective_terminal_boundary.position, selected, 1e-10,
+                      "explicit cancellation must not request new goal progress");
+}
+
+void testSearchedPartialUsesOriginalRequestedMode() {
+    auto config = makeLocalConfig();
+    for (auto mode : {TerminalMode::Stopped, TerminalMode::Continuation,
+                      TerminalMode::MovingRendezvous}) {
+        LocalPlanRequest request;
+        request.initial_state.position = Vec3(0., 0., 1.5);
+        request.local_goal = Vec3(2., 0., 1.5);
+        request.duration_s = 4.;
+        request.terminal_boundary.mode = mode;
+        request.terminal_boundary.position = request.local_goal;
+        int polls = 0;
+        request.octopus_stop_requested = [&polls] { return ++polls > 2; };
+        const auto result = LocalPlanner(config).plan(request);
+        requireTrue(result.success && result.partial, "searched partial fixture failed: " + result.status);
+        requireTrue(result.search.partial_fallback_selected_index > 2,
+                    "fixture must select a real searched extension, not the root seed");
+        const Vec3 selected = result.search.control_points->bottomRows(1).transpose();
+        requireMatrixNear(result.effective_terminal_boundary.position, selected, 1e-10,
+                          "searched partial boundary metadata changed");
+        const Vec3 expected_goal = mode == TerminalMode::Stopped ? request.local_goal : selected;
+        const auto expected = buildRefinementQP(result.search, result.knots, expected_goal,
+            config.refinement, result.effective_terminal_boundary);
+        requireMatrixNear(result.refinement->qp.linear, expected.linear, 1e-10,
+                          "searched partial objective disagrees with its original requested mode");
+    }
+}
+
+void testFailedSeedGoalRefinementRetainsRefinedStop() {
+    auto config = makeLocalConfig();
+    config.octopus.max_runtime_s = 1e-9;
+    // Pinned qpOASES fixture: this work-set limit cannot refine the far soft
+    // goal but can refine the already-certified stopped endpoint. Production
+    // limits are unchanged; this exercises the failure path, not a new budget.
+    config.refinement.max_working_set_recalculations = 31;
+    LocalPlanRequest request;
+    request.initial_state.position = Vec3(0., 0., 1.5);
+    request.local_goal = Vec3(10., 1., 1.5);
+    request.duration_s = 4.;
+    const auto result = LocalPlanner(config).plan(request);
+    requireTrue(result.success && result.partial, "certified endpoint retry was lost");
+    requireTrue(result.message.find("unextended_seed_endpoint_retry=SOLVER_FAILED") != std::string::npos,
+                "fixture did not exercise failed goal refinement and bounded endpoint retry");
+    requireTrue(result.refinement && result.refinement->success &&
+                result.refinement->separator_recheck_passed,
+                "endpoint retry bypassed refinement/postchecks");
+    const State end = evaluateCubicState(*result.control_points, result.knots, request.duration_s);
+    requireMatrixNear(end.position, request.initial_state.position, 1e-7, "endpoint retry stop position");
+    requireMatrixNear(end.velocity, Vec3::Zero(), 1e-7, "endpoint retry velocity");
+    requireMatrixNear(end.acceleration, Vec3::Zero(), 1e-7, "endpoint retry acceleration");
 }
 
 void testObstructedIntermediateGoalRemainsSoft() {
@@ -126,12 +359,54 @@ void testObstructedIntermediateGoalRemainsSoft() {
               << " / " << terminal.position.transpose() << '\n';
 }
 
+void testStationaryNavigationNearbyGoalRemainsSoft() {
+    const State start{Vec3(0., 0., 1.35), Vec3::Zero(), Vec3::Zero()};
+    const Vec3 goal(.85, 0., 1.35);
+    RecedingHorizonConfig config;
+    config.fixed_splice_lookahead_s = .1;
+    config.moving_rendezvous_enabled = false;
+    config.terminal_time_target_prediction_enabled = true;
+    config.require_terminal_hold_for_nominal = false;
+    auto local = makeLocalConfig();
+    WorldSnapshot snapshot;
+    snapshot.physical_static_obstacles.push_back({"obstructed_nearby_goal",
+        axisAlignedBoxVertices(goal, Vec3(.15, .15, .15))});
+    VersionedWorld world(snapshot);
+    CommittedTrajectoryTargetPredictor predictor(
+        makeStationaryHoverTrajectory(goal, 0., 100.), Vec3::Zero());
+    RecedingHorizonPlanner planner(goal, config, local);
+    planner.initializeCommittedTrajectory(makeStationaryHoverTrajectory(start.position, 0., .1));
+    const auto result = planner.replan(0., start, world, [] { return .01; }, &predictor);
+    requireTrue(result.local_plan.has_value(), "nearby stationary goal never reached local planning");
+    requireTrue(result.global_distance_from_splice_m < config.planning_radius_m,
+                "fixture did not exercise the nearby-goal region");
+    requireTrue(result.local_plan->requested_terminal_boundary.mode == TerminalMode::Stopped &&
+                !result.moving_rendezvous_active && !result.target_time_prediction_used,
+                "stationary navigation still requested a hard nearby rendezvous");
+    requireTrue(result.accepted, "stationary soft goal failed: " + result.status);
+    const auto endpoint = planner.committedTrajectory().endState();
+    requireTrue((endpoint.position-goal).norm() > .15,
+                "soft stationary endpoint entered its obstructed goal");
+    requireMatrixNear(endpoint.velocity, Vec3::Zero(), 1e-7, "stationary endpoint velocity");
+    requireMatrixNear(endpoint.acceleration, Vec3::Zero(), 1e-7, "stationary endpoint acceleration");
+    requireTrue(TrajectorySafetyChecker().checkCommitted(planner.committedTrajectory(),
+        planner.committedTrajectory().startTime(), planner.committedTrajectory().endTime(), snapshot).safe,
+        "stationary soft endpoint bypassed independent collision checking");
+}
+
 }  // namespace
 
 int main() {
     try {
-        testStoppedPartialRetainsSelectedEndpoint();
+        testStoppedPartialRetainsForwardSoftGoal();
+        testStationaryTimeoutRefinesTowardSoftGoal();
+        testFrozenSecondWallPrefixRepair();
+        testUnextendedMovingSeedUsesSoftGoal();
+        testMovingSeedCancellationKeepsStoppedEndpoint();
+        testSearchedPartialUsesOriginalRequestedMode();
+        testFailedSeedGoalRefinementRetainsRefinedStop();
         testObstructedIntermediateGoalRemainsSoft();
+        testStationaryNavigationNearbyGoalRemainsSoft();
         State start;
         start.position = Vec3(0.0, 0.0, 1.5);
         start.velocity = Vec3::Zero();

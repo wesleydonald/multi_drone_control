@@ -127,7 +127,7 @@ def test_a_network_row_leaves_the_ocp_columns_blank():
 def test_the_yaw_lag_columns_follow_the_tick_columns():
     h = tick_log_header(3, 3)
     i = h.index('net_trim_z') + 1
-    assert h[i:] == ['yaw_ref0', 'plan_yaw1', 'plan_yaw5', 'az1_0', 'az1_1', 'az1_2', 'az0_0', 'az0_1', 'az0_2']
+    assert h[i:i + 9] == ['yaw_ref0', 'plan_yaw1', 'plan_yaw5', 'az1_0', 'az1_1', 'az1_2', 'az0_0', 'az0_1', 'az0_2']
 
 
 def _yaw_quat(a):
@@ -161,3 +161,14 @@ def test_a_tick_without_a_plan_leaves_the_plan_yaw_blank_and_measures_the_cables
     r = dict(zip(tick_log_header(3, 3), p._tick_log_row()))
     assert all(r[c] == '' for c in ('yaw_ref0', 'plan_yaw1', 'plan_yaw5', 'az1_0', 'az1_1', 'az1_2'))
     assert all(r[f'az0_{i}'] != '' for i in range(3))
+
+
+def test_the_stamp_gap_per_slot_is_logged_last():
+    """5 Nov (RIG-1105-sq8_2, the critic): each slot's pose stamp behind the ring's, appended after az0_*."""
+    h = tick_log_header(3, 3)
+    assert h[-3:] == ['skew0', 'skew1', 'skew2'] and h[-4] == 'az0_2'
+    p = _stub()
+    assert [dict(zip(h, p._tick_log_row()))[f'skew{i}'] for i in range(3)] == ['', '', '']
+    p._load_stamp, p._drone_stamp = 50.0, {d: 50.0 - 0.01 * (d + 1) for d in p.slot2drone}
+    r = dict(zip(h, p._tick_log_row()))
+    assert [r[f'skew{i}'] for i in range(3)] == [f'{0.01 * (p.slot2drone[i] + 1):.3f}' for i in range(3)]

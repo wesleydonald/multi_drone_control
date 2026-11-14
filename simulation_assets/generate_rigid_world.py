@@ -112,7 +112,7 @@ def _rod_body(idx, radius, mass, L, cx, cy, cz, pitch, yaw, magnet_mass=0.0):
 
 def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
                  damping=0.1, detachable=False, pivot_dz=0.0, magnet_mass=0.0,
-                 stub_mass=None, pose_hz=0.0):
+                 stub_mass=None, pose_hz=0.0, plate_damping=None):
     """One rigid tether (payload bottom -> drone top). Both ends are ball joints (a
     two-force rigid link: the paper model), so the drone's ATTITUDE is decoupled from
     the rod at the top AND the rod swings freely at the payload -- the MPC tilts the
@@ -139,7 +139,11 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
 
     pose_hz > 0 (detachable only) publishes the rod model's pose at that rate
     (/model/lift_system/model/tether_{idx}/pose): its payload end is the magnet, which the
-    mocap emulator reports as the rig's magnet marker (card 2026-10-21_tip_detect)."""
+    mocap emulator reports as the rig's magnet marker (card 2026-10-21_tip_detect).
+
+    plate_damping (detachable only) makes the payload-to-stub joint a damped universal: a free stub on a ball spins on
+    after a release, DART ignores ball damping, and a re-weld hands the rod and drone its velocity
+    (docs/analysis/x4_weld_kick_2026-10-31.md)."""
     top = (drone[0], drone[1], drone[2] - pivot_dz) if pivot_dz else drone
     dx = top[0] - attach[0]
     dy = top[1] - attach[1]
@@ -171,11 +175,11 @@ def tether_block(idx, drone, attach, radius=0.004, mass=0.001,
           <inertia><ixx>1e-8</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-8</iyy><iyz>0</iyz><izz>1e-8</izz></inertia>
         </inertial>
       </link>
-      <joint name="payload_to_stub_{idx}" type="ball">
+      <joint name="payload_to_stub_{idx}" type="{'ball' if plate_damping is None else 'universal'}">
         <parent>payload::body</parent>
         <child>stub_pay_{idx}</child>
-        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis>
-        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping}</damping></dynamics></axis2>
+        <axis><xyz>1 0 0</xyz><dynamics><damping>{damping if plate_damping is None else plate_damping}</damping></dynamics></axis>
+        <axis2><xyz>0 1 0</xyz><dynamics><damping>{damping if plate_damping is None else plate_damping}</damping></dynamics></axis2>
       </joint>
       <model name="tether_{idx}">
         <pose>0 0 0 0 0 0</pose>
@@ -432,6 +436,8 @@ def build_world(n, placement, detachable=False, legs=False, geom=None):
         tkw['magnet_mass'] = geom['magnet_mass']
     if geom and geom.get('tether_pose_hz'):
         tkw['pose_hz'] = geom['tether_pose_hz']
+    if geom.get('plate_damping') is not None:
+        tkw['plate_damping'] = geom['plate_damping']
     px, py, pz, pyaw = placement['payload']
     attaches = placement['attaches']
     drones = placement['drones']
@@ -605,6 +611,9 @@ def main():
     rig.add_argument('--tether-pose-hz', type=float, default=0.0,
                      help='> 0 (with --detachable): publish each rod model\'s pose at this rate, for the '
                           'magnet-marker emulation (card 2026-10-21_tip_detect)')
+    rig.add_argument('--plate-damping', type=float, default=None,
+                     help='with --detachable: each plate stub on a universal joint with this damping (N m s/rad), '
+                          'not a free ball (docs/analysis/x4_weld_kick_2026-10-31.md)')
     rig.add_argument('--drone-model', choices=('x3', 'x3_rig'), default='x3',
                      help='models/x3_drone{i}.sdf (legacy 0.64 kg) or models/x3_rig_drone{i}.sdf '
                           '(0.475 kg airframe)')
@@ -642,6 +651,8 @@ def main():
         geom['magnet_mass'] = a.magnet_mass
     if a.tether_pose_hz:
         geom['tether_pose_hz'] = a.tether_pose_hz
+    if a.plate_damping is not None:
+        geom['plate_damping'] = a.plate_damping
     if a.drone_model != 'x3':
         geom['drone_model'] = a.drone_model
     ring = geom.get('ring')

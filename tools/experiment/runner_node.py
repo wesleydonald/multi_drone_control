@@ -35,8 +35,9 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
-from .config import (mocap_loss_arg, mocap_tilt_arg, wait_lift_arg, wait_log_arg, wait_reweld_arg, wait_traj_arg,
-                     wrench_arg)
+from .config import (LAST_PROVEN, PARTNER_GO_TOPIC, drone_set_arg, instance_topic, mocap_loss_arg, mocap_tilt_arg,
+                     partner_go_topic, release_topic, wait_lift_arg, wait_log_spec, wait_reweld_arg, wait_reweld_spec,
+                     wait_traj_arg, wrench_arg)
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
 PLANNER_TICK_S = 0.1    # the load planner's tick (PLANNER_HZ 10)
@@ -53,6 +54,27 @@ def _xyz(msg):
 def _tilt_topic(d):
     """MOCAP_TILT's input: drone d's emulator, or the ring's for d -1."""
     return '/payload/mocap_tilt' if d < 0 else f'/drone_{d}/mocap_tilt'
+
+
+def partner_go_topics(arg, quad4):
+    """PARTNER_GO's start-gate topics: QUAD4's /runner/partner_go with no arg, else one per named partner
+    (config.partner_go_topic)."""
+    if arg is None:
+        return [PARTNER_GO_TOPIC]
+    return [partner_go_topic(d, quad4) for d in drone_set_arg(arg, 'PARTNER_GO')]
+
+
+def his_land_topics(arg, quad4):
+    """HIS_LAND's topics: QUAD4's instance's /join_planner/land_now with no arg, else each named partner's instance's."""
+    if arg is None:
+        return ['/join_planner/land_now']
+    return [instance_topic('/join_planner/land_now', d, quad4) for d in drone_set_arg(arg, 'HIS_LAND')]
+
+
+# 4 -> 2 -> 4 runs (more than one partner): the planner lines worth an events.csv row with their sim time, whatever
+# their exact wording (the set detach, releases, fold-ins and their queue, drops, take-backs, refusals)
+PLANNER_LINE_424 = re.compile(r'DETACH|UNLOAD|RELEASE|ATTACH|FOLD|QUEUE|RESIZE|DROP|TAKE-BACK|refused|REFUSED|LAND|'
+                              r'GIVE|ABORT|SET')
 
 
 def _tilt_deg(q):
@@ -129,7 +151,7 @@ class ExperimentRunner(Node):
         self._object_attached = False
         self.t_partner_release = None
         self._partner_release_wait = None   # t the WAIT_PARTNER_RELEASE event fired
-        self._log_wait = None               # (regex, t fired, timeout) of a WAIT_LOG
+        self._log_wait = None               # (regex, t fired, timeout, n-th line) of a WAIT_LOG
         self._planner_lines = []            # (t, text) of every dissipative planner /rosout line this run
         self._traj_wait = None              # (target, in laps, t fired, timeout) of a WAIT_TRAJ
         self._traj_samples = []             # (t, trajectory clock, lap_s) per /payload/trajectory_state, for WAIT_TRAJ
@@ -166,6 +188,11 @@ class ExperimentRunner(Node):
                                      lambda m: setattr(self, 'tip', _xyz(m)), best)
             self.create_subscription(PoseStamped, '/attach_target/pose',
                                      lambda m: setattr(self, 'tip_target', _xyz(m)), best)
+            # his planner's reference for QUAD4 (Te-Jen 12 Nov, R4316): node 0's position and velocity and the
+            # horizon's last position, so a window can show what his reference asked of QUAD4
+            from trajectory_msgs.msg import MultiDOFJointTrajectory
+            self.his_ref = None
+            self.create_subscription(MultiDOFJointTrajectory, '/join_planner/reference', self._his_ref_cb, best)
         self.t_landed = None
         self.create_subscription(Bool, '/fleet/landed', self._landed_cb, 5)
         self.create_subscription(String, '/fleet/abort', self._abort_cb, 10)
@@ -191,6 +218,34 @@ class ExperimentRunner(Node):
             self.create_subscription(Bool, f'/drone_{d}/take_back', self._take_back_cb, latched)
             self.create_subscription(String, f'/drone_{d}/mux_state', self._mux_state_cb, latched)
             self.create_subscription(String, '/magnet/attach_proof', self._proof_cb, 10)
+        # 4 -> 2 -> 4 (mdc_424 contract): every reserved drone but QUAD4 (n - 1) is a further partner on its own topics
+        # (instance_topic); a run with one partner has none and subscribes and logs exactly as before
+        self._extra = list(range(cfg.num_drones, self.n - 1))
+        self._att = {d: {'attached': False, 'released': False, 't_weld': None, 't_reweld': None} for d in self._extra}
+        self._partner_seen = {}             # (drone, what) -> last value, for the per-partner events
+        self._proven = []                   # partners in the order their proof reached 'attached'
+        # OPERATOR_GIVE_UP: every partner's give-up topic, made at start (which one 'last_proven' names comes later)
+        self.give_up_pubs = ({instance_topic('/join_planner/give_up', d, self.n - 1): self.create_publisher(
+            Bool, instance_topic('/join_planner/give_up', d, self.n - 1), 10) for d in range(cfg.num_drones, self.n)}
+            if any(e.do == 'OPERATOR_GIVE_UP' for e in cfg.events) else {})
+        self._proof_d, self._tip_d = {}, {}
+        for d in self._extra:
+            t = lambda topic, d=d: instance_topic(topic, d, self.n - 1)    # noqa: E731
+            self.create_subscription(Bool, t('/magnet/object_attached'), lambda m, d=d: self._partner_attached_cb(m, d),
+                                     10)
+            self.create_subscription(Bool, t('/magnet/contact'),
+                                     lambda m, d=d: self._partner_cb(d, 'contact', bool(m.data)), latched)
+            self.create_subscription(String, t('/magnet/attach_proof'), lambda m, d=d: self._partner_proof_cb(m, d), 10)
+            self.create_subscription(Bool, t('/join_planner/give_up'),
+                                     lambda m, d=d: m.data and self._partner_cb(d, 'give_up', True), 10)
+            self.create_subscription(Bool, t(f'/drone_{self.n - 1}/take_back'),
+                                     lambda m, d=d: m.data and self._partner_cb(d, 'take_back', True), latched)
+            self.create_subscription(String, t(f'/drone_{self.n - 1}/mux_state'),
+                                     lambda m, d=d: self._partner_cb(d, 'mux', m.data), latched)
+            self.create_subscription(String, t('/join_planner/phase'),
+                                     lambda m, d=d: self._partner_cb(d, 'phase', m.data), latched)
+            self.create_subscription(PoseStamped, t('/magnet_tip_pose'),
+                                     lambda m, d=d: self._tip_d.__setitem__(d, _xyz(m)), best)
         if cfg.ball_start is not None:
             self.create_subscription(PoseArray, '/model/payload_model/pose',
                                      self._ball_cb, best)
@@ -207,6 +262,8 @@ class ExperimentRunner(Node):
         self.magnet_pub = self.create_publisher(String, '/magnet/command', 10)
         self.attach_pub = self.create_publisher(Int32, '/fleet/attach', 10)
         self.detach_pub = self.create_publisher(Int32, '/fleet/detach', 10)
+        self.detach_set_pub = (self.create_publisher(String, '/fleet/detach_set', 10)
+                               if any(e.do == 'DETACH_SET' for e in cfg.events) else None)
         self.drop_pub = self.create_publisher(String, '/fleet/drop', 10)
         # TASK and WAIT_TRAJ (card 2026-10-23_scalability cases 6 and 7): only in runs that have them
         self.task_pub = (self.create_publisher(String, '/fleet/task', 10)
@@ -214,8 +271,8 @@ class ExperimentRunner(Node):
         if any(e.do == 'WAIT_TRAJ' for e in cfg.events):
             self.create_subscription(String, '/payload/trajectory_state', self._traj_state_cb, 10)
         # RELEASE: the joint's own topic, made at start so it is matched before the event
-        self.release_pubs = {int(e.arg): self.create_publisher(Empty, f'/drone_{int(e.arg)}/detach', 1)
-                             for e in cfg.events if e.do == 'RELEASE'}
+        self.release_pubs = {int(e.arg): self.create_publisher(
+            Empty, release_topic(int(e.arg), cfg.num_drones, self.n - 1), 1) for e in cfg.events if e.do == 'RELEASE'}
         # MOCAP_LOSS: the sim mocap emulator's dropout input, made at start for the same reason
         self.dropout_pubs = {mocap_loss_arg(e.arg)[0]: self.create_publisher(
             Float64, f'/drone_{mocap_loss_arg(e.arg)[0]}/mocap_dropout', 5)
@@ -237,9 +294,17 @@ class ExperimentRunner(Node):
         self.handoff_pub = self.create_publisher(Bool, '/join_planner/handoff_ready', 10)
         self.his_land_pub = (self.create_publisher(Bool, '/join_planner/land_now', 10)
                              if any(e.do == 'HIS_LAND' for e in cfg.events) else None)
+        # HIS_LAND naming partners: one per instance, made at start
+        self.his_land_pubs = {tp: (self.his_land_pub if tp == '/join_planner/land_now' else
+                                   self.create_publisher(Bool, tp, 10)) for tp in sorted(
+            {tp for e in cfg.events if e.do == 'HIS_LAND' for tp in his_land_topics(e.arg, self.n - 1)})}
+        self.force_drop_pub = (self.create_publisher(Bool, '/join_planner/force_drop', 1)
+                               if any(e.do == 'FORCE_DROP' for e in cfg.events) else None)
         self.fleet_handover_pub = self.create_publisher(Bool, '/fleet/handover', 10)
-        self.partner_go_pub = (self.create_publisher(String, '/runner/partner_go', 10)
-                               if any(e.do == 'PARTNER_GO' for e in cfg.events) else None)
+        # PARTNER_GO: one start gate per partner it names (his TAKEOFF in the twin), made at start
+        self.partner_go_pubs = {tp: self.create_publisher(String, tp, 10) for tp in sorted(
+            {tp for e in cfg.events if e.do == 'PARTNER_GO' for tp in partner_go_topics(e.arg, self.n - 1)})}
+        self.partner_go_pub = self.partner_go_pubs.get(PARTNER_GO_TOPIC)
         # HANGER_RELEASE publishers exist from the start: one created at the event has no
         # matched subscriber yet, and _publish would fail the run on its first send
         self._hanger_pubs = {}
@@ -285,6 +350,15 @@ class ExperimentRunner(Node):
         if len(msg.data) >= 5:
             self.ref[i] = (float(msg.data[2]), float(msg.data[3]),
                            float(msg.data[4]))
+
+    def _his_ref_cb(self, msg):
+        if not msg.points or not msg.points[0].transforms:
+            return
+        p0, pn = msg.points[0], msg.points[-1]
+        t0, tn = p0.transforms[0].translation, pn.transforms[0].translation
+        v0 = p0.velocities[0].linear if p0.velocities else None
+        self.his_ref = (t0.x, t0.y, t0.z, *((v0.x, v0.y, v0.z) if v0 else (math.nan,) * 3),
+                        tn.x, tn.y, tn.z, float(len(msg.points)))
 
     def _payload_ref_cb(self, msg):
         if len(msg.data) >= 3:
@@ -382,6 +456,58 @@ class ExperimentRunner(Node):
             return
         if isinstance(p, dict):
             self._proof = p
+            if getattr(self, '_extra', None):
+                self._partner_cb(self.n - 1, 'proof', p.get('state'))
+
+    def _partner_attached_cb(self, msg, d):
+        """A further partner's weld (its own object_attached), as _attached_cb tracks QUAD4's."""
+        a, topic, on = self._att[d], instance_topic('/magnet/object_attached', d, self.n - 1), bool(msg.data)
+        if not on and a['attached'] and not a['released']:
+            a['released'] = True
+            self._log_event('RELEASED', topic)
+        if on and a['released'] and a['t_reweld'] is None:
+            a['t_reweld'] = self._rel()
+            self._log_event('REWELD', topic)
+            self.get_logger().warn(f'[exp] RE-WELD of drone {d} detected at t={a["t_reweld"]:.2f}')
+        if on and not a['attached']:
+            a['attached'] = True
+            a['t_weld'] = self._rel()
+            self._log_event('WELD', topic)
+
+    def _partner_proof_cb(self, msg, d):
+        try:
+            p = json.loads(msg.data)
+        except ValueError:
+            return
+        if isinstance(p, dict):
+            self._proof_d[d] = p
+            self._partner_cb(d, 'proof', p.get('state'))
+
+    # (event name, the topic its arg names) of a partner's state: QUAD4's topics as the one-partner runs log them
+    _PARTNER_EVENTS = {'contact': (lambda v: 'CONTACT' if v else 'CONTACT_LOST', '/magnet/contact'),
+                       'give_up': (lambda v: 'GIVE_UP', '/join_planner/give_up'),
+                       'take_back': (lambda v: 'TAKE_BACK', '/drone_{q}/take_back'),
+                       'mux': (lambda v: f'MUX:{v}', '/drone_{q}/mux_state'),
+                       'phase': (lambda v: f'PHASE:{v}', '/join_planner/phase'),
+                       'proof': (lambda v: f'PROOF:{v}', '/magnet/attach_proof')}
+
+    def _partner_cb(self, d, what, value):
+        """One events.csv row per change of a partner's contact, proof state, mux, his phase, and its first give-up and
+        take-back; the arg is the partner's own topic, so each row names its drone. His phase and the proof state also
+        go to WAIT_LOG as 'PHASE_D<d>:<phase>' and 'PROOF_D<d>:<state>' (QUAD4's phase stays 'PHASE:<phase>')."""
+        if value is None or self._partner_seen.get((d, what)) == value:
+            return
+        if what in ('give_up', 'take_back') and (d, what) in self._partner_seen:
+            return                          # he repeats his give-up at 1 Hz (R1481)
+        self._partner_seen[(d, what)] = value
+        name, topic = self._PARTNER_EVENTS[what]
+        q = self.n - 1
+        self._log_event(name(value), instance_topic(topic.format(q=q), d, q))
+        if what in ('phase', 'proof'):
+            # WAIT_LOG reads these: 'PHASE_D2:DESCEND_TO_ATTACHMENT', '#2 PROOF_D\d+:attached' (the second proof)
+            self._planner_lines.append((self._rel(), f'{what.upper()}_D{d}:{value}'))
+        if what == 'proof' and value == 'attached':
+            self._proven.append(d)
 
     _ROSOUT = ((re.compile(r'\] ATTACH drone (\d+)'), 'FOLD_IN'),
                # a departed carrier's rejoin (rejoin_departed): ATTACH accepted, its end on the plate (attach sent), the
@@ -392,6 +518,9 @@ class ExperimentRunner(Node):
                (re.compile(r'tether joint of drone \d+ \(/drone_(\d+)\): detached'), 'JOINT_DETACHED'),
                (re.compile(r'REJOIN WELD drone \d+ \(/drone_(\d+)\)'), 'REJOIN_WELD'),
                (re.compile(r'REJOIN BLEND OVER drone \d+ \(/drone_(\d+)\)'), 'REJOIN_BLEND_OVER'),
+               # QUAD4's fold-in under the cap (foldin_cap, card 2026-11-05_quad4_foldin_weld_cap)
+               (re.compile(r'FOLD-IN CAP ON drone \d+ \(/drone_(\d+)\)'), 'FOLDIN_CAP_ON'),
+               (re.compile(r'FOLD-IN CAP OVER drone \d+ \(/drone_(\d+)\)'), 'FOLDIN_CAP_OVER'),
                (re.compile(r'REJOIN ABORT drone \d+ \(/drone_(\d+)\)'), 'REJOIN_ABORT'),
                (re.compile(r'REJOIN REFUSED drone \d+ \(/drone_(\d+)\)'), 'REJOIN_REFUSED'),
                (re.compile(r'staged drone \d+ \(/drone_(\d+)\) leaves'), 'STAGED_LEAVES'),
@@ -401,6 +530,16 @@ class ExperimentRunner(Node):
                (re.compile(r'TASK DONE drone \d+ \(/drone_(\d+)\)'), 'TASK_DONE'),
                (re.compile(r'TASK ABORT drone \d+ \(/drone_(\d+)\)'), 'TASK_ABORT'),
                (re.compile(r'TASK REFUSED(?: drone \d+ \(/drone_(\d+)\))?'), 'TASK_REFUSED'),
+               # relay_task (card 2026-10-30_x4_endurance_relay): a carrier's queued task and leave, its park, its way
+               # back, a cancelled leave, a path stopped mid-lap; every announced release's resize
+               (re.compile(r'TASK QUEUED drone \d+ \(/drone_(\d+)\)'), 'TASK_QUEUED'),
+               (re.compile(r'TASK PARKED drone \d+ \(/drone_(\d+)\)'), 'TASK_PARKED'),
+               (re.compile(r'RELAY RETURN drone \d+ \(/drone_(\d+)\)'), 'RELAY_RETURN'),
+               (re.compile(r'RELAY ATTACH QUEUED drone \d+ \(/drone_(\d+)\)'), 'RELAY_ATTACH_QUEUED'),
+               (re.compile(r'RELAY LEAVE QUEUED drone \d+ \(/drone_(\d+)\)'), 'RELAY_LEAVE_QUEUED'),
+               (re.compile(r'RELAY LEAVE CANCELLED drone \d+ \(/drone_(\d+)\)'), 'RELAY_LEAVE_CANCELLED'),
+               (re.compile(r'RELAY HOLD drone \d+ \(/drone_(\d+)\)'), 'RELAY_HOLD'),
+               (re.compile(r'\] DETACH drone \d+ \(/drone_(\d+)\) \(OCP resize\)'), 'DETACH_RESIZE'),
                (re.compile(r'\] lap (\d+) done at t='), 'LAP_DONE'),
                (re.compile(r'PARTNER RELEASE: drone (\d+)'), 'PARTNER_RELEASE'),
                (re.compile(r'PARTNER HANDOFF()'), 'PARTNER_HANDOFF'),
@@ -434,6 +573,8 @@ class ExperimentRunner(Node):
         if not msg.name.endswith('dissipative_planner'):
             return
         self._planner_lines.append((self._rel(), msg.msg))
+        if getattr(self, '_extra', None) and PLANNER_LINE_424.search(msg.msg):
+            self._log_event('PLANNER', msg.msg.replace('[dissipative] ', '', 1))
         for pat, name in self._ROSOUT:
             m = pat.search(msg.msg)
             if m:
@@ -538,16 +679,18 @@ class ExperimentRunner(Node):
                 if expired:
                     self._log_event('WELD_TIMEOUT', f'{shift:.2f}')
         if self._reweld_wait is not None:
+            d = getattr(self, '_reweld_drone', None)
+            t_rw = self.t_reweld if d is None else self._att[d]['t_reweld']
             timeout = getattr(self, '_reweld_timeout', None)
-            expired = self.t_reweld is None and timeout is not None and t - self._reweld_wait >= timeout
-            if self.t_reweld is None and not expired:
+            expired = t_rw is None and timeout is not None and t - self._reweld_wait >= timeout
+            if t_rw is None and not expired:
                 return                      # WAIT_REWELD blocks the rest of the schedule
             shift = t - self._reweld_wait
             for e in self._pending:
                 e.t += shift
             self._reweld_wait = None
             if expired:
-                self._log_event('REWELD_TIMEOUT', f'{shift:.2f}')
+                self._log_event('REWELD_TIMEOUT', f'{shift:.2f}' + ('' if d is None else f' d{d}'))
             self.get_logger().warn(f'[exp] t={t:6.2f} {"NOT re-welded (timeout)" if expired else "re-welded"}; '
                                    f'later events shifted {shift:+.2f} s')
         if self._partner_release_wait is not None:
@@ -560,8 +703,9 @@ class ExperimentRunner(Node):
             self.get_logger().warn(
                 f'[exp] t={t:6.2f} partner released; later events shifted {shift:+.2f} s')
         if self._log_wait is not None:
-            pat, t0, timeout = self._log_wait
-            hit = next((tl for tl, ln in self._planner_lines if pat.search(ln)), None)
+            pat, t0, timeout, nth = (tuple(self._log_wait) + (1,))[:4]
+            hits = [tl for tl, ln in self._planner_lines if pat.search(ln)]
+            hit = hits[nth - 1] if len(hits) >= nth else None
             seen = hit is not None
             if not seen and not (timeout and t - t0 >= timeout):
                 return                      # WAIT_LOG blocks the rest of the schedule
@@ -645,16 +789,21 @@ class ExperimentRunner(Node):
             if ev.do == 'WAIT_THRUST':
                 self._thrust_wait = (str(ev.arg) if ev.arg else self.cfg.cmd_ready_topic, t)
                 return
-            if ev.do == 'WAIT_REWELD' and self.t_reweld is None:
-                self._reweld_wait = t
-                self._reweld_timeout = wait_reweld_arg(ev.arg)
-                return
+            if ev.do == 'WAIT_REWELD':
+                timeout, d = wait_reweld_spec(ev.arg)
+                if d is not None and d == self.n - 1:
+                    d = None                # QUAD4's own weld is today's /magnet/object_attached
+                if (self.t_reweld if d is None else self._att[d]['t_reweld']) is None:
+                    self._reweld_wait = t
+                    self._reweld_timeout = timeout
+                    self._reweld_drone = d
+                    return
             if ev.do == 'WAIT_PARTNER_RELEASE' and self.t_partner_release is None:
                 self._partner_release_wait = t
                 return
             if ev.do == 'WAIT_LOG':
-                pat, timeout = wait_log_arg(ev.arg)
-                self._log_wait = (pat, t, timeout)
+                pat, timeout, nth = wait_log_spec(ev.arg)
+                self._log_wait = (pat, t, timeout, nth)
                 return
             if ev.do == 'WAIT_TRAJ':
                 x, in_laps, timeout = wait_traj_arg(ev.arg)
@@ -738,6 +887,9 @@ class ExperimentRunner(Node):
         elif ev.do == 'DETACH':
             self._publish(self.detach_pub, Int32(data=int(ev.arg)),
                           f'/fleet/detach {ev.arg}')
+        elif ev.do == 'DETACH_SET':
+            # once, as DETACH: a repeat would be a second set detach
+            self._publish(self.detach_set_pub, String(data=str(ev.arg)), f'/fleet/detach_set {ev.arg}')
         elif ev.do == 'DROP':
             why = str(ev.arg) if ev.arg else 'forced by the runner'
             self._publish(self.drop_pub, String(data=why), f'/fleet/drop {why}')
@@ -746,7 +898,7 @@ class ExperimentRunner(Node):
         elif ev.do == 'RELEASE':
             # the joint only, as a magnet that fails: the planner has to notice by itself
             pub = self.release_pubs[int(ev.arg)]
-            self._publish(pub, Empty(), f'/drone_{ev.arg}/detach (unannounced)')
+            self._publish(pub, Empty(), f'{release_topic(int(ev.arg), self.cfg.num_drones, self.n - 1)} (unannounced)')
             self._repeats.append((self._rel() + 0.5, pub, Empty()))
         elif ev.do == 'MOCAP_LOSS':
             d, secs = mocap_loss_arg(ev.arg)
@@ -766,11 +918,24 @@ class ExperimentRunner(Node):
                           exclude_self=True)
             self._repeats.append((self._rel() + 2.0, self.handoff_pub, Bool(data=True)))
         elif ev.do == 'HIS_LAND':
-            self._publish(self.his_land_pub, Bool(data=True), '/join_planner/land_now')
+            for topic in his_land_topics(ev.arg, self.n - 1):
+                self._publish(self.his_land_pubs.get(topic, self.his_land_pub), Bool(data=True), topic)
+        elif ev.do == 'OPERATOR_GIVE_UP':
+            ids = self._proven[-1:] if ev.arg == LAST_PROVEN else list(drone_set_arg(ev.arg, ev.do))
+            if not ids:
+                self.failures.append('OPERATOR_GIVE_UP last_proven: no partner proven yet, nothing sent')
+            for d in ids:
+                topic = instance_topic('/join_planner/give_up', d, self.n - 1)
+                self._publish(self.give_up_pubs[topic], Bool(data=True), f'{topic} (GIVE UP)', exclude_self=True)
+                self._log_event('GIVE_UP_SENT', str(d))
+        elif ev.do == 'FORCE_DROP':
+            self._publish(self.force_drop_pub, Bool(data=True), '/join_planner/force_drop')
         elif ev.do == 'PARTNER_GO':
             go = String(data='{"running": true}')
-            self._publish(self.partner_go_pub, go, '/runner/partner_go')
-            self._repeats.append((self._rel() + 3.0, self.partner_go_pub, go))
+            for topic in partner_go_topics(ev.arg, self.n - 1):
+                pub = self.partner_go_pubs[topic]
+                self._publish(pub, go, topic)
+                self._repeats.append((self._rel() + 3.0, pub, go))
         elif ev.do == 'FLEET_HANDOVER':
             # the driver's 5 x 0.3 s (drive_m2_handover.py); the muxes latch the first True
             self._publish(self.fleet_handover_pub, Bool(data=True), '/fleet/handover')
@@ -867,6 +1032,10 @@ class ExperimentRunner(Node):
             for name, v in (('tip', self.tip), ('tip_target', self.tip_target)):
                 for k, c in zip('xyz', v or (math.nan,) * 3):
                     row[f'{name}_{k}'] = c
+            h = getattr(self, 'his_ref', None) or (math.nan,) * 10
+            for k, c in zip(('his_ref_x', 'his_ref_y', 'his_ref_z', 'his_ref_vx', 'his_ref_vy', 'his_ref_vz',
+                             'his_ref_end_x', 'his_ref_end_y', 'his_ref_end_z', 'his_ref_nodes'), h):
+                row[k] = c
         for i in range(self.n):
             q = self.pose[i]
             v = self.vel[i] or (math.nan,) * 3
@@ -893,7 +1062,8 @@ class ExperimentRunner(Node):
             row[pre + 'elev_deg'] = math.nan
             row[pre + 'thr'] = c[0]
             row[pre + 'armed'] = int(bool(c[1]))
-            row[pre + 'attached'] = int(self.attached and i == self.n - 1)
+            att = getattr(self, '_att', {})
+            row[pre + 'attached'] = int(att[i]['attached']) if i in att else int(self.attached and i == self.n - 1)
         if self.cfg.ball_start is not None:
             b = self.ball or (math.nan,) * 3
             row['ball_x'], row['ball_y'], row['ball_z'] = b
@@ -901,6 +1071,12 @@ class ExperimentRunner(Node):
             # the manager's latest /magnet/attach_proof (10 Hz); empty before the first
             for k in self.PROOF_COLS:
                 row[f'proof_{k}'] = (self._proof or {}).get(k)
+        for d in getattr(self, '_extra', ()):
+            # a further partner's tip and proof, after every column a one-partner run has
+            for k, c in zip('xyz', self._tip_d.get(d) or (math.nan,) * 3):
+                row[f'tip_d{d}_{k}'] = c
+            for k in self.PROOF_COLS:
+                row[f'proof_d{d}_{k}'] = (self._proof_d.get(d) or {}).get(k)
         self.rows.append(row)
         self.step_i += 1
 

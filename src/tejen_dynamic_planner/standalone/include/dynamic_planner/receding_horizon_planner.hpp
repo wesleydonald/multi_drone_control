@@ -161,6 +161,13 @@ struct ReplanResult {
     double world_snapshot_s = 0.0;
     double obstacle_build_s = 0.0;
     double safety_check_s = 0.0;
+    double full_safety_check_s = 0.0;
+    double incremental_safety_check_s = 0.0;
+    std::size_t full_safety_checks = 0;
+    std::size_t incremental_safety_checks = 0;
+    std::size_t collision_relations_checked = 0;
+    std::size_t collision_relations_reused = 0;
+    std::string recheck_change_kind = "INITIAL_FULL";
     double atomic_commit_s = 0.0;
     // Elapsed trajectory/world time during this planning attempt. With the
     // legacy clock this equals steady runtime approximately; with ROS /clock it

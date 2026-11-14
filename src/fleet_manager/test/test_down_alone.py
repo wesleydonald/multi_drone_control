@@ -110,3 +110,61 @@ def test_land_with_nothing_armed_changes_nothing(sync):
     m.CentralController._land_fleet(f)
     assert f.service_disarms == []
 
+
+
+def _carrier_fake(**kw):
+    f = _fake(**kw)
+    f._carrier_down = set()
+    f._carrier_released_callback = m.CentralController._carrier_released_callback.__get__(f)
+    return f
+
+
+def _said(f):
+    return [s for s in f._log.lines if 'disarmed alone' in s]
+
+
+def test_carriers_released_on_the_landed_ring_are_each_disarmed_alone_while_quad4_lands(sync):
+    """carriers_down_alone (card 2026-11-05_carriers_down_alone): the planner releases each carrier on the landed ring
+    (/drone_d/carrier_released) while QUAD4, taken back (its mux ours), still lands; each carrier's down_alone disarms
+    it alone, its disarm is expected, QUAD4 flies on, and LANDED then disarms the fleet as before. The line says it is
+    still on its plate (critic CODE 5: not a magnet that let go)."""
+    f = _carrier_fake(mux_state={3: 'ours'})
+    _flying(f, 0, 1, 2, 3)
+    f.landing = True
+    for d in (0, 1, 2):
+        f._carrier_released_callback(Bool(data=True), d)
+        f._down_alone_callback(Bool(data=True), d)
+        f._arming_feedback_callback(Bool(data=False), d)
+    assert [f.arming_clients[i].calls for i in range(4)] == [1, 1, 1, 0]
+    assert f.abort_pub.msgs == [] and f.fleet_cmd_pub.msgs == [] and f.flying and f.service_disarms == []
+    assert _said(f) == [f'Drone {d + 1} is down at its rest on the landed ring (still on its plate): disarmed alone.'
+                        for d in (0, 1, 2)]
+    m.CentralController._landed_callback(f, Bool(data=True))
+    assert f.service_disarms == [True] and f.abort_pub.msgs == []
+
+
+def test_a_departed_drone_down_alone_reads_as_before(sync):
+    f = _carrier_fake()
+    _flying(f, 3)
+    f.landing = True
+    _down(f, 3)
+    assert _said(f) == ['Drone 4 is down at its rest off the ring: disarmed alone.']
+
+
+def test_a_carrier_release_from_before_this_flight_or_cleared_does_not_count(sync):
+    f = _carrier_fake()
+    f._carrier_released_callback(Bool(data=True), 0)          # latched, arrives on the floor
+    _flying(f, 0, 1)
+    f._down_alone_callback(Bool(data=True), 0)
+    f._carrier_released_callback(Bool(data=True), 1)
+    f._carrier_released_callback(Bool(data=False), 1)
+    f._down_alone_callback(Bool(data=True), 1)
+    assert f.arming_clients[0].calls == 0 and f.arming_clients[1].calls == 0 and f._down_alone == set()
+
+
+def test_arm_clears_the_carrier_releases(sync):
+    f = _carrier_fake()
+    f._carrier_down.add(0)
+    f._arm_fleet = lambda: None
+    m.CentralController._command_callback(f, String(data='ARM'))
+    assert f._carrier_down == set()

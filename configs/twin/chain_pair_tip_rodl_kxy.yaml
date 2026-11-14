@@ -1,0 +1,13 @@
+# configs/twin/chain_pair_tip_kxy.yaml (int_k_xy 5.26) with the rod in the plan and references that balance it, twin only
+# (card docs/experiments/2026-10-31_rod_in_plan.md).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+int_k_xy: 5.26
+tip_detect_m: 0.04
+rod_mass: 0.075
+rod_com: 0.267
+plan_rod_level: true

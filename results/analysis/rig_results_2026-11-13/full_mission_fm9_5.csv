@@ -1,0 +1,21 @@
+flight,registry_id,phase,start_s,end_s,duration_s,n_ours,quad4_by,ring,ring_speed_end_mps,detail
+fm9_5,RIG-1112-fm9_5,"takeoff, creep, pretension and lift ramp (QUAD4 welded on plate 9)",0.000,17.820,17.820,4,ours (carrier),lift,0.005,"hand-over settle done +7.81 s, pretension done and the lift ramp starts +11.29 s; the unload starts with the ring's set-point at 0.92 m of 1.20"
+fm9_5,RIG-1112-fm9_5,"detach: unload over 3 s, our magnet OFF",17.820,20.890,3.070,4,ours (carrier),lift,0.016,"UNLOAD -> UNLOADED (planned 0.48 N, ring tilt 3.1 deg) -> FLEET RESIZED n=3; the set-point reaches 1.20 m at +20.72 s"
+fm9_5,RIG-1112-fm9_5,QUAD4 steps out,20.890,27.100,6.210,3,ours (stepping out),hover,0.012,"DETACH (OCP resize, trajectory held 1.5 s) -> PARTNER RELEASE"
+fm9_5,RIG-1112-fm9_5,his takeoff and approach over the object,27.100,38.290,11.190,3,his planner,hover,0.010,his TAKEOFF +27.21 s
+fm9_5,RIG-1112-fm9_5,pickup try 1 (failed),38.290,66.290,28.000,3,his planner,hover,0.020,failed +57.09 s: contact wait made no progress for 10s; retry from +63.62 s
+fm9_5,RIG-1112-fm9_5,pickup try 2 (failed),66.290,92.390,26.100,3,his planner,hover,0.019,failed +87.79 s: contact wait made no progress for 10s; retry from +90.79 s
+fm9_5,RIG-1112-fm9_5,pickup try 3 (attached),92.390,109.8,17.400,3,his planner,hover,0.024,object attached with xy error 1.2 cm
+fm9_5,RIG-1112-fm9_5,object lift,109.8,124.0,14.200,3,his planner,hover,0.019,object lifted 1.58 m
+fm9_5,RIG-1112-fm9_5,transit to the drop point,124.0,137.3,13.370,3,his planner,hover,0.045,
+fm9_5,RIG-1112-fm9_5,settle and descent over the ring,137.3,154.5,17.170,3,his planner,hover,0.035,descent from +145.76 s
+fm9_5,RIG-1112-fm9_5,drop (release dwell),154.5,155.0,0.430,3,his planner,hover,0.035,object measured away from the magnet
+fm9_5,RIG-1112-fm9_5,"to the re-attach (clear, transit, approach, match)",155.0,158.1,3.130,3,his planner,hover,0.033,
+fm9_5,RIG-1112-fm9_5,descent to contact,158.1,163.5,5.370,3,his planner,hover,0.013,"1 descent(s); CONTACT try 1 xy 15.0 mm, normal +8.5 mm; 2 hold(s) at the 5 cm band"
+fm9_5,RIG-1112-fm9_5,proof 1 (failed),163.5,166.2,2.790,3,his planner,hover,0.023,"PROOF FAILED (lost): drift 73.9 mm, plate rise -29.2 mm"
+fm9_5,RIG-1112-fm9_5,re-contact (descent again),166.2,167.4,1.150,3,his planner,hover,0.040,"1 descent(s); CONTACT try 2 xy 17.7 mm, normal +0.6 mm; 1 hold(s) at the 5 cm band"
+fm9_5,RIG-1112-fm9_5,proof 2 (held),167.4,170.9,3.510,3,his planner,hover,0.023,"ATTACH: proven (try 2), drift 0.3 mm"
+fm9_5,RIG-1112-fm9_5,fold-in (proof -> FLEET RESIZED n=4),170.9,171.0,0.070,3,his planner,hover,0.031,our planner takes QUAD4 over
+fm9_5,RIG-1112-fm9_5,fold-in hold (resize -> trajectory resumes),171.0,172.7,1.700,4,ours (carrier),hover,0.003,the OCP resize; trajectory held 1.5 s
+fm9_5,RIG-1112-fm9_5,hover on four,172.7,186.7,13.980,4,ours (carrier),hover,0.031,
+fm9_5,RIG-1112-fm9_5,LAND (command -> fleet landed and disarmed),186.7,199.7,13.050,4,LAND (every drone),landing,0.000,"every drone lands; the operator DISARM at +199.67 s (ring z 0.02 m, quads z 0.05-0.09 m)"

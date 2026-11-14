@@ -1,0 +1,10 @@
+# configs/rig/m1_release_tip_m2a.yaml with the cable-length loss check at 15 cm (5 Nov): the unannounced release (rel) on the
+# M2A ring. The magnet-marker check (tip_detect_m 0.04) is what detects the release; the stretch check is the backup.
+tip_detect_m: 0.04
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+detach_detect_m: 0.15

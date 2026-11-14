@@ -632,3 +632,13 @@ the split, a_expected zero, the dynamic centre, R7c (`test_quan_law.py`), the ha
 The twin confirms the offline cause: R7b applies the path's acceleration ~1.3x; R7c (once) takes out most of the overshoot,
 leaving an asymmetric residue; without a_expected the law lags 2 s and falls short. Figure:
 docs/figures/review_2026-10-24/fig_quan_lines.png (ours / R6c / R7c on both lines, two cycles).
+
+## The final-tree re-fly (X11, 7 Nov; R4138, R4139; feed F082)
+`x11_c_net_quan_const_katt8_hubcom_hover_L100` (the law at its best reading, R6c, vel_k_att 8, on world C; the slope
+filter, nothing else changed) x2, final masses, one tree (5e7b1d3bd133; diff_sha256 319c020f6359). Both valid and landed:
+146.7 / 141.9 mm 3-D RMS from the target, height +66.6 / +66.9 mm (the ring above it); ring off the quads' centroid
+4.2 mm, quad-quad distances within 0.69 %, estimated tensions within 2.8 %. R2805's exploratory falsifier (> 0.10 m off
+1.0 m) does not fire (at most 81 mm in the first 5 s). Against R2805 / R2812 (R6b) and R2813 (R6c) (110.0 / 118.3 / 109.1 mm, height
+-3.6 / -3.7 / -4.8 mm) not like for like: the tree, the filter and world C's mass split changed (rods 0.075 -> 0.040 kg,
+airframe base 0.435 -> 0.470 kg; quan_rod_mass 0.055 typed); which moved the height is not shown. This card's bars (Q1,
+Q3, Q4, A, O) were never frozen, and our planner on world C did not fly in this batch: the row is reported, not judged.

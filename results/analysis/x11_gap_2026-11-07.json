@@ -1,0 +1,456 @@
+{
+ "what": "X11 the gap table (tab:res_gap; Tier B at 1 m), chunk 9 of docs/claim_batch_2026-11-07.md, final tree and final quadrotor masses, slope filter on the carriers; G120 = x11_r1m_ta_a1 (R4033 / R4032 from chunk 7, R4149 here)",
+ "scorer": "tools/release_bands.py metrics (T6: dtheta from the 5 s pre-window mean, event to +15 s); drop / fault arms cut at the planner's DROP AND LAND or the first ENVELOPE FAULT line on the ARM-stamp clock, as tools/drop_metrics.py maps it (the 23 Oct rows' rule; scratchpad cut_metrics.py), scored '>='",
+ "one_tree": {
+  "code_hash": "5e7b1d3bd133",
+  "diff_sha256_chunk9": "8d39976a843a",
+  "diff_sha256_chunk7": "2863a8be2293",
+  "git": "bf52a8a"
+ },
+ "bars": "Tier B card docs/experiments/2026-10-16_tier_b_support_margin.md section 5: B1-B5 frozen 16 Oct 08:41 by the lab chat before the 0.55 m runs ('set while Wesley is at work'); applied at 1 m by docs/experiments/2026-10-23_refly_1m.md section 5, frozen 23 Oct 02:15 by the lab chat under overnight authority (Wesley's push answer 10 'R as designed'); B3 needs the planned-pull arm G150p, dropped (Wesley 2 Nov 23:03: planned pull not in the thesis); Wesley 5 Nov ~14:00: the gap table re-flies with the integral as flown; F075: bars arbitrary unless compared with another paper",
+ "runs": {
+  "R4033": {
+   "run": "R4033",
+   "kind": "unannounced",
+   "t_event": 32.367,
+   "window_s": 15.0,
+   "dtheta": 6.154366530789554,
+   "t_peak": 0.39400000000000546,
+   "abs_peak": 5.477597281573906,
+   "rise": 4.646183815176627,
+   "sigma_pre": 0.6204159012795876,
+   "n_pre": 236,
+   "ref_still": 6.555999999999997,
+   "t_back": 3.5900000000000034,
+   "post": 0.010461378021659992,
+   "steady": true,
+   "band_deg": 1.2408318025591751,
+   "dtheta_is_lower_bound": false,
+   "cell": "G120 (x11_r1m_ta_a1 r1/r2/r3)",
+   "detection_s_planner_log_10Hz": 0.356,
+   "detach_resize_s_events_csv": 0.433,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.003,
+    "note": "tipped onto its side after the disarm: 10.7 -> 90.2 deg, body -7.5 cm (F077)"
+   }
+  },
+  "R4032": {
+   "run": "R4032",
+   "kind": "unannounced",
+   "t_event": 32.846,
+   "window_s": 15.0,
+   "dtheta": 6.445945430162392,
+   "t_peak": 0.38100000000000733,
+   "abs_peak": 5.591471580759422,
+   "rise": 4.702049245221957,
+   "sigma_pre": 0.4693614620364098,
+   "n_pre": 234,
+   "ref_still": 7.039999999999996,
+   "t_back": 3.6980000000000004,
+   "post": 0.03203153959177786,
+   "steady": true,
+   "band_deg": 0.9387229240728197,
+   "dtheta_is_lower_bound": false,
+   "cell": "G120 (x11_r1m_ta_a1 r1/r2/r3)",
+   "detection_s_planner_log_10Hz": 0.366,
+   "detach_resize_s_events_csv": 0.417,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level"
+   }
+  },
+  "R4149": {
+   "run": "R4149",
+   "kind": "unannounced",
+   "t_event": 33.296,
+   "window_s": 15.0,
+   "dtheta": 6.345693997554686,
+   "t_peak": 0.38400000000000745,
+   "abs_peak": 5.332966491548516,
+   "rise": 4.316092467708485,
+   "sigma_pre": 0.328434412196396,
+   "n_pre": 234,
+   "ref_still": 7.550999999999998,
+   "t_back": 3.7800000000000082,
+   "post": 0.04311533543687813,
+   "steady": true,
+   "band_deg": 0.656868824392792,
+   "dtheta_is_lower_bound": false,
+   "cell": "G120 (x11_r1m_ta_a1 r1/r2/r3)",
+   "detection_s_planner_log_10Hz": 0.366,
+   "detach_resize_s_events_csv": 0.42,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.31,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level (0.9 deg max after)"
+   }
+  },
+  "R4140": {
+   "run": "R4140",
+   "kind": "unannounced",
+   "t_event": 32.268,
+   "window_s": 15.0,
+   "dtheta": 10.123269630681541,
+   "t_peak": 0.4170000000000016,
+   "abs_peak": 9.59374982967643,
+   "rise": 8.912996970505352,
+   "sigma_pre": 0.5100573608248626,
+   "n_pre": 234,
+   "ref_still": 6.539999999999999,
+   "t_back": 3.896000000000001,
+   "post": 0.26265000317178333,
+   "steady": true,
+   "band_deg": 1.0201147216497253,
+   "dtheta_is_lower_bound": false,
+   "cell": "G135",
+   "detection_s_planner_log_10Hz": 0.271,
+   "detach_resize_s_events_csv": 0.314,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level"
+   }
+  },
+  "R4141": {
+   "run": "R4141",
+   "kind": "unannounced",
+   "t_event": 32.833,
+   "window_s": 15.0,
+   "dtheta": 10.497322669429323,
+   "t_peak": 0.44000000000000483,
+   "abs_peak": 9.841415247875377,
+   "rise": 9.14470652364398,
+   "sigma_pre": 0.36039632571789715,
+   "n_pre": 234,
+   "ref_still": 7.039999999999996,
+   "t_back": 3.9849999999999994,
+   "post": 0.22793958727742034,
+   "steady": true,
+   "band_deg": 0.7207926514357943,
+   "dtheta_is_lower_bound": false,
+   "cell": "G135",
+   "detection_s_planner_log_10Hz": 0.366,
+   "detach_resize_s_events_csv": 0.424,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.28,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level"
+   }
+  },
+  "R4142": {
+   "run": "R4142",
+   "kind": "unannounced",
+   "t_event": 32.362,
+   "window_s": 15.0,
+   "dtheta": 15.81315006273269,
+   "t_peak": 0.4939999999999998,
+   "abs_peak": 15.501589107810252,
+   "rise": 15.042291971907467,
+   "sigma_pre": 0.3753052415818603,
+   "n_pre": 237,
+   "ref_still": 6.536000000000001,
+   "t_back": 4.244,
+   "post": 0.5631024104190288,
+   "steady": true,
+   "band_deg": 0.7506104831637206,
+   "dtheta_is_lower_bound": false,
+   "cell": "G150",
+   "detection_s_planner_log_10Hz": 0.265,
+   "detach_resize_s_events_csv": 0.322,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level"
+   }
+  },
+  "R4143": {
+   "run": "R4143",
+   "kind": "unannounced",
+   "t_event": 32.785,
+   "window_s": 15.0,
+   "dtheta": 16.24604723491812,
+   "t_peak": 0.48800000000000665,
+   "abs_peak": 15.830239184385313,
+   "rise": 15.356188601892597,
+   "sigma_pre": 0.27977813815063035,
+   "n_pre": 235,
+   "ref_still": 7.019999999999996,
+   "t_back": 6.062000000000005,
+   "post": 0.5649494230460071,
+   "steady": true,
+   "band_deg": 0.5595562763012607,
+   "dtheta_is_lower_bound": false,
+   "cell": "G150",
+   "detection_s_planner_log_10Hz": 0.289,
+   "detach_resize_s_events_csv": 0.333,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.0,
+    "note": "level"
+   }
+  },
+  "R4144": {
+   "run": "R4144",
+   "kind": "unannounced",
+   "t_event": 32.278,
+   "window_s": 15.0,
+   "dtheta": 29.996130982367887,
+   "t_peak": 0.6160000000000068,
+   "abs_peak": 29.83618540165696,
+   "rise": 29.550647974585154,
+   "sigma_pre": 0.2518230455399248,
+   "n_pre": 235,
+   "ref_still": 6.509,
+   "t_back": 8.036999999999999,
+   "post": 0.6908977266310399,
+   "steady": true,
+   "band_deg": 0.5036460910798496,
+   "dtheta_is_lower_bound": false,
+   "cell": "G165",
+   "detection_s_planner_log_10Hz": 0.296,
+   "detach_resize_s_events_csv": 0.348,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.3,
+    "before_landed": true,
+    "disarm_dz_m": 0.001,
+    "note": "level"
+   }
+  },
+  "R4145": {
+   "run": "R4145",
+   "kind": "unannounced",
+   "t_event": 32.841,
+   "window_s": 0.5805321700861583,
+   "dtheta": 30.313430654199635,
+   "t_peak": 0.5730000000000004,
+   "abs_peak": 30.053123040552283,
+   "rise": 29.76662470657275,
+   "sigma_pre": 0.14924972568230163,
+   "n_pre": 235,
+   "ref_still": 7.024999999999999,
+   "t_back": null,
+   "post": null,
+   "steady": true,
+   "cut": "drop",
+   "cut_after_event_s": 0.5805321700861583,
+   "cut_line": "[dissipative] DROP AND LAND: drone 3: ring tilt 30.2 deg > 30 - every magnet OFF, the ring is droppe",
+   "node_offset_s": 10.076,
+   "dtheta_is_lower_bound": true,
+   "cell": "G165",
+   "detection_s_planner_log_10Hz": 0.277,
+   "detach_resize_s_events_csv": 0.332,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.13,
+    "before_landed": false,
+    "disarm_dz_m": 0.0,
+    "note": "disarmed with the fleet 0.10 s after LANDED (the drop), not alone"
+   }
+  },
+  "R4146": {
+   "run": "R4146",
+   "kind": "unannounced",
+   "t_event": 32.313,
+   "window_s": 0.7067041507907064,
+   "dtheta": 60.774923345079465,
+   "t_peak": 0.6890000000000001,
+   "abs_peak": 60.751157945375056,
+   "rise": 60.67531508143412,
+   "sigma_pre": 0.0866802950139314,
+   "n_pre": 233,
+   "ref_still": 6.521000000000001,
+   "t_back": null,
+   "post": null,
+   "steady": true,
+   "cut": "fault",
+   "cut_after_event_s": 0.7067041507907064,
+   "cut_line": "[Drone 4] ENVELOPE FAULT: payload tilt 61.3 deg > 60.0 - disarming fleet.",
+   "node_offset_s": 24.408,
+   "dtheta_is_lower_bound": true,
+   "cell": "G180, drop rule off",
+   "detection_s_planner_log_10Hz": 0.29,
+   "detach_resize_s_events_csv": 0.375,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": null,
+    "before_landed": null,
+    "disarm_dz_m": 1.888,
+    "note": "disarmed in the air by the fleet fault (1.89 m above rest)"
+   }
+  },
+  "R4147": {
+   "run": "R4147",
+   "kind": "unannounced",
+   "t_event": 32.763,
+   "window_s": 0.6208819042609264,
+   "dtheta": 62.124658179493956,
+   "t_peak": 0.6160000000000068,
+   "abs_peak": 62.149339651048244,
+   "rise": 62.08925320544195,
+   "sigma_pre": 0.06464283149122192,
+   "n_pre": 234,
+   "ref_still": 7.023999999999997,
+   "t_back": null,
+   "post": null,
+   "steady": true,
+   "cut": "fault",
+   "cut_after_event_s": 0.6208819042609264,
+   "cut_line": "[Drone 2] ENVELOPE FAULT: payload tilt 62.7 deg > 60.0 - disarming fleet.",
+   "node_offset_s": 19.048000000000002,
+   "dtheta_is_lower_bound": true,
+   "cell": "G180, drop rule off",
+   "detection_s_planner_log_10Hz": 0.281,
+   "detach_resize_s_events_csv": 0.375,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": null,
+    "before_landed": null,
+    "disarm_dz_m": 1.885,
+    "note": "disarmed in the air by the fleet fault"
+   }
+  },
+  "R4148": {
+   "run": "R4148",
+   "kind": "unannounced",
+   "t_event": 32.274,
+   "window_s": 0.2881900626304841,
+   "dtheta": 21.305383904406447,
+   "t_peak": 0.28000000000000114,
+   "abs_peak": 21.324741489942515,
+   "rise": 21.264890725715965,
+   "sigma_pre": 0.06211368820323959,
+   "n_pre": 234,
+   "ref_still": 6.528000000000002,
+   "t_back": null,
+   "post": null,
+   "steady": true,
+   "cut": "drop",
+   "cut_after_event_s": 0.2881900626304841,
+   "cut_line": "[dissipative] DROP AND LAND: unannounced loss of drone 2 (/drone_1): the survivors span a 180 deg ga",
+   "node_offset_s": 18.353,
+   "dtheta_is_lower_bound": true,
+   "cell": "G180d (drop rule on, optional, n=1)",
+   "detection_s_planner_log_10Hz": null,
+   "detach_resize_s_events_csv": null,
+   "freed_drone": {
+    "disarm_minus_first_at_rest_s": 0.2,
+    "before_landed": true,
+    "disarm_dz_m": 0.001,
+    "note": "disarmed alone 0.20 s after first at rest, before LANDED"
+   }
+  }
+ },
+ "arms": {
+  "G120 (x11_r1m_ta_a1 r1/r2/r3)": {
+   "ids": [
+    "R4033",
+    "R4032",
+    "R4149"
+   ],
+   "mean": 6.315335319502211,
+   "range": 0.2915788993728379,
+   "lower_bound": false
+  },
+  "G135": {
+   "ids": [
+    "R4140",
+    "R4141"
+   ],
+   "mean": 10.310296150055432,
+   "range": 0.37405303874778184,
+   "lower_bound": false
+  },
+  "G150": {
+   "ids": [
+    "R4142",
+    "R4143"
+   ],
+   "mean": 16.029598648825406,
+   "range": 0.4328971721854291,
+   "lower_bound": false
+  },
+  "G165": {
+   "ids": [
+    "R4144",
+    "R4145"
+   ],
+   "mean": 30.15478081828376,
+   "range": 0.3172996718317478,
+   "lower_bound": true
+  },
+  "G180, drop rule off": {
+   "ids": [
+    "R4146",
+    "R4147"
+   ],
+   "mean": 61.44979076228671,
+   "range": 1.349734834414491,
+   "lower_bound": true
+  },
+  "G180d (drop rule on, optional, n=1)": {
+   "ids": [
+    "R4148"
+   ],
+   "mean": 21.305383904406447,
+   "range": 0.0,
+   "lower_bound": true
+  }
+ },
+ "B1_pairs": [
+  {
+   "pair": "G120 (x11_r1m_ta_a1 r1/r2/r3) -> G150",
+   "gap": 9.714263329323195,
+   "need": 1.0,
+   "resolved": true,
+   "sign_ok": true
+  },
+  {
+   "pair": "G150 -> G180, drop rule off",
+   "gap": 45.420192113461304,
+   "need": 2.699469668828982,
+   "resolved": true,
+   "sign_ok": true
+  }
+ ],
+ "B2_neighbour_pairs": [
+  {
+   "pair": "G120 (x11_r1m_ta_a1 r1/r2/r3) -> G135",
+   "gap": 3.9949608305532216,
+   "need": 1.0,
+   "resolved": true,
+   "sign_ok": true
+  },
+  {
+   "pair": "G135 -> G150",
+   "gap": 5.719302498769974,
+   "need": 1.0,
+   "resolved": true,
+   "sign_ok": true
+  },
+  {
+   "pair": "G150 -> G165",
+   "gap": 14.125182169458355,
+   "need": 1.0,
+   "resolved": true,
+   "sign_ok": true
+  },
+  {
+   "pair": "G165 -> G180, drop rule off",
+   "gap": 31.29500994400295,
+   "need": 2.699469668828982,
+   "resolved": true,
+   "sign_ok": true
+  }
+ ],
+ "B4": {
+  "rule": "every G120-G150 absolute peak < 30 deg",
+  "max_abs_peak": 15.830239184385313
+ },
+ "late_ticks": "planner ticks over 100 ms in the run span (exact clock, t_ready_sim): 0-0.74 % except R4146 1.70 % (7 of 411, max 189 ms; 5 in the 6.3-3.6 s before the release; the span ends 8 s after the fault); 0 failed solves; RTF 0.71-0.78"
+}

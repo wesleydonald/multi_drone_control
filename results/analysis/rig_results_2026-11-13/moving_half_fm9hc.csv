@@ -1,0 +1,48 @@
+flight,registry_id,phase,start_s,end_s,duration_s,n_ours,quad4_by,ring,ring_speed_end_mps,detail
+fm9hc_2,RIG-1112-fm9hc_2,takeoff and lift on three,0.000,20.520,20.520,3,"his stack, on its mat",lift,0.004,his TAKEOFF (QUAD4 off its mat holding the object) +14.17 s
+fm9hc_2,RIG-1112-fm9hc_2,"hover hold 5 s, then the orbit starts",20.520,25.610,5.080,3,his planner,hover,0.008,
+fm9hc_2,RIG-1112-fm9hc_2,his takeoff and loaded climb (QUAD4 track),14.170,25.180,11.020,3,his planner,lift / hover / circle,0.002,overlaps the two rows above and below
+fm9hc_2,RIG-1112-fm9hc_2,transit to the moving drop point,25.180,34.150,8.970,3,his planner,hover / circle,0.131,the orbit starts +25.61 s
+fm9hc_2,RIG-1112-fm9hc_2,settle and descent over the moving ring,34.150,43.980,9.830,3,his planner,circle,0.099,descent from +35.22 s
+fm9hc_2,RIG-1112-fm9hc_2,drop (release dwell),43.980,44.420,0.440,3,his planner,circle,0.123,ring speed at the drop 0.099 m/s
+fm9hc_2,RIG-1112-fm9hc_2,clear the drop zone,44.420,44.900,0.480,3,his planner,circle,0.158,his TRANSIT_TO_REATTACH starts the attach pause
+fm9hc_2,RIG-1112-fm9hc_2,the orbit slows to rest (3 s),44.900,47.900,3.000,3,his planner,slowing,0.045,
+fm9hc_2,RIG-1112-fm9hc_2,approach and match over plate 9,47.900,55.550,7.640,3,his planner,at rest,0.054,
+fm9hc_2,RIG-1112-fm9hc_2,descent to contact,55.550,102.5,46.930,3,his planner,at rest,0.027,"4 descent(s); CONTACT try 1 xy 8.4 mm, normal -0.1 mm; 10 hold(s) at the 5 cm band; retried: ATTACH_READY -> APPROACH_ABOVE_TARGET: bottom hold left: the tip sunk below the plate (off its edge); lifting clear to retry | ATTACH_READY -> APPROACH_ABOVE_TARGET: bottom hold left: moving or far off the plate; lifting clear to retry | DESCEND_TO_ATTACHMENT -> APPROACH_ABOVE_TARGET: attachment descent aborted after loss of relative alignment"
+fm9hc_2,RIG-1112-fm9hc_2,proof 1 (held),102.5,104.9,2.390,3,his planner,at rest,0.025,"ATTACH: proven (try 1), drift 1.2 mm"
+fm9hc_2,RIG-1112-fm9hc_2,fold-in (proof -> FLEET RESIZED n=4),104.9,104.9,0.000,3,his planner,at rest,0.025,our planner takes QUAD4 over
+fm9hc_2,RIG-1112-fm9hc_2,fold-in hold (resize -> trajectory resumes),104.9,106.7,1.780,4,ours (carrier),at rest,0.047,the OCP resize; trajectory held 1.5 s; the orbit speeds back up over 3 s from +105.07 s
+fm9hc_2,RIG-1112-fm9hc_2,circle on four,106.7,124.5,17.890,4,ours (carrier),circle,0.128,
+fm9hc_2,RIG-1112-fm9hc_2,LAND (command -> fleet landed and disarmed),124.5,138.1,13.560,4,LAND (every drone),landing,0.000,"every drone lands; the operator DISARM at +137.12 s (ring z 0.02 m, quads z 0.11-0.16 m)"
+fm9hc_4,RIG-1112-fm9hc_4,takeoff and lift on three,0.000,20.620,20.620,3,"his stack, on its mat",lift,0.006,his TAKEOFF (QUAD4 off its mat holding the object) +21.00 s
+fm9hc_4,RIG-1112-fm9hc_4,"hover hold 5 s, then the orbit starts",20.620,25.790,5.170,3,"his stack, on its mat",hover,0.006,
+fm9hc_4,RIG-1112-fm9hc_4,his takeoff and loaded climb (QUAD4 track),21.000,32.540,11.540,3,his planner,lift / hover / circle,0.116,overlaps the two rows above and below
+fm9hc_4,RIG-1112-fm9hc_4,transit to the moving drop point,32.540,42.780,10.230,3,his planner,hover / circle,0.123,the orbit starts +25.79 s
+fm9hc_4,RIG-1112-fm9hc_4,settle and descent over the moving ring,42.780,52.580,9.800,3,his planner,circle,0.119,descent from +43.81 s
+fm9hc_4,RIG-1112-fm9hc_4,drop (release dwell),52.580,53.010,0.440,3,his planner,circle,0.140,ring speed at the drop 0.119 m/s
+fm9hc_4,RIG-1112-fm9hc_4,clear the drop zone,53.010,53.490,0.480,3,his planner,circle,0.127,his TRANSIT_TO_REATTACH starts the attach pause
+fm9hc_4,RIG-1112-fm9hc_4,the orbit slows to rest (3 s),53.490,56.490,3.000,3,his planner,slowing,0.019,
+fm9hc_4,RIG-1112-fm9hc_4,approach and match over plate 9,56.490,70.780,14.280,3,his planner,at rest,0.012,
+fm9hc_4,RIG-1112-fm9hc_4,descent to contact,70.780,83.720,12.940,3,his planner,at rest,0.028,"1 descent(s); CONTACT try 1 xy 12.7 mm, normal -1.4 mm; 8 hold(s) at the 5 cm band"
+fm9hc_4,RIG-1112-fm9hc_4,proof 1 (held),83.720,87.150,3.430,3,his planner,at rest,0.023,"ATTACH: proven (try 1), drift 1.3 mm"
+fm9hc_4,RIG-1112-fm9hc_4,fold-in (proof -> FLEET RESIZED n=4),87.150,87.160,0.010,3,his planner,at rest,0.023,our planner takes QUAD4 over
+fm9hc_4,RIG-1112-fm9hc_4,fold-in hold (resize -> trajectory resumes),87.160,88.900,1.740,4,ours (carrier),at rest,0.039,the OCP resize; trajectory held 1.5 s; the orbit speeds back up over 3 s from +87.35 s
+fm9hc_4,RIG-1112-fm9hc_4,circle on four,88.900,112.2,23.290,4,ours (carrier),circle,0.092,
+fm9hc_4,RIG-1112-fm9hc_4,LAND (command -> fleet landed and disarmed),112.2,125.5,13.300,4,LAND (every drone),landing,0.000,every drone lands; the fleet disarmed by its own landed test
+fm9hc_5,RIG-1112-fm9hc_5,takeoff and lift on three,0.000,20.390,20.390,3,"his stack, on its mat",lift,0.006,his TAKEOFF (QUAD4 off its mat holding the object) +22.90 s
+fm9hc_5,RIG-1112-fm9hc_5,"hover hold 5 s, then the orbit starts",20.390,25.570,5.180,3,"his stack, on its mat",hover,0.007,
+fm9hc_5,RIG-1112-fm9hc_5,his takeoff and loaded climb (QUAD4 track),22.900,33.100,10.200,3,his planner,lift / hover / circle,0.111,overlaps the two rows above and below
+fm9hc_5,RIG-1112-fm9hc_5,transit to the moving drop point,33.100,45.130,12.030,3,his planner,hover / circle,0.089,the orbit starts +25.57 s
+fm9hc_5,RIG-1112-fm9hc_5,settle and descent over the moving ring,45.130,54.960,9.830,3,his planner,circle,0.117,descent from +46.20 s
+fm9hc_5,RIG-1112-fm9hc_5,drop (release dwell),54.960,55.400,0.430,3,his planner,circle,0.135,ring speed at the drop 0.117 m/s
+fm9hc_5,RIG-1112-fm9hc_5,clear the drop zone,55.400,55.870,0.470,3,his planner,circle,0.117,his TRANSIT_TO_REATTACH starts the attach pause
+fm9hc_5,RIG-1112-fm9hc_5,the orbit slows to rest (3 s),55.870,58.870,3.000,3,his planner,slowing,0.028,
+fm9hc_5,RIG-1112-fm9hc_5,approach and match over plate 9,58.870,60.900,2.030,3,his planner,at rest,0.021,
+fm9hc_5,RIG-1112-fm9hc_5,descent to contact,60.900,87.560,26.660,3,his planner,at rest,0.007,"2 descent(s); CONTACT try 1 xy 17.5 mm, normal +33.9 mm; 8 hold(s) at the 5 cm band; retried: DESCEND_TO_ATTACHMENT -> APPROACH_ABOVE_TARGET: attachment descent aborted after loss of relative alignment"
+fm9hc_5,RIG-1112-fm9hc_5,proof 1 (failed),87.560,88.410,0.850,3,his planner,at rest,0.029,"PROOF FAILED (lost): drift 73.7 mm, plate rise -0.4 mm"
+fm9hc_5,RIG-1112-fm9hc_5,re-contact (descent again),88.410,91.180,2.760,3,his planner,at rest,0.013,"1 descent(s); CONTACT try 2 xy 16.5 mm, normal +0.5 mm; 2 hold(s) at the 5 cm band"
+fm9hc_5,RIG-1112-fm9hc_5,proof 2 (held),91.180,94.710,3.540,3,his planner,at rest,0.051,"ATTACH: proven (try 2), drift 2.5 mm"
+fm9hc_5,RIG-1112-fm9hc_5,fold-in (proof -> FLEET RESIZED n=4),94.710,94.750,0.040,3,his planner,at rest,0.051,our planner takes QUAD4 over
+fm9hc_5,RIG-1112-fm9hc_5,fold-in hold (resize -> trajectory resumes),94.750,96.560,1.810,4,ours (carrier),at rest,0.056,the OCP resize; trajectory held 1.5 s; the orbit speeds back up over 3 s from +94.96 s
+fm9hc_5,RIG-1112-fm9hc_5,circle on four,96.560,116.6,20.040,4,ours (carrier),circle,0.081,
+fm9hc_5,RIG-1112-fm9hc_5,LAND (command -> fleet landed and disarmed),116.6,130.7,14.070,4,LAND (every drone),landing,0.000,every drone lands; the fleet disarmed by its own landed test

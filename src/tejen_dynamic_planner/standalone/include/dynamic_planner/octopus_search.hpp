@@ -121,6 +121,11 @@ struct OctopusResult {
     double initial_q2_radius_m = 0.0;
     bool initial_q2_box_valid = false;
     bool initial_q2_radius_valid = false;
+
+    // Provenance of an accepted padded partial. Root q2 has index 2 and no
+    // searched extension; >=3 is an actual searched history. -1 means none.
+    // Do not infer this from numerical control-point distances.
+    int partial_fallback_selected_index = -1;
 };
 
 class OctopusSearch {

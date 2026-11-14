@@ -85,9 +85,9 @@ def test_newcomer_rod_masses_and_pivot(start):
     links = {lk.get('name'): lk for lk in m.findall('link')}
     mass = {k: float(v.findtext('inertial/mass')) for k, v in links.items()}
     assert sum(mass.values()) == pytest.approx(0.55)                  # rig drone_mass
-    assert sum(v for k, v in mass.items() if not k.startswith('magnet')) == pytest.approx(0.475)
-    assert mass['magnet_arm'] == pytest.approx(0.040)
-    assert mass['magnet_tip_link'] == pytest.approx(0.035)
+    assert sum(v for k, v in mass.items() if not k.startswith('magnet')) == pytest.approx(0.510)   # 4 Nov links
+    assert mass['magnet_arm'] == pytest.approx(0.002)
+    assert mass['magnet_tip_link'] == pytest.approx(0.038)
     arm = links['magnet_arm']
     assert arm.find('pose').get('relative_to') == 'base_link'
     assert _pose(arm)[2] == pytest.approx(-0.04)                     # pivot 4 cm below centre
@@ -97,7 +97,7 @@ def test_newcomer_rod_masses_and_pivot(start):
     assert _pose(tip)[:3] == pytest.approx([0.0, 0.0, -0.55])
     assert rod == pytest.approx(0.55)
     assert _pose(arm.find('inertial'))[2] == pytest.approx(-0.275)   # spread along the rod
-    assert float(arm.findtext('inertial/inertia/ixx')) == pytest.approx(0.04 * 0.55 ** 2 / 12,
+    assert float(arm.findtext('inertial/inertia/ixx')) == pytest.approx(0.002 * 0.55 ** 2 / 12,   # the 4 Nov rod
                                                                           rel=1e-3)
     assert 0.04 + rod == pytest.approx(0.59)                         # body to tip, hanging
 
@@ -257,22 +257,22 @@ LEGACY_WORLD = ASSETS / 'old_worlds' / 'three_attach_partner_attached.sdf'
 LEGACY_MODEL = ASSETS / 'models' / 'x3_drone3_magnet_rod_partner_attached.sdf'
 BALL = ASSETS / 'tejen' / 'payload_model.sdf'
 # the existing outputs when the pickup variant was added: it leaves them byte for byte. A deliberate
-# change to one of them updates its digest here.
+# change to one of them updates its digest here (4 Nov: the twin's links, masses and inertias only).
 OLD_DIGESTS = {
-    FREE: '807924f97b3872f23efe38c88d6473b0de9dab332cfbd487d1bfe1872714f076',
-    WELDED: '587805ff1ce120845e0e61a7fceeb25e05aa881654993f10df8b2e3a528d830b',
+    FREE: 'fcb01c96c921df24fb1f0484faf18bf0b2e9be08e43894ff6b716ea9c3ce49ed',
+    WELDED: 'aa173e7fee5e4e3cdffc82174d11d686299975a2c8f608df1199a443b8ddd8ec',
     'three_rigid_ground_rig_attach_push.sdf':
-        'aa2a7e30f41839aab8b4f4691f5acdfe52d02eec0e1a529c64f53990e7f80cd8',
-    f"models/{MODELS['free']}": 'ff36ee07b5e489a5fe617b0d7dd65a68a992324f873430953828509716bf94f1',
-    f"models/{MODELS['welded']}": '5839b65674a9cf31e03937a0a5940c2b13b219ef4bfaf33c75b410b306de3fd6',
+        'df40479c270b86849c05ad8acbfa0ce91b2a39cb071d80e3566de2e3c39b7972',
+    f"models/{MODELS['free']}": '4d93dc1a82e7b26702311969c8f8e9cab4d25ab7d958cefe2826d10ffbe32626',
+    f"models/{MODELS['welded']}": '251f9d00d6bd3a1089ec1746153f6e20232c2c92f37620812862a4f3afc94359',
 }
 # the combined M1 subtest's outputs when the welded pickup variant (the full M1) was added: it leaves them
 # byte for byte too
 SUBTEST_DIGESTS = {
-    PICKUP: 'ac07b0e1d68159ee91b48cdfde1c90d24d909939a34f498704c40fc4d7db02af',
-    f'models/{PICKUP_MODEL}': 'ec0a10dc0d5146206cd970aa2611f48ab2d6e0ab0e53da1eb070a6d73f680569',
+    PICKUP: '7c50d871e882f1697ceeade9d3e9c0372095bea0618349563acc68df739aadde',
+    f'models/{PICKUP_MODEL}': '4ba570b116d6982fbbb91383e57c1590665f27d37f94e86f267554e614ed3fa9',
     BALL_COPY: '44c07dd5313a33d625b040a0a264faa21cbccc8b237f42abe2931c877a567ace',
-    PICKUP_PUSH: 'e5d4ddf1411c6b4ae76ad8e7bff200345f06aa67c1e38b83722ff4b9488d16b6',
+    PICKUP_PUSH: '6938355f5764fe45fdc0889287fe49eb85529d9c1c6293e2d5d0990e5fe87898',
 }
 
 
@@ -571,8 +571,8 @@ def test_ball_clearance_is_measured_to_each_newcomers_own_rod():
 
 WELDED_PICKUP_PUSH = 'three_rigid_ground_rig_attach_welded_pickup_push.sdf'
 FULL_M1_DIGESTS = {   # the full M1's world and model when the push variant was added: byte for byte
-    WELDED_PICKUP: 'e8b9c5baf6e1f4697fd849c9636753a11376f344218ab2b6cd9195b3b58e6fef',
-    f'models/{WELDED_PICKUP_MODEL}': '790dc75f8d161a8fc3f01f46e0433e917e335432a76aa6f67d08374deb1a3dc8',
+    WELDED_PICKUP: '55933f6f5434e85e357a96364c6d13f705d110d956848029fd90cf5fe6f4214d',
+    f'models/{WELDED_PICKUP_MODEL}': '53be6dc31186542cc7d9179e48ab84d3c4e8a34953c57b5c7f683d0808b79960',
 }
 
 

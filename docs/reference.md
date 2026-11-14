@@ -8,7 +8,7 @@ Where the rest went:
 - **What is running and what's next:** `docs/SESSION_STATE.md`.
 - **Decisions:** `docs/decisions.md`. The locked ones are in `CLAUDE.md`.
 - **Run results:** `results/registry.csv`.
-- **Plans:** `docs/archive/plan_m1_remaining_2026-10-11.md` and `docs/thesis_plan_2026-10-11.md`.
+- **Plans:** `docs/archive/plan_m1_remaining_2026-10-11.md` and `docs/archive/thesis_plan_2026-10-11.md`; the current plan is `docs/plan_rescope_2026-10-30.md` with `docs/handin_plan.md`.
 - **The old sections 3 (status), 4 (results to 7 Oct), 5 (locked decisions), 7 (open problems) and 8 (plan):** in git,
   `git show 0e91d86:CURRENT_STATE.md`.
 
@@ -289,6 +289,10 @@ runs the geometry check; `fleet arm|takeoff|land|disarm|estop`.
 - **The partner model's pickup DetachableJoint** holds the tip to the ball until his mission sends
   `/pickup/detach`; a bench without his mission uses a `_nopick` copy or GZ_PUB it (R0654–R0659 void).
 - **Runner events are time-sorted**: a WAIT placed before the event it waits for blocks forever (R0671).
+- **Node logs and `events.csv` are on different clocks** in a twin run: the planner's and trackers' logs on the world clock, `events.csv`
+  on the runner's, 3-21 s apart and different per run (31 Oct). A window taken from `events.csv` on a node log reads the wrong seconds.
+- **`events.csv` can lose a line.** The runner reads the planner's lines off `/rosout` (R3456 lost one `REJOIN WELD` of 26, 2 Nov). A count that looks one short: check `launch.log` first.
+- **A release the planner never saw reads as a good chain.** R3469, R3470: `/drone_5`'s release fell under the stretch check's 3 cm rise rule, n stopped at 5 and the run still passed. Read the planner's n against the plan before comparing arms.
 
 - **Lab: switching back to an older tree breaks the build** (11 Oct).
   - The lab builds with `--symlink-install` into one `~/mdc`. Files that exist only in the newer tree (for example

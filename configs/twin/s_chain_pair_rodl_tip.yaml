@@ -1,0 +1,11 @@
+# s_chain_pair_rodl.yaml with the marker check typed, tip_detect_m 0.04 (the reviewer of 2 Nov: the same detector as the no-rod arms).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+rod_mass: 0.075
+rod_com: 0.267
+plan_rod_level: true
+tip_detect_m: 0.04

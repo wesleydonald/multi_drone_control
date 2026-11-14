@@ -99,6 +99,14 @@ def test_slot_builds_both_solvers_before_the_run():
     assert warm.endswith('exec "$@"') and cmd[k + 4:k + 6] == ['python3', 'tools/run_experiment.py']
 
 
+def test_a_config_with_the_rod_in_its_planner_warms_through_its_config():
+    """A warm-up by fleet size and masses builds rod 0: the planner would compile in the run's ready window."""
+    exp = os.path.join(LB.REPO, 'configs', 'experiments')
+    assert LB.planner_has_rod(os.path.join(exp, 'x1_sqT_ours_rodl_check.yaml')) is False     # unreadable: said, not fatal
+    assert LB.planner_has_rod(os.path.join(exp, 'rodl_u_meas_d00.yaml'))                     # plan_rod_level typed
+    assert LB.planner_has_rod(os.path.join(exp, 'x1_sqTrodl_noxy.yaml'))                     # in its params file
+
+
 def test_the_warm_up_can_build_what_the_config_loads():
     """--warm-from-config (card 2026-10-23_scalability): every resize size, the ring inertia and the rod model of the
     config, built in the slot before the run; off, the warm-up is the fleet size with its masses, as before."""

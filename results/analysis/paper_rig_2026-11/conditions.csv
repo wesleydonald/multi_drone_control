@@ -1,0 +1,24 @@
+# What paper_rig.py cannot read from a flight's launch line. One line per flight or pattern (day/name, fnmatch: * and ?);
+# the last matching line wins. funnel: yes / no (default: no before 11 Nov, "?" from 11 Nov on, so a missing line shows
+# up in the tables as "funnel ?"). exclude: any text leaves the flight out of the main tables (say why in note).
+# After each session add its lines, e.g.:
+#   2026-11-11/nrtf*,yes,,the funnel on plate 9 (v2 or v3: say which)
+#   2026-11-11/rel*,yes,,QUAD4's magnet caught in the funnel on plate 9
+#   2026-11-12/nr9m_3,,yes,the wrong body set streamed
+flight,funnel,exclude,note
+2026-10-08/*,no,,
+2026-11-04/*,no,,
+2026-11-05/*,no,,
+2026-11-11/k1zo*,yes,,funnel v4 (TPU) on plate 9 (no attach in this line); cone bands not relevant
+2026-11-11/nrtfc*,yes,,funnel v4 (TPU) on plate 9; the 5 cm bands (BAND=cone)
+2026-11-11/fm9hc*,yes,,the supervisor's funnel (105 mm) on plate 9; 5 cm bands; release 0.03
+2026-11-11/fm9c*,yes,,the supervisor's funnel (105 mm) on plate 9; 5 cm bands; release 0.03
+2026-11-11/nrtfc,yes,yes,VOID: QUAD4's magnet was on plate 1 at launch (RIG-1111-nrtfc)
+2026-11-11/nrtfc_3,yes,,funnel v4; caught and proven then the magnet let go 4 s later (a loose magnet lead; RIG-1111-nrtfc_3c)
+2026-11-11/nrtfc_4,yes,yes,the start weld slid off in the pretension (the loose magnet lead); no lift
+2026-11-11/nrtfc_5,yes,,the supervisor's funnel (105 mm) on plate 9 (Wesley 11 Nov); the 5 cm bands
+2026-11-11/fm9hc_2,yes,yes,the held object was lost in his takeoff (a weak magnet connection); landed in the lift
+2026-11-11/fm9hc_4,yes,yes,as fm9hc_2
+2026-11-11/fm9hc_5,yes,yes,landed in the creep
+2026-11-11/fm9c_4,yes,,the supervisor's funnel; the BIGGER object (OBJ=big); the circle paused for the pickup
+2026-11-11/fm9c_6,yes,,the supervisor's funnel; the BIGGER object; fly-away after the object fell off (RIG-1111-fm9c_6c)

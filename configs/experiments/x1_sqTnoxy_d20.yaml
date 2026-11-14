@@ -1,0 +1,108 @@
+# Final-tree claim copy of configs/experiments/x1_sqT_d20.yaml for the batch of 7-8 Nov (docs/claim_batch_2026-11-07.md); the source stays (registry rows cite it). Changed: params x1_sqT_noxy.yaml.
+criteria:
+  forbid_abort: false
+  min_payload_z: -1.0
+  min_peak_payload_z: 0.5
+description: 'Final-tree claim copy of x1_sqT_d20 (docs/claim_batch_2026-11-07.md): X1 cell sqT (a T after the release), int_k_xy 0 through configs/twin/x1_sqT_noxy.yaml by Wesley''s fallback of 31 Oct 17:16 (decisions.md: int_k_xy 0 typed in the cells that form a T, now that the rod-in-plan fix was reversed on 4 Nov ~23:00); the sideways integral is off for the whole flight, so a steady sideways offset is not cancelled (on the new links R3701: the T level within 1.8 deg, 47 mm off its point; with it on R3699/R3700 leaned 16.5-17.8 deg). Was: X1 uneven cell sqT: the square (four_rigid_ground_rig_L100, typed 0,270,180,90 = plates 0/9/6/3, 0.86 kg ring),
+  unannounced RELEASE of plate 9 (drone 1) at 25 s in hover leaving a T (gap 180 deg), LAND 20 s later; twin only: the trackers''
+  ring-tilt drop at 80 deg (configs/twin/x1_sqT.yaml) and the 60 deg ring envelope off (payload_tilt_envelope false), so the
+  57-61 deg transient is compared, not dropped. Otherwise x1_h4. Arm late resize: resize_delay_s 2.0. card docs/experiments/2026-10-30_x1_release_ablation.md,
+  addendum sqT (bars frozen 30 Oct ~15:20). Falsifier (U1): the no-resize arm within 1 deg of tilt rise, 5 mm of dip and 1
+  deg of settled tilt of ours, no loss in either.'
+events:
+- do: ARM
+  t: 3.0
+- do: TAKEOFF
+  t: 6.0
+- arg: 0.3 60
+  do: WAIT_LIFT
+  t: 8.0
+- arg: 1
+  do: RELEASE
+  t: 25.0
+- do: LAND
+  t: 45.0
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2,3
+fleet:
+  n_total: 4
+  num_drones: 4
+io_launch:
+  args:
+    detach: true
+    num_drones: 4
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    tether_tips: true
+    tether_len: 1.0
+  file: sim_io_launch.py
+launch:
+  args:
+    departed_land: true
+    attach_azimuths_deg: 0,270,180,90
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    mode: dissipative
+    num_drones: 4
+    params_file: /home/wesley/multi_drone_control/configs/twin/x1_sqT_noxy.yaml
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    departed_ground_idle: true
+    plan_sqp_iters: 5
+    plan_fast_refs: true
+    resize_delay_s: 2.0
+    payload_tilt_envelope: false
+  file: sim_control_launch.py
+  package: bringup
+name: x1_sqTnoxy_d20
+timing:
+  duration_s: 135.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 2.0
+world: four_rigid_ground_rig_L100.sdf
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.0
+      - -4.6
+      - 2.9
+      look_at:
+      - 0.35
+      - 0.0
+      - 1.1
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

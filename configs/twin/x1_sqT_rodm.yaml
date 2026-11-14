@@ -1,0 +1,12 @@
+# X1's uneven cell sqT with the planner modelling the twin's rod mass (T-offset forensics, 30 Oct,
+# docs/analysis/t_offset_forensics_2026-10-30.md: the 0.075 kg rod pulls the ring ~0.29 N toward the T's middle carrier,
+# unmodelled at rod_mass 0): configs/twin/x1_sqT.yaml plus rod_mass 0.075 kg, rod_com 0.27 m from the ring end. Twin only,
+# exploratory; one variable against x1_sqT_ours.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 80.0
+rod_mass: 0.075
+rod_com: 0.27

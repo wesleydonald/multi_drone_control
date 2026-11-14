@@ -1,0 +1,7 @@
+run,source,start,end,t_start,t_end,window_s,mean,median,tmean,min,max,n,tilt_at_start,tilt_at_end
+RIG-1105-sq8_2,bag /payload/motion_capture_state (all samples),magnet OFF,FLEET RESIZED n=4,1793832639.091,1793832660.626,21.535,15.59,13.22,15.59,0.9,30.11,2015,1.14,28.25
+RIG-1105-sq8_2,sq8_2_run/logs/run.csv (50 Hz grid),magnet OFF,FLEET RESIZED n=4,1793832639.091,1793832660.626,21.535,15.59,13.25,15.58,0.9,30.11,1077,1.16,28.25
+R3708,"logs/run.csv quaternion (sim time, 50 Hz)",RELEASED,REWELD,35.711,55.087,19.376,9.13,8.49,9.13,0.13,27.84,908,0.02,6.82
+R3712,"logs/run.csv quaternion (sim time, 50 Hz)",RELEASED,REWELD,35.438,54.737,19.299,11.93,11.43,11.92,0.23,28.44,903,0.1,15.03
+R3714,"logs/run.csv quaternion (sim time, 50 Hz)",RELEASED,REWELD,35.82,55.189,19.369,11.55,11.19,11.55,0.31,26.85,907,0.08,14.7
+R3715,"logs/run.csv quaternion (sim time, 50 Hz)",RELEASED,REWELD,35.679,55.048,19.369,12.33,12.02,12.32,0.06,27.54,907,0.01,15.7

@@ -14,6 +14,10 @@ The pendulum is his IRL math, unchanged (motion_capture_publisher_irl.compute_pe
 is the body pose plus R(q) @ (0, 0, anchor_offset_z) (his IRL -0.030), r = marker - anchor,
 phi = atan2(r_x, -r_z), theta = atan2(r_y, -r_z), the rates over the marker's sample times through an
 8-sample mean, and no estimate from a body/marker pair older than max_pair_age_s (his 0.20 s).
+
+A second instance of his stack (partner_mission instance:=d<d>) runs this node with ns /tejen_d<d> on its own drone's
+body and marker; tip_msg_type motion_capture_state takes the marker as one of our mocap's extra bodies
+(/drone_<d>/magnet_tip_state) instead of the magnet-tip PoseStamped.
 """
 from collections import deque
 import math
@@ -23,6 +27,8 @@ import rclpy
 from geometry_msgs.msg import PoseArray, PoseStamped
 from interfaces.msg import MotionCaptureState
 from rclpy.node import Node
+
+TIP_TYPES = {'pose_stamped': PoseStamped, 'motion_capture_state': MotionCaptureState}
 
 
 def _rot(q_wxyz):
@@ -80,8 +86,13 @@ class PartnerRigState(Node):
         body = str(p('body_topic', '/drone_3/motion_capture_state').value)
         tip = str(p('tip_topic', '/magnet_tip_pose').value)
         ball = str(p('ball_topic', '/pickup/motion_capture_state').value)
+        self.label = str(p('label', 'QUAD4').value)
+        # the marker as our mocap's magnet-tip PoseStamped, or as an extra body's MotionCaptureState (same header and pose)
+        tip_type = str(p('tip_msg_type', 'pose_stamped').value)
+        if tip_type not in TIP_TYPES:
+            raise ValueError(f'tip_msg_type {tip_type!r}: one of {sorted(TIP_TYPES)}')
         self.create_subscription(MotionCaptureState, body, self._body_cb, 10)
-        self.create_subscription(PoseStamped, tip, self._tip_cb, 10)
+        self.create_subscription(TIP_TYPES[tip_type], tip, self._tip_cb, 10)
         self.create_subscription(MotionCaptureState, ball, self._ball_cb, 10)
         self.get_logger().info(
             f'[partner_rig_state] {body} + {tip} -> {ns}/magnet_tip_pose, {ns}/pendulum_swing_state '
@@ -102,7 +113,7 @@ class PartnerRigState(Node):
         self.tip_pub.publish(out)
         t = self._now()
         if self._body is None or t - self._body[0] > self.max_pair_age_s:
-            self.get_logger().warn('[partner_rig_state] no pendulum: QUAD4 body and magnet marker too far apart '
+            self.get_logger().warn(f'[partner_rig_state] no pendulum: {self.label} body and magnet marker too far apart '
                                    'in time', throttle_duration_sec=2.0)
             return
         tp = msg.pose.position

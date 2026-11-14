@@ -214,7 +214,8 @@ def render(run_dir, cameras=None, start=None, end=None, crf=18, out_dir=None, ve
     t0, t1 = max(t0, lo), min(t1, hi - 2.0 / fps)     # the last slot well inside the log
     if t1 <= t0:
         raise SystemExit(f'nothing to render: [{t0:.2f}, {t1:.2f}] s of a log [{lo:.2f}, {hi:.2f}]')
-    out_dir = out_dir or os.path.join(run_dir, 'video')
+    # absolute: gz runs with cwd=simulation_assets, so a relative server-config path would not be found
+    out_dir = os.path.abspath(out_dir or os.path.join(run_dir, 'video'))
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.basename(run_dir).split('_')[0]
 

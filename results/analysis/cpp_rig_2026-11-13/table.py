@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""metrics.csv -> table.md (three markdown tables keyed by flight, then the findings in findings.md)."""
+import os
+
+import numpy as np
+import pandas as pd
+
+from common import FLIGHTS, HERE
+
+TRAJ = {'fig_8': 'fig-8', 'orbit': 'circle', 'hover': 'hover'}
+
+# Written from metrics.csv of 13 Nov 2026 (17:30); rerunning the scripts does not update these lines.
+FINDINGS = """
+## Findings (numbers from the tables above; exploratory, no bars)
+
+1. 14 flights ran his C++ planner: 7 PASS, 1 PARTIAL (fm9hc: captured, the drop missed the net), 5 FAIL (no capture,
+   each ended by our LAND), 1 ABORT (fm9h8_4: the position limit 6.2 s after his TAKEOFF, before any C++ hand-over).
+   The four FROZEN-line flights all passed: figure-eight (fm9h8_13), circle (fm9hc_10, fm9hc_11), hover (fm9h_2).
+2. Moving ring, frozen line: C++ transit 4.0-6.4 s with the ring at 0.121-0.124 m/s; hover (swing 5 deg, spline 4,
+   not 3 / 2) 11.5 s. The earlier passes took 4.8-9.4 s; the PARTIAL fm9hc took 30.3 s.
+3. Every captured C++ transit kept QUAD4's cable 0.21-0.50 m and the object 0.17-0.43 m from every carrier cable; every
+   failed one brought them to 0.00-0.09 m and -0.03-0.08 m (centre lines; negative = the carrier's centre line inside
+   the object's 0.0525 m half-size).
+4. Four of the five FAILs installed 32-63 UNCERTIFIED_HARD_HOVER fallbacks (fm9hc_9 39, no SMOOTH_BRAKE); the fifth
+   (fm9h8_3) had its backend disabled 0.8 s after the grant (stale carrier states) and held its last C++ window. The
+   frozen line and fm9h8_14 installed no fallback; fm9h8_5 installed 3, fm9hc_8 4, fm9hc 23.
+5. In all eight drops QUAD4 came closer to the carrier cables in his Python settle + descent than in the C++ transit:
+   QUAD4 cable 0.12-0.23 m and object 0.06-0.18 m from a carrier cable (frozen line 0.14-0.23 / 0.09-0.18 m).
+6. The seven PASS objects lay 0.015-0.119 m from the ring centre and 0.034-0.063 m under the ring marker's plane 3 s
+   after DROP_OBJECT, inside the ring the whole DROP +1.5 to +6 s; fm9hc's was released 0.137 m from the centre and
+   ended on the floor 2.44 m away. His release reports the magnet 0.039-0.058 m from the drop point on the frozen line.
+7. Python return to AT_START: 6.5-8.5 s in the PASS flights, QUAD4 then 0.02-0.07 m (horizontal) from where it took off.
+8. Backend, frozen line: 15-56 replans, 5-48 installed, 0-3 late; replan time median 137-256 ms, p95 202-346 ms against
+   the 300 ms splice (p95 over it in fm9hc_10, 346, and fm9hc_11, 325); carrier state age <= 160 ms (1 Hz samples).
+9. Height, frozen line: his reference reached 3.03-3.11 m and QUAD4's body 3.04-3.08 m, above the typed max_body_z 3.0
+   (the launch's check on planned heights; his C++ ceiling cpp_max_z was 3.3 m).
+10. Against registry rows written earlier today: the fallback installs counted here from the log (equal to the
+   backend's own execution_fallback_count in every flight) are higher than those rows give (fm9h8_5 "no fallback" ->
+   1 SMOOTH_BRAKE + 2 UNCERTIFIED_HARD_HOVER in its transit; fm9hc 3/2 -> 13/10; fm9hc_5 "~10" -> 21/38; fm9h8_7 21/14
+   -> 30/63; fm9h8_10 HH 7 -> 32; fm9hc_9 HH 8 -> 39). The settle+descent cable clearances here are 0.04-0.05 m lower
+   than in rows fm9h8_5, fm9hc and fm9hc_8 (0.15 / 0.20 / 0.16 m here against 0.19 / 0.25 / 0.20 m there), and fm9hc's
+   C++ transit cable clearance is 0.27 m here against 0.33 m there. fm9h8_5's and fm9hc_8's C++ transit values agree
+   to 0.01 m; fm9h8_3 (0.00 here, 0.01-0.02 there) and fm9hc_9 (0.02 here, 0.00 there) differ by up to 0.02 m (those
+   two rows took QUAD4's hanging cable as vertical; here it ends at the measured tip).
+
+## Caveats
+- Clearances are centre lines from motion capture (QUAD4 body, magnet tip marker, carriers, ring pose; plates placed from
+  the ring pose), no cable or body radii; the object is a point at its marker minus 0.0525 m. The carrier plates were
+  found from the data (cable length std 0.4-1.7 mm on the chosen plate vs 1.6-4.4 mm on the next best; body azimuth in
+  the ring frame 207.6-211.1 / 328.5-331.8 / 87.8-92.5 deg clockwise = plates 7 / 11 / 3) in all 14 flights.
+- "Max carrier state age" is the backend's 1 Hz sample (backend.csv): fm9h8_3 reads 8 ms although its backend was
+  disabled for stale carrier states, so the true maxima can be higher.
+- In the failed flights the "C++ transit" window runs to our LAND and includes hard-hover and (fm9h8_3) stale-hold time.
+- Ring speed = the ring marker's horizontal speed (0.2 s central difference), mean over the window.
+"""
+
+
+def f(x, nd=2, unit=''):
+    if x is None or (isinstance(x, float) and not np.isfinite(x)) or x == '':
+        return '-'
+    return f'{float(x):.{nd}f}{unit}'
+
+
+def main():
+    df = pd.read_csv(os.path.join(HERE, 'metrics.csv')).set_index('flight').loc[FLIGHTS].reset_index()
+    L = []
+    L.append('# His C++ planner on the rig, Fri 13 Nov 2026: every flight that ran it\n')
+    L.append('Generated by table.py from metrics.csv (metrics.py; extract.py reads the bags). Times in s after his '
+             'TAKEOFF. C++ transit = his TRANSIT_TO_DROP_POINT entry (authority switched to C++) to the next phase '
+             '(SETTLE_ABOVE_DROP_POINT = the moving rendezvous captured, else TAKEN_BACK by our LAND). Settle+descent = '
+             'SETTLE_ABOVE_DROP_POINT to DROP_OBJECT. Clearances: centre-line segment distances from motion capture, no '
+             'radii, QUAD4 cable = body -0.04 m to the magnet tip marker, carrier cable = body -0.04 m to its plate '
+             '(plates found from the data: d0 7, d1 11, d2 3 in every flight); object = its marker minus its 0.0525 m '
+             'half-size. Bars: none (exploratory, judged after the flights).\n')
+    L.append('## A. Settings and outcome\n')
+    L.append('| flight | ring | swing (deg) | spline | splice (s) | cpp_max_z (m) | drop_height (m) | max_body_z (m) '
+             '| his TAKEOFF (local) | outcome | reason |')
+    L.append('|---|---|---|---|---|---|---|---|---|---|---|')
+    for r in df.itertuples():
+        fz = ' (frozen)' if r.frozen_line else ''
+        L.append(f'| {r.flight}{fz} | {TRAJ.get(r.traj, r.traj)} | {f(r.swing_deg, 1)} | {r.spline_factor} | '
+                 f'{f(r.cpp_splice_s)} | {f(r.cpp_max_z, 1)} | {f(r.drop_height)} | {f(r.max_body_z, 1)} | '
+                 f'{r.takeoff_local} | {r.outcome} | {r.reason} |')
+    L.append('\n## B. Mission and clearances\n')
+    L.append('| flight | C++ start | C++ transit (s) | ring speed in transit (m/s) | QUAD4 max z, body / his reference (m) '
+             '| min QUAD4 cable / object, C++ transit (m) | min QUAD4 cable / object, settle+descent (m) '
+             '| DROP_OBJECT | object 3 s after: from ring centre / vs ring plane (m) | in net | Python return to '
+             'AT_START (s) |')
+    L.append('|---|---|---|---|---|---|---|---|---|---|---|')
+    for r in df.itertuples():
+        cap = '' if r.captured or not np.isfinite(r.cpp_transit_s) else ' (no capture)'
+        c1 = (f'{f(r.min_q4cable_cpp_m)} ({r.min_q4cable_cpp_carrier}) / {f(r.min_obj_cpp_m)} ({r.min_obj_cpp_carrier})'
+              if np.isfinite(r.min_q4cable_cpp_m) else '-')
+        c2 = (f'{f(r.min_q4cable_desc_m)} ({r.min_q4cable_desc_carrier}) / {f(r.min_obj_desc_m)} '
+              f'({r.min_obj_desc_carrier})' if np.isfinite(r.min_q4cable_desc_m) else '-')
+        obj = f'{f(r.obj_final_h_m, 3)} / {f(r.obj_final_dz_m, 3)}' if np.isfinite(r.obj_final_h_m) else '-'
+        net = '-' if pd.isna(r.in_net) else ('yes' if r.in_net else 'no')
+        L.append(f'| {r.flight} | {f(r.cpp_start_s, 1)} | {f(r.cpp_transit_s, 1)}{cap} | {f(r.ring_speed_mean_mps, 3)} '
+                 f'| {f(r.q4_max_z_flight_m)} / {f(r.ref_max_z_flight_m)} | {c1} | {c2} | {f(r.drop_t, 1)} | {obj} | {net} | {f(r.return_s, 1)} |')
+    L.append('\n## C. His C++ backend (replans.csv, backend.csv; fallbacks from the .log)\n')
+    L.append('| flight | replans | installed | late | failed (RUNTIME_REACHED / EMPTY_OPEN_LIST) | replan time median / '
+             'p95 / max (ms) | splice (ms) | SMOOTH_BRAKE | UNCERTIFIED_HARD_HOVER | max carrier state age, 1 Hz '
+             'samples (ms) |')
+    L.append('|---|---|---|---|---|---|---|---|---|---|')
+    for r in df.itertuples():
+        if not r.replans:
+            L.append(f'| {r.flight} | 0 | - | - | - | - | {f(r.cpp_splice_s * 1000, 0)} | - | - | - |')
+            continue
+        L.append(f'| {r.flight} | {r.replans} | {r.installed} | {r.late} | {r.failed} ({r.failed_runtime_reached} / '
+                 f'{r.failed_empty_open_list}) | {f(r.replan_ms_median, 0)} / {f(r.replan_ms_p95, 0)} / '
+                 f'{f(r.replan_ms_max, 0)} | {f(r.cpp_splice_s * 1000, 0)} | {r.fb_smooth_brake} | {r.fb_hard_hover} | '
+                 f'{f(r.max_state_age_ms_1hz, 0)} |')
+    L.append('\n' + FINDINGS.strip())
+    open(os.path.join(HERE, 'table.md'), 'w').write('\n'.join(L) + '\n')
+
+
+if __name__ == '__main__':
+    main()

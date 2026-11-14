@@ -25,13 +25,22 @@ takeoff:
 height_hold:
   z_i_gate: 0.25
 landing:
-  land_rearm_touchdown: true   # twin default (Wesley 17 Oct); the rig after a critic look at its wall-clock pose check
+  land_rearm_touchdown: true   # twin default (Wesley 17 Oct); the rig's too since 5 Nov (real.yaml)
 watchdogs:
   # the trackers' 60 deg ring-tilt envelope (a fleet disarm); false only on world C, where the ring's tilt is free
   # (Wesley 23 Oct, card 2026-10-23_quan_exact; twin only, the rig keeps it)
   payload_tilt_envelope: true
 trajectory:
   traj_speed: 0.4
+rod_in_plan:
+  # the rod's weight in the plan and references that balance it (card 2026-10-31_rod_in_plan; Wesley 31 Oct: on in
+  # simulation once it is ready, real flights refuse it). Flipped on 4 Nov ~22:20 and back off ~22:50 (Wesley: the
+  # twin's links, not the plan, are wrong: the magnet sits on the link's side of the ring joint and the rod is heavier
+  # than the rig's cable). true flies a sim config of a detach, carry or attach mode with the rod below and int_k_xy 0
+  # unless chosen (bringup.real_mode); --check refuses a world whose rods differ. SIL and the network mode keep it off.
+  plan_rod_level: false
+  rod_level_mass: 0.040        # rod 0.002 + magnet 0.038 (tools/make_carry_worlds.py, 4 Nov), every world but the _rod1g one
+  rod_level_com_frac: 0.025    # the CoM 0.025 x cable_len from the ring end (the magnet at the plate)
 thrust_map:
   thrust_ratio: 35.2
   takeoff_thrust_ratio: 0.0
@@ -43,6 +52,12 @@ fleet_resize:
   reconfig_mode: 'ocp'
 network:
   auto_network_handover: false
+weld_gate:
+  weld_vel_filter_s: 0.1      # the twin's weld gate on a 0.1 s filtered speed (Wesley 4 Nov ~22:20; R3458, R3475 vs R3485-R3488)
+contact_traj:
+  # twin only (Wesley 11 Nov, Te-Jen's figure-eight demonstration): true lets partner_contact fly load_traj fig_8.
+  # The take-back clears hover and the circle only (TB16), so a take-back on the figure-eight is not cleared.
+  contact_sim_fig8: false
 sim_interface:
   sil: false
   sim_thrust_map: 'rig'
@@ -58,6 +73,7 @@ modes:
     # the paper's method, our port (card 2026-10-23_paper_method_compare; values Wesley 22 Oct, push answer 23):
     # our OCP creeps and lifts, the network flies the rest on the trackers' velocity loop. Twin only.
     num_drones: 4
+    plan_rod_level: false        # the port's arms keep their creep and lift
     reconfig_mode: 'network'
     auto_network_handover: true
     control_mode: 'velocity_after_handover'

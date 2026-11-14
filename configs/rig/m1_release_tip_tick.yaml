@@ -1,0 +1,4 @@
+# configs/rig/m1_release_tip.yaml plus the planner tick settings for Wed 4 Nov h4m1 (Wesley 2 Nov): the 29 Oct 4-carrier ticks ran on a ring pose over 90 ms old 4.2 % of the time. They are not launch arguments on real flights.
+tip_detect_m: 0.04
+plan_fast_refs: true
+plan_res_every: 0

@@ -112,6 +112,8 @@ void testPaddedPartialRejectedWhenFinalCompletionViolatesAccelerationLimit() {
             "immediate timeout must certify its one retained partial");
     require(result.partial_fallback_selected_rank == 0,
             "dynamics-rejected fallback must not report a certified rank");
+    require(result.partial_fallback_selected_index == -1,
+            "rejected fallback must not expose an accepted seed index");
 }
 
 
@@ -317,6 +319,44 @@ void testQ2OutsideWorkspaceRejectedBeforeTimeoutFallback() {
     require(result.popped_nodes == 0, "invalid q2 must be rejected before queue pop");
 }
 
+void testExpandedHullFinalPlanesAreCheckedWithoutRedundantLPs() {
+    const auto knots = dynamic_planner::openUniformKnots(0., 4., 4);
+    State state;
+    state.position = Vec3(0., 0., 1.);
+    const auto q012 = dynamic_planner::initialControlPointsFromState(state, knots);
+    OctopusConfig config = baseConfig();
+    config.max_runtime_s = 1e-9;  // deterministically certify the stopped partial
+    Eigen::MatrixXd expanded(9, 3);
+    expanded.topRows(8) = dynamic_planner::axisAlignedBoxVertices(
+        Vec3(2., 0., 1.), Vec3::Constant(.2));
+    expanded.row(8) = Vec3(2., 0., 1.).transpose();
+    TimeIndexedObstacle obstacle;
+    obstacle.name = "expanded_hull";
+    obstacle.interval_vertices.assign(4, expanded);
+    auto result = OctopusSearch(knots, q012, Vec3(1., 0., 1.), {obstacle}, config).search();
+    require(result.success, "stopped partial should certify against a remote expanded hull");
+    require(result.partial_fallback_selected_index == 2,
+            "natural immediate timeout must identify its unextended q2 seed");
+    require(result.separators.size() == 4, "all four interval planes must be materialized");
+    require(result.separator_lp_calls == 0, "validated fast planes should not count as LP calls");
+    for (const auto& item : result.separators) {
+        require(item.result.feasible && item.result.plane.has_value(), "missing final certificate");
+        const auto& plane = *item.result.plane;
+        require((expanded * plane.normal).minCoeff() + plane.offset >= 1. - 1e-7,
+                "fast plane does not separate the complete obstacle hull");
+        require(state.position.dot(plane.normal) + plane.offset <= -1. + 1e-7,
+                "fast plane does not separate the stopped candidate");
+    }
+    // Same name, later interval, different hull: previous interval's direction
+    // is only a hint, never authority to accept an actual overlap.
+    obstacle.interval_vertices[2].rowwise() -= Vec3(2., 0., 0.).transpose();
+    result = OctopusSearch(knots, q012, Vec3(1., 0., 1.), {obstacle}, config).search();
+    require(!result.success, "changed interval hull collision must reject the partial");
+    require(!result.separators.empty() && !result.separators.back().result.feasible,
+            "colliding interval must retain its failed LP witness");
+    require(result.separator_lp_calls == 1, "ambiguous overlap must invoke LP fallback");
+}
+
 }  // namespace
 
 int main() {
@@ -329,6 +369,7 @@ int main() {
         testPaddedFallbackTriesMultipleRetainedPartials();
         testInitialQ2BoundaryToleranceAllowsCertifiedRestartResidue();
         testQ2OutsideWorkspaceRejectedBeforeTimeoutFallback();
+        testExpandedHullFinalPlanesAreCheckedWithoutRedundantLPs();
         std::cout << "test_octopus: PASS\n";
         return 0;
     } catch (const std::exception& error) {

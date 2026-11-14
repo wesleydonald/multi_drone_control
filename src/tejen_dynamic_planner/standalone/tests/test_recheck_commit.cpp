@@ -129,6 +129,28 @@ WorldSnapshot attachmentSnapshot(std::uint64_t version, bool attached) {
 
 }  // namespace
 
+void rotationOnlyCatchUp() {
+    State start;
+    start.position = Vec3(0, 0, 1.5);
+    auto snapshot = emptySnapshot(0);
+    snapshot.ego_suspended_geometry.enabled = true;
+    snapshot.ego_suspended_geometry.swing_envelope = SwingEnvelope::OuterOctagon;
+    snapshot.physical_static_obstacles.push_back({"far_wall",
+        boxVertices(Vec3(0, 4, 1.5), Vec3(.1, .1, 1))});
+    auto rotated = snapshot;
+    rotated.version = 1;
+    rotated.ego_body_rotation = Eigen::AngleAxisd(.02, Vec3::UnitY()).toRotationMatrix();
+    ScriptedWorld world;
+    world.snapshots = {snapshot, snapshot, rotated};
+    world.forced_commit_mismatches = 1;
+    RecedingHorizonPlanner planner(Vec3(3, 0, 1.5), makeConfig(), makeLocalConfig());
+    const auto result = planner.replan(0, start, world, [] { return .02; });
+    requireTrue(result.accepted, "rotation-only catch-up rejected: " + result.status);
+    requireTrue(result.full_safety_checks > 0 && result.incremental_safety_checks > 0 &&
+                result.collision_relations_reused > 0,
+                "rotation race still performs a complete second world check");
+}
+
 // Deterministic ROS-clock progression: rolling starts move during snapshot
 // acquisition, not by sleeping or depending on machine performance.
 void rollingRecheck(const std::string& scenario) {
@@ -245,6 +267,7 @@ void failedRollingRecheck(const std::string& scenario) {
 
 int main(int argc, char** argv) {
     try {
+        rotationOnlyCatchUp();
         if (argc == 2) {
             const std::string scenario(argv[1]);
             if (scenario.find("failure_") == 0) failedRollingRecheck(scenario);
@@ -261,6 +284,29 @@ int main(int argc, char** argv) {
         State start;
         start.position = Vec3(0.0, 0.0, 1.5);
         const Vec3 goal(3.0, 0.0, 1.5);
+
+        // Newest snapshot geometry, not the search snapshot's body attitude,
+        // determines final workspace acceptance.
+        {
+            auto first = emptySnapshot(0);
+            first.workspace.enabled = true;
+            first.workspace.lower = Vec3(-1., -2., 0.);
+            first.workspace.upper = Vec3(4., .2, 3.);
+            first.ego_half_extents = Vec3(.1, .1, .3);
+            auto changed = first;
+            changed.version = 1;
+            changed.ego_body_rotation = Eigen::AngleAxisd(
+                3.14159265358979323846 / 2., Vec3::UnitX()).toRotationMatrix();
+            ScriptedWorld world;
+            world.snapshots = {first, first, changed};
+            world.forced_commit_mismatches = 1;
+            RecedingHorizonPlanner planner(goal, makeConfig(), makeLocalConfig());
+            const auto result = planner.replan(0., start, world);
+            requireTrue(!result.accepted && result.recheck_retry_performed,
+                        "changed full attitude escaped final workspace recheck");
+            requireTrue(!result.certified_world_version,
+                        "newest-world workspace rejection acquired authority");
+        }
 
         // One irrelevant update between first recheck and commit: do one
         // bounded final recheck, then commit the still-safe candidate.

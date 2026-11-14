@@ -1,6 +1,6 @@
 <sdf version="1.6">
-    <!-- Rig twin of x3_drone1.sdf (tools/make_carry_worlds.py): airframe with pack 0.475 kg over all links
-         (base 0.435 + four 0.01 rotors), base inertia scaled by 0.435/0.6. Rod and magnet are on the rod. -->
+    <!-- Rig twin of x3_drone1.sdf (tools/make_carry_worlds.py): airframe with pack 0.51 kg over all links
+         (base 0.470 + four 0.01 rotors), base inertia scaled by 0.470/0.6. Rod and magnet are on the rod. -->
     <model name="x3_drone1">
         <pose>0 0 0.0 0 0 0</pose>
         
@@ -9,14 +9,14 @@
             <pose frame="">0 0 0 0 0 0</pose>
             <inertial>
                 <pose frame="">0.0 0.0 0 0 -0 0</pose>
-                <mass>0.435</mass>
+                <mass>0.470</mass>
                 <inertia>
-                    <ixx>0.001264939537</ixx>
+                    <ixx>0.001366716281</ixx>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
-                    <iyy>0.001015391174</iyy>
+                    <iyy>0.001097089315</iyy>
                     <iyz>0</iyz>
-                    <izz>0.002017247905</izz>
+                    <izz>0.002179555208</izz>
                 </inertia>
             </inertial>
             <collision name="base_link_inertia_collision">

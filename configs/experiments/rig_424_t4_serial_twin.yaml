@@ -1,0 +1,168 @@
+name: rig_424_t4_serial_twin
+description: 'Exploratory twin check of the 4 -> 2 -> 4 (results/analysis/424_design_2026-11-13/rig_and_twin.md 4.3,
+  the mdc_424 contract; one run, judged after the run, no bars). T4, the full 4 -> 2 -> 4 with the returns
+  serialised: his TAKEOFF A (QUAD4) at its release; QUAD4 re-attaches on plate 9 (the T 0/6/9); his TAKEOFF B (QUAD3)
+  10 s after QUAD4''s weld, past its fold-in blend; QUAD3 re-attaches on plate 3 (the square); 20 s on four; LAND.
+  Read: each partner''s release, contact, proof and fold-in, the ring''s tilt across each contact and fold-in, the
+  pair''s and the T''s lean, the partners'' clearance to each other and to the pair''s cables. Falsifier: a drop or
+  abort, a partner not re-welded within 300 s of its TAKEOFF, a fold-in into the wrong slot or plate. Flies the
+  square 0/3/6/9 on the M2A ring (0.86 kg, 1 m rods, floor start; world
+  pair2_rigid_ground_rig_attach_welded_pickup_L100: the pair QUAD1/QUAD2 = drones 0/1 on plates 0/6, QUAD3 = drone 2
+  welded on plate 3 with its own ring weld /drone_2/payload/*, QUAD4 = drone 3 welded on plate 9), ring at 1.0 m in
+  hover; DETACH_SET 2,3 (one set detach, 3 s unload, one resize to the pair, both stepped out and released); his two
+  instances (A for QUAD4 under /tejen, B for QUAD3 under /tejen_d2, its marker our /drone_2/magnet_tip_pose), each
+  started by its own PARTNER_GO (his TAKEOFF in the twin: his supervisor''s start gate; it then arms and sends
+  TAKEOFF on its own /tejen[_d2]/drone_command), floor_join on the low route with the rig''s 5/5 cm bands, contact_dz
+  left at his default (the twin''s rigid rod misses with -0.03: R4233-R4243). Params configs/rig/attach_424_pair.yaml
+  with the twin ring typed over it, partners configs/twin/partners_424_twin.yaml. Not mirrored: downwash on the
+  pair-held ring, the magnets'' pull and let-go, the funnels, slack cables. Score: tools/score_424.py <run>.'
+world: pair2_rigid_ground_rig_attach_welded_pickup_L100.sdf
+ball_start: [1.6, 2.0, 0.08]       # tools/make_attach_worlds_L100.py BALL_XY (QUAD4's spawn weld, freed by his launch A)
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1        # the pair on slope; both partners keep ema (his MPC reads it), as QUAD4 today
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: hover
+    measure_rod_len: true
+    num_drones: 2
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.95
+    cable_notch_hz: 5.3
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.8
+    mode: attach
+    # the pair's rules and the rig's M2A values; the twin's ring geometry above wins over the file's (typed args win)
+    params_file: /home/wesley/multi_drone_control/configs/rig/attach_424_pair.yaml
+    # the two partners' records (the twin's values): drone 3 on plate 9, drone 2 on plate 3
+    partners_file: /home/wesley/multi_drone_control/configs/twin/partners_424_twin.yaml
+    reserved_attach: 2
+    attach_azimuths_deg: 0,180
+    detach_unload_s: 3.0
+    partner: true
+    partner_attached: true
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 2
+    attach: true
+    attach_partners: 2             # both partners drawn and given a pack (the rig thrust map reads it)
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 2
+  n_total: 4
+timing:
+  duration_s: 900.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:            # checked once both of his launches are up: instance A's, then B's
+  - /join_planner/phase
+  - /fake_payload/pose
+  - /tejen_d2/join_planner/phase
+  - /tejen_d2/fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH              # his instance A: QUAD4 on plate 9, his topics as today; his TAKEOFF = PARTNER_GO 3
+  arg: tejen_mission partner_mission.launch.py plate:=9 confirm_pickup_release:=true start_gate_topic:=/runner/partner_go
+    geometry:=rig_twin_L100 carrier_azimuths_deg:=[0.0,180.0] contact_attach:=true carry_clearance:=0.25
+    airborne_start:=true mission_mode:=floor_join commit_backdate:=0.04 tracking_check:=off attach_cpp_transit:=false
+    attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30 attach_twist:=zero match_xy:=0.05
+    match_dwell:=0.5 climb_speed:=0.3 match_speed:=0.20 descent_abort_speed:=0.35 descent_hold:=true
+    descent_debounce:=1.0 descent_abort_xy:=0.05 contact_give_up_s:=120 ring_z:=1.0
+- t: 1.5
+  do: LAUNCH              # his instance B: QUAD3 (drone 2) on plate 3 under /tejen_d2; his TAKEOFF = PARTNER_GO 2
+  arg: tejen_mission partner_mission.launch.py instance:=d2 drone_id:=2 plate:=3
+    start_gate_topic:=/drone_2/runner/partner_go tip_topic:=/drone_2/magnet_tip_pose tip_msg_type:=pose_stamped
+    geometry:=rig_twin_L100 carrier_azimuths_deg:=[0.0,180.0] contact_attach:=true carry_clearance:=0.25
+    airborne_start:=true mission_mode:=floor_join commit_backdate:=0.04 tracking_check:=off attach_cpp_transit:=false
+    attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30 attach_twist:=zero match_xy:=0.05
+    match_dwell:=0.5 climb_speed:=0.3 match_speed:=0.20 descent_abort_speed:=0.35 descent_hold:=true
+    descent_debounce:=1.0 descent_abort_xy:=0.05 contact_give_up_s:=120 ring_z:=1.0
+- t: 2.0
+  do: WAIT_PICKUP_FREE    # his launch A frees the spawn's ball weld on QUAD4's tip before the creep moves the ring
+  arg: 120
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: DETACH_SET          # one command for both partners: unload both, one resize to the pair 0/6, both stepped out
+  arg: 2,3
+- t: 21.0
+  do: WAIT_LOG            # QUAD3 stepped out and released (its stream not yet flying: our tracker holds it)
+  arg: 90 PARTNER RELEASE:? drone 2\b
+- t: 22.0
+  do: WAIT_LOG            # QUAD4 likewise; both lines may come in either order, later events are timed from QUAD4's
+  arg: 90 PARTNER RELEASE:? drone 3\b
+- t: 22.5
+  do: PARTNER_GO          # his TAKEOFF A (QUAD4), as the rig's pressed before DETACH and held until its release
+  arg: 3
+- t: 23.0
+  do: WAIT_REWELD         # QUAD4's own weld after his re-attach; later events are timed from it
+  arg: d3 300
+- t: 33.0
+  do: PARTNER_GO          # his TAKEOFF B (QUAD3), 10 s after QUAD4's weld (its fold-in blend held 10 s)
+  arg: 2
+- t: 34.0
+  do: WAIT_REWELD         # QUAD3's own weld (/drone_2/magnet/object_attached)
+  arg: d2 300
+- t: 54.0
+  do: LAND                # 20 s on four after the last weld
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos: [2.0, -4.6, 2.9]
+      look_at: [0.0, 0.0, 1.1]
+      hfov_deg: 66.0
+      size: [1280, 720]

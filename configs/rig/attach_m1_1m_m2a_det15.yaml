@@ -1,0 +1,13 @@
+# configs/rig/attach_m1_1m_m2a.yaml (k1d's file, 5 Nov) with the cable-length loss check at 15 cm: the S4 pickup and drop
+# (K). The tilt drop stays at the default 30 deg, as k1d flew. A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+detach_detect_m: 0.15

@@ -1,0 +1,8 @@
+configs/experiments/rj4_softdetach9_rejoin_L100.yaml
+configs/experiments/rj4_softdetach9_rejoin_L100.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_tip.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_tip.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_lean.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_lean.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_leanneg.yaml
+configs/experiments/rj3_pairrelease_rejoin_L100_leanneg.yaml

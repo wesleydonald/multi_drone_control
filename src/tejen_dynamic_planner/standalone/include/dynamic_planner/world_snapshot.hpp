@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <Eigen/Geometry>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,17 @@ struct CooperativeObstacleTrajectory {
     void validate() const;
 };
 
+// A transaction-local selection, not a collision certificate. Only combine a
+// subset check with a previous full SAFE result for the same trajectory/range.
+struct CollisionCheckSelection {
+    bool full_check = true;
+    bool ego_body_changed = false;
+    std::vector<std::string> cooperative_names;
+
+    bool checksBody() const { return full_check || ego_body_changed; }
+    bool checksPeer(const std::string& name) const;
+};
+
 struct WorldSnapshot {
     std::uint64_t version = 0;
     double captured_at_s = 0.0;
@@ -43,8 +55,13 @@ struct WorldSnapshot {
     // axis-wise tube around the committed reference.
     Vec3 ego_tracking_error_half_extents = Vec3::Zero();
     SuspendedGeometry ego_suspended_geometry;
+    Eigen::Matrix3d ego_body_rotation = Eigen::Matrix3d::Identity();
+    AssemblyWorkspace workspace;
 
     void validate() const;
+
+    // Exact collision-input differences; receipt time/version are not geometry.
+    CollisionCheckSelection collisionChangesSince(const WorldSnapshot& previous) const;
 
     // Build interval hulls aligned with the local planner's uniform spline
     // intervals. Cooperative trajectory hulls are exact cubic convex hulls,
@@ -85,6 +102,7 @@ public:
     void setEgoHalfExtents(const Vec3& half_extents);
     void setEgoTrackingErrorHalfExtents(const Vec3& half_extents);
     void setEgoSuspendedGeometry(const SuspendedGeometry& geometry);
+    void setEgoBodyOrientation(const Eigen::Quaterniond& orientation);
     void upsertCooperativeTrajectory(CooperativeObstacleTrajectory obstacle);
     // Atomically upsert a coherent set of moving obstacles while advancing the
     // world version once. This prevents a multi-part physical object from
@@ -101,6 +119,8 @@ private:
     Vec3 ego_half_extents_ = Vec3(0.105, 0.105, 0.060);
     Vec3 ego_tracking_error_half_extents_ = Vec3::Zero();
     SuspendedGeometry ego_suspended_geometry_;
+    Eigen::Matrix3d ego_body_rotation_ = Eigen::Matrix3d::Identity();
+    AssemblyWorkspace workspace_;
 };
 
 }  // namespace dynamic_planner

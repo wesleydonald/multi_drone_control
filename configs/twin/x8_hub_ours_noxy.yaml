@@ -1,0 +1,16 @@
+# X8's hub cell (world C), our arm, with the sideways integral off (int_k_xy 0): configs/twin/x8_hub_ours.yaml plus
+# int_k_xy 0.0 (Wesley 7 Nov ~10:10: the hub's survivors leave a 171 deg gap; both X8 cells then follow the 5 Nov T rule,
+# the as-flown R4008/R4009 stay recorded). Twin only.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+# X8's loss rule, the same text in every arm of the cell: drop_gap_deg 200 lets our planner fly on with the T a
+# loss of one of four leaves (its largest gap 180 deg; on the hub the cables meet at the ring's centre of mass, so
+# the T is no capsize there). Inert in the network phase (the planner's loss rules run only before the hand-over).
+drop_gap_deg: 200.0
+int_k_xy: 0.0

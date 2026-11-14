@@ -9,7 +9,11 @@ On the rig every node stamps wall-clock epoch time (no use_sim_time), and so do 
 so the three line up directly. The flight is resampled on a 50 Hz grid (last sample at or before each tick) into
 logs/run.csv with the shared t / payload_* / dN_* schema (readiness review 2026-09-29: rig flights could not be
 scored). Drone pose, velocity and tilt come from the bag's mocap when given, else the tracker logs; the ring's
-orientation (payload_tilt_deg) needs the bag. Throttle (dN_thr = u2), references and armed come from the trackers.
+orientation (payload_tilt_deg) needs the bag. Throttle (dN_thr = u2), references and armed come from the trackers:
+dN_ref_* is OUR tracker's reference, which only follows the measured drone while the partner flies it. With a bag, the
+partner's own columns (Te-Jen's review of 4 Nov, RIG-1104-k1m_3): dN_partner_ref_* (his /join_planner/reference, the
+first point), dN_partner_thr (his /drone_N/ELRSCommand_tejen throttle), dN_radio_thr (the throttle sent to the radio,
+/drone_N/ELRSCommand) and dN_mux (1 = his stream drives the radio, from /drone_N/mux_state 'partner').
 Events (ARM, TAKEOFF, LAND, ESTOP, DISARM, FLEET_ABORT, LANDED, the manager's grounding lines, and the dissipative
 planner's DETACH, DETECTED (unannounced detach) and DROP) come from the T2 console; RELEASE (an operator's magnet OFF,
 not sent by the planner) from the bag's /drone_N/magnet. t = 0 at the first grid tick; events.csv uses the same origin."""
@@ -62,6 +66,7 @@ def read_bag(path):
     r.open(rosbag2_py.StorageOptions(uri=path, storage_id=''), rosbag2_py.ConverterOptions('cdr', 'cdr'))
     types = {t.name: t.type for t in r.get_all_topics_and_types()}
     mocap, armed, magnet = {}, {}, {}
+    extra = {}                        # partner columns: {name: [(t, value)]}
     while r.has_next():
         topic, data, ts = r.read_next()
         if topic.endswith('motion_capture_state'):
@@ -71,10 +76,27 @@ def read_bag(path):
         elif re.fullmatch(r'/drone_\d+/ELRSCommand', topic):
             m = deserialize_message(data, get_message(types[topic]))
             armed.setdefault(topic, []).append((ts * 1e-9, float(bool(m.armed))))
+            extra.setdefault(f'd{topic.split("/")[1][6:]}_radio_thr', []).append(
+                (ts * 1e-9, (m.channel_2 + 1.0) / 2.0 if m.armed else np.nan))
+        elif re.fullmatch(r'/drone_\d+/ELRSCommand_tejen', topic):
+            m = deserialize_message(data, get_message(types[topic]))
+            extra.setdefault(f'd{topic.split("/")[1][6:]}_partner_thr', []).append(
+                (ts * 1e-9, (m.channel_2 + 1.0) / 2.0 if m.armed else np.nan))
+        elif re.fullmatch(r'/drone_\d+/mux_state', topic):
+            m = deserialize_message(data, get_message(types[topic]))
+            extra.setdefault(f'd{topic.split("/")[1][6:]}_mux', []).append(
+                (ts * 1e-9, 1.0 if m.data.strip().lower() == 'partner' else 0.0))
+        elif topic == '/join_planner/reference':
+            m = deserialize_message(data, get_message(types[topic]))
+            if m.points and m.points[0].transforms:
+                v = m.points[0].transforms[0].translation
+                for k in 'xyz':
+                    extra.setdefault(f'partner_ref_{k}', []).append((ts * 1e-9, getattr(v, k)))
         elif re.fullmatch(r'/drone_\d+/magnet', topic):
             m = deserialize_message(data, get_message(types[topic]))
             magnet.setdefault(int(topic.split('/')[1][6:]), []).append((ts * 1e-9, m.data))
     cols = ['t', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz', 'vx', 'vy', 'vz']
+    read_bag.extra = {k: pd.DataFrame(v, columns=['t', 'v']) for k, v in extra.items()}
     return ({k: pd.DataFrame(v, columns=cols) for k, v in mocap.items()},
             {k: pd.DataFrame(v, columns=['t', 'armed']) for k, v in armed.items()}, magnet)
 
@@ -164,6 +186,14 @@ def convert(trackers, out, bag=None, t2_log=None):
         a = armed.get(f'/drone_{i}/ELRSCommand')
         col[f'd{i}_armed'] = on_grid(grid, a.t, a.armed) if a is not None and len(a) else np.full(len(grid), np.nan)
         col[f'd{i}_attached'] = np.full(len(grid), np.nan)
+    # the partner's columns (bag only): his reference belongs to the newcomer, the last drone
+    for k, v in (getattr(read_bag, 'extra', {}) if bag else {}).items():
+        name = f'd{len(tr) - 1}_{k}' if k.startswith('partner_ref_') else k
+        hold = k.endswith('_mux')
+        col[name] = (np.interp(grid, v.t, v.v, left=np.nan, right=v.v.iloc[-1]) if not hold else
+                     v.v.to_numpy()[np.clip(np.searchsorted(v.t.to_numpy(), grid, side='right') - 1, 0, len(v) - 1)])
+        if hold:
+            col[name] = np.where(grid < v.t.iloc[0], np.nan, col[name])
     os.makedirs(os.path.join(out, 'logs'), exist_ok=True)
     pd.DataFrame(col).to_csv(os.path.join(out, 'logs', 'run.csv'), index=False)
     evs = events_from_log(t2_log) if t2_log else []

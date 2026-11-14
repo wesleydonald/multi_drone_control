@@ -23,12 +23,15 @@ def planner(phase):
     p.m2b_commissioning_stage = 'b2'
     p.c1f1_shadow_transfer_enabled = p.c1f2_cpp_authority_enabled = True
     p.c1f2_prepare_active = p.c1f2_prepare_settled = True
-    p.c1f2_prepare_lift_end_position = np.array([-.4, -.3, 1.26])
+    # This fixture starts already settled at its commanded endpoint. Mid-climb
+    # relatching/reset is exercised separately below, not implicitly in every test.
+    p.c1f2_prepare_lift_end_position = hold().positions[0].copy()
     p.c1f2_prepare_hold_position = hold().positions[0].copy()
     p.drone_position = np.array([-.4, -.3, 1.178])
     p.drone_velocity = p.drone_acceleration = np.zeros(3)
     p.c1f2_prepare_max_lift_drift_m = .15
     p.c1f2_prepare_settle_speed_mps = .08
+    p.c1f2_prepare_revoke_speed_mps = .10 if p.preloaded_navigation else .08
     p.c1f2_prepare_settle_acceleration_mps2 = .5
     p.c1f2_handoff_position_tolerance_m = .03
     p.c1f2_handoff_velocity_tolerance_mps = .1

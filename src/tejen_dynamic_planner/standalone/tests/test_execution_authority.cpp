@@ -54,6 +54,18 @@ int main() {
     const auto before = retained.committedTrajectory();
     retained.setPreviousSpliceTiming(.09);
     requireNear(retained.previousSpliceTiming(), .09, 1e-12, "rejected-solve history lost");
+    auto adaptive_config = config;
+    adaptive_config.fixed_splice_lookahead_s = 0.;
+    adaptive_config.min_splice_lookahead_s = .1;
+    RecedingHorizonPlanner adaptive(Vec3(3, 0, 1.5), adaptive_config, local);
+    requireNear(adaptive.chooseSpliceLookahead(), .1, 1e-12, "adaptive minimum changed");
+    adaptive.setPreviousSpliceTiming(.112);
+    const auto rebuilt = adaptive;
+    requireNear(rebuilt.chooseSpliceLookahead(), 2.5*4./30., 1e-12,
+                "adaptive rebuild lost complete iteration history");
+    adaptive.setPreviousSpliceTiming(2.);
+    requireNear(adaptive.chooseSpliceLookahead(), 1., 1e-12, "adaptive maximum changed");
+    requireNear(retained.chooseSpliceLookahead(), .1, 1e-12, "legacy fixed timing changed");
     requireMatrixNear(retained.committedTrajectory().endState().position, before.endState().position, 0., "timing changed authority");
     bool bad_history = false;
     try { retained.setPreviousSpliceTiming(NAN); } catch (const std::invalid_argument&) { bad_history = true; }

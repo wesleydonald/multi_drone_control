@@ -243,3 +243,62 @@ def test_dry_hold_keeps_the_coil_off_and_only_logs_both_inputs():
     assert g.partner('ON') is None and g.ours('ON') is None and g.ours('OFF') is None
     assert g.last == 'OFF' and len(g.events) == 1 and 'DRY HOLD' in g.events[0]
     assert MagnetGate().partner('ON') == 'ON'                     # off by default: today's gate
+
+
+def test_operator_off_drops_his_puck_in_the_transit_and_holds_every_on():
+    """RIG-1104-k1m_3/_4: his OFF is held in the transit, so the object never dropped; the operator's OFF passes."""
+    g = MagnetGate()
+    g.partner('ON'); g.puck(True); g.his_phase('TRANSIT_TO_DROP_POINT')
+    assert g.partner('OFF') is None                   # his OFF held in the transit, as flown
+    assert g.operator('OFF') == 'OFF' and g.dropped
+    assert g.partner('ON') is None and g.ours('ON') is None
+    assert g.source == 'partner'                      # our held ON did not take the coil
+    assert g.operator('ON') is None                   # clears the hold, forwards nothing
+    assert g.partner('ON') == 'ON'
+
+
+def test_operator_off_releases_a_welded_quad4_and_a_cut_or_dry_gate_ignores_it():
+    g = MagnetGate(start_ours=True)
+    assert g.operator('OFF') == 'OFF' and g.ours('ON') is None
+    g = MagnetGate(); g.cut()
+    assert g.operator('OFF') is None and g.last == 'OFF'
+    assert MagnetGate(dry=True).operator('OFF') is None
+
+
+def test_his_off_held_just_before_the_drop_phase_goes_when_the_drop_phase_arrives():
+    """RIG-1111-k1zo_3: his 'Magnet command: OFF' reached the gate 1 ms before DROP_OBJECT did; it was held and never
+    sent, and the object stayed on the magnet. A held OFF goes when his phase reaches the drop; a later ON cancels it."""
+    g = MagnetGate()
+    g.his_phase('LIFT_OBJECT')
+    assert g.partner('ON') == 'ON'
+    g.puck(True)
+    g.his_phase('DESCEND_TO_DROP_HEIGHT')
+    assert g.partner('OFF') is None                   # held: not the drop yet
+    assert g.his_phase('DROP_OBJECT') == 'OFF'         # the phase arrives: the held OFF goes
+    assert g.last == 'OFF'
+    g = MagnetGate()
+    g.his_phase('LIFT_OBJECT')
+    g.partner('ON')
+    g.puck(True)
+    g.his_phase('TRANSIT_TO_DROP_POINT')
+    assert g.partner('OFF') is None
+    assert g.partner('ON') == 'ON'                    # a later ON of his cancels the held OFF
+    assert g.his_phase('DROP_OBJECT') is None
+    assert g.last == 'ON'
+
+
+def test_node_sends_his_held_off_when_his_phase_reaches_the_drop(monkeypatch):
+    """Te-Jen's review 11 Nov: the held OFF (RIG-1111-k1zo_3) must reach the coil through the PHASE subscription's own
+    publish, with no further command of his."""
+    try:
+        n = _node(monkeypatch, '-p', 'restore_s:=0.0')
+        n._on(n.gate.partner, 'ON')                      # his pickup: the coil follows him
+        n._on(n.gate.puck, True)                         # the object on the magnet
+        n._on(n.gate.his_phase, 'DESCEND_TO_DROP_HEIGHT')
+        n._on(n.gate.partner, 'OFF')                     # 1 ms early: held
+        assert [m.data for m in n.pub.msgs] == ['ON']
+        n._on(n.gate.his_phase, 'DROP_OBJECT')           # the phase alone sends it
+        assert [m.data for m in n.pub.msgs] == ['ON', 'OFF']
+        n.destroy_node()
+    finally:
+        rclpy.shutdown()

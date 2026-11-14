@@ -1,0 +1,13 @@
+# X2's full chain on the figure-8 (card docs/experiments/2026-10-30_x2_full_chain_fig8.md; Wesley 30 Oct ~15:10), twin
+# only: configs/rig/chain_pair_tip.yaml's values (the T and the opposite pair fly under drop_gap_deg 200 with
+# min_survivors 2; the height-only model integral, int_k_xy 0; the magnet-marker check, which catches the T's ~0.1 N
+# rider letting go) with the trackers' ring-tilt drop raised from 45 to 80 deg, as configs/twin/x1_sqT.yaml, so the
+# unannounced square-to-T release (57-61 deg peaks on 1 m cables) is not dropped by rule. Both variants fly this file.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 80.0
+int_k_xy: 0.0
+tip_detect_m: 0.04

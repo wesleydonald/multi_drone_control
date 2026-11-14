@@ -1,0 +1,13 @@
+# attach_m1_1m_m2a.yaml with the ring-tilt drop at 55 deg (Wesley 5 Nov, the square sq9: the simulated release swing ~28 deg,
+# the default drop 30; 55 stays under the trackers' 60 deg max_payload_tilt_deg disarm). A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+drop_tilt_deg: 55.0

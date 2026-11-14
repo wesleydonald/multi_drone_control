@@ -1,0 +1,5 @@
+configs/experiments/x4_relay_30min_v3_norod.yaml
+configs/experiments/x4_relay_30min_v3_norod.yaml
+configs/experiments/x4_relay_30min_m115_v3_norod.yaml
+configs/experiments/x4_fixed_B_v3_norod.yaml
+configs/experiments/x4_fixed_B_v3_norod.yaml

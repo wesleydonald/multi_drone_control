@@ -1,0 +1,4 @@
+# Wed 4 Nov (S1) h4m1 and rel1/rel2: the M1 four (QUAD1-3 on 3/11/7, QUAD4 on 9) with the magnet-marker release check
+# (card docs/experiments/2026-10-21_tip_detect.md rev 3, flown 22 Oct through chain_pair_tip.yaml), markers 21 and 24
+# streamed. The stretch check (detach_detect_m 0.06), the step-out and the drop rules stay at their defaults.
+tip_detect_m: 0.04

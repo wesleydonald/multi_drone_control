@@ -1,0 +1,23 @@
+# X8, the paper's method through a loss (card docs/experiments/2026-10-30_x8_network_loss.md): the network, our port of Quan et al. (net_law port, C's search-best gains) on world C.
+# configs/twin/c_net_portfinal_hubcom.yaml (the C table's arm, as flown) plus the loss rules below; nothing else changed.
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_tilt_deg: 180.0
+payload_tilt_envelope: false
+traj_hold_s: 5.0
+net_hold_carry: true
+net_twin_geometry: true
+diss_c: 12.0
+diss_k_slot: 18.0
+diss_k_pay: 80.0
+diss_k_anchor: 80.0
+diss_k_ring: 40.0
+diss_ki_load: 0.5
+vel_kp_pos: 1.0
+vel_kv: 3.0
+vel_k_att: 8.0
+# X8's loss rule, the same text in every arm of the cell: drop_gap_deg 200 lets our planner fly on with the T a
+# loss of one of four leaves (its largest gap 180 deg; on the hub the cables meet at the ring's centre of mass, so
+# the T is no capsize there). Inert in the network phase (the planner's loss rules run only before the hand-over).
+drop_gap_deg: 200.0

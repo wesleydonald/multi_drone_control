@@ -34,10 +34,72 @@ SuspendedGeometry suspended(bool attached = false) {
     return g;
 }
 
+void testOctagonalPeerCheckingMatchesStaticAndRejectsRealContact() {
+    WorldSnapshot world;
+    world.ego_half_extents = Vec3(.105, .105, .1);
+    world.ego_tracking_error_half_extents = Vec3::Constant(.005);
+    world.ego_suspended_geometry = suspended(false);
+    world.ego_suspended_geometry.swing_envelope = SwingEnvelope::OuterOctagon;
+    const Vec3 ego_position(0., 0., 1.5);
+    const auto hold = linearPiece(ego_position, ego_position, 0., 1.);
+    CooperativeObstacleTrajectory peer;
+    peer.name = "diagonal_peer";
+    peer.physical_half_extents = Vec3::Constant(.02);
+    peer.tracking_error_half_extents = Vec3::Constant(.005);
+    const Vec3 peer_position(.15, .15, .975);  // near magnet, clear of its octagon, inside its AABB
+    peer.trajectory = constantTrajectory(peer_position, 0., 1.);
+    world.cooperative_obstacles.push_back(peer);
+    TrajectorySafetyChecker checker;
+    requireTrue(checker.checkPiece(hold, 0., 1., world).safe,
+                "cooperative checker AABB-wrapped an octagonal diagonal near-miss");
+    const auto timed = world.timeIndexedObstacles(1, 0., 1.);
+    Eigen::MatrixXd point(1, 3); point.row(0) = ego_position.transpose();
+    Separator separator;
+    for (const auto& relation : timed)
+        requireTrue(separator.solve(point, relation.interval_vertices.front()).feasible,
+                    "planner C-space disagrees with convex near-miss checker");
+
+    auto static_world = world;
+    static_world.cooperative_obstacles.clear();
+    static_world.physical_static_obstacles.push_back({peer.name, axisAlignedBoxVertices(
+        peer_position, peer.physical_half_extents + peer.tracking_error_half_extents)});
+    requireTrue(checker.checkPiece(hold, 0., 1., static_world).safe,
+                "stationary peer and equivalent physical box disagree");
+
+    auto legacy = world;
+    legacy.ego_suspended_geometry.swing_envelope = SwingEnvelope::LegacySquare;
+    requireTrue(!checker.checkPiece(hold, 0., 1., legacy).safe,
+                "legacy conservative diagonal geometry must remain unchanged");
+    auto contact = world;
+    contact.cooperative_obstacles.front().trajectory = constantTrajectory(Vec3(.12, .12, .975), 0., 1.);
+    requireTrue(!checker.checkPiece(hold, 0., 1., contact).safe, "actual magnet contact was missed");
+    auto tracked = world;
+    tracked.ego_tracking_error_half_extents.x() += .03;
+    requireTrue(!checker.checkPiece(hold, 0., 1., tracked).safe, "tracking inflation was dropped");
+
+    // Optional temporal checking must retain the same convex components in
+    // parent and child physical hulls. Small parallel motion needs subdivision,
+    // but actual equal-time separation is identical to the constant near-miss.
+    auto parallel = world;
+    parallel.cooperative_obstacles.front().trajectory = CommittedTrajectory();
+    requireTrue(parallel.cooperative_obstacles.front().trajectory.replaceSuffix(0., linearPiece(
+        peer_position, peer_position + Vec3(.04, 0., 0.), 0., 1.)).accepted,
+        "parallel peer fixture failed");
+    const auto moving_ego = linearPiece(ego_position, ego_position + Vec3(.04, 0., 0.), 0., 1.);
+    requireTrue(!checker.checkPiece(moving_ego, 0., 1., parallel).safe,
+                "parallel fixture must require narrower temporal hulls");
+    TemporalRefinementConfig temporal;
+    temporal.enabled = true;  // Fixture only; no production default change.
+    const auto resolved = TrajectorySafetyChecker(1e-7, temporal).checkPiece(moving_ego, 0., 1., parallel);
+    requireTrue(resolved.safe && resolved.temporal_refinement.child_tests > 0,
+                "temporal children reverted to a different cooperative geometry");
+}
+
 }  // namespace
 
 int main() {
     try {
+        testOctagonalPeerCheckingMatchesStaticAndRejectsRealContact();
         TrajectorySafetyChecker checker;
         const TrajectoryPiece ego = linearPiece(
             Vec3(0.0, 0.0, 1.5), Vec3(1.0, 0.0, 1.5), 0.0, 1.0);

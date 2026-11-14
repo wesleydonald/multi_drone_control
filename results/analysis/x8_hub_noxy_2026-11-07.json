@@ -1,0 +1,583 @@
+{
+ "card": "docs/experiments/2026-10-30_x8_network_loss.md",
+ "rows": [
+  {
+   "run": "R4200",
+   "name": "x8_hub_ours_noxy",
+   "cell": "hub",
+   "arm": "ours",
+   "leaver": 1,
+   "te": 49.322,
+   "tl": 79.321,
+   "t_abort": null,
+   "E_mm": 287.257581839211,
+   "tE": 1.218999999999994,
+   "dip_mm": 66.72946184563311,
+   "rtf": 0.6831009005096341,
+   "rows": 4355,
+   "diff": "45436aa0",
+   "shift_mm": 33.88820523870691,
+   "ts": 5.544999999999995,
+   "ts_band_mm": 20.0,
+   "ts_cens": false,
+   "quad_tilt_peak": 16.01817566112826,
+   "tilt_rise": 100.30131087382655,
+   "tilt_abs_peak": 100.40257342145401,
+   "over300_s": 0.0,
+   "over300_from": null,
+   "loss": [],
+   "leaver_far_m": 1.4891463891941656,
+   "leaver_vmax": 0.503744487040863,
+   "leaver_dist_1s_max": 1.4223161966430156,
+   "leaver_closest_survivor_m": 0.7081998385671737,
+   "gap_deg": 176.4018880050147,
+   "unannounced": [
+    "UNANNOUNCED DETACH: drone 2 (/drone_1) cable 1.177 m, 18 cm over its length (up 13 cm) - resizing"
+   ],
+   "detach_lines": [
+    "DETACH drone 2 (/drone_1) (OCP resize): n=3, trajectory held 1.5 s; surviving ring spans a 180 deg gap (CoG ON/OUTSIDE the hull \u2014 the load cannot hang level)"
+   ],
+   "resize_ev": [
+    0.4259999999999948
+   ],
+   "detach_ev": [],
+   "handover_before_s": null,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "RELEASE",
+    "DETACH_RESIZE",
+    "LAND",
+    "PLANNER_LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0010775862068965517,
+    "failed": 0,
+    "rows_frac": 0.9764156986676148,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "ocp",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4201",
+   "name": "x8_hub_ours_noxy",
+   "cell": "hub",
+   "arm": "ours",
+   "leaver": 1,
+   "te": 49.404,
+   "tl": 79.402,
+   "t_abort": null,
+   "E_mm": 288.33281670052423,
+   "tE": 1.2379999999999995,
+   "dip_mm": 66.57881641686036,
+   "rtf": 0.8446008577487473,
+   "rows": 4408,
+   "diff": "45436aa0",
+   "shift_mm": 33.17829703467578,
+   "ts": 5.6129999999999995,
+   "ts_band_mm": 20.0,
+   "ts_cens": false,
+   "quad_tilt_peak": 16.00158248979312,
+   "tilt_rise": 102.91002203478995,
+   "tilt_abs_peak": 103.03659815411002,
+   "over300_s": 0.0,
+   "over300_from": null,
+   "loss": [],
+   "leaver_far_m": 1.4926608677554636,
+   "leaver_vmax": 0.5240851941827777,
+   "leaver_dist_1s_max": 1.4377779840640257,
+   "leaver_closest_survivor_m": 0.7089114843485819,
+   "gap_deg": 176.37912399668448,
+   "unannounced": [
+    "UNANNOUNCED DETACH: drone 2 (/drone_1) cable 1.177 m, 18 cm over its length (up 14 cm) - resizing"
+   ],
+   "detach_lines": [
+    "DETACH drone 2 (/drone_1) (OCP resize): n=3, trajectory held 1.5 s; surviving ring spans a 180 deg gap (CoG ON/OUTSIDE the hull \u2014 the load cannot hang level)"
+   ],
+   "resize_ev": [
+    0.40799999999999415
+   ],
+   "detach_ev": [],
+   "handover_before_s": null,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "RELEASE",
+    "DETACH_RESIZE",
+    "LAND",
+    "PLANNER_LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0,
+    "failed": 0,
+    "rows_frac": 0.9874867987327157,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "ocp",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4006",
+   "name": "x8_hub_portu",
+   "cell": "hub",
+   "arm": "portu",
+   "leaver": 1,
+   "te": 49.33,
+   "tl": 79.33,
+   "t_abort": null,
+   "E_mm": 616.2238235698783,
+   "tE": 2.304000000000002,
+   "dip_mm": 430.2105622681428,
+   "rtf": 0.7525372365895596,
+   "rows": 4118,
+   "diff": "f6426db0",
+   "shift_mm": 403.88679268919253,
+   "ts": 29.983000000000004,
+   "ts_band_mm": 20.0,
+   "ts_cens": true,
+   "quad_tilt_peak": 11.036814265227802,
+   "tilt_rise": 144.10569941344679,
+   "tilt_abs_peak": 143.75477073507383,
+   "over300_s": 29.248000000000005,
+   "over300_from": 0.7560000000000002,
+   "loss": [
+    "over 300 mm for 29.25 s from +0.76"
+   ],
+   "leaver_far_m": 3.130447075358912,
+   "leaver_vmax": 1.1874417403840651,
+   "leaver_dist_1s_max": 2.2829107821653,
+   "leaver_closest_survivor_m": 0.6457977835870007,
+   "gap_deg": 143.9761481868432,
+   "unannounced": [],
+   "detach_lines": [],
+   "resize_ev": [],
+   "detach_ev": [],
+   "handover_before_s": 22.171,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0008291873963515755,
+    "failed": 0,
+    "rows_frac": 0.9864823243558088,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4007",
+   "name": "x8_hub_portu",
+   "cell": "hub",
+   "arm": "portu",
+   "leaver": 1,
+   "te": 49.315,
+   "tl": 79.315,
+   "t_abort": null,
+   "E_mm": 615.5126300718426,
+   "tE": 2.297000000000004,
+   "dip_mm": 429.7261110815703,
+   "rtf": 0.7574714227862311,
+   "rows": 4108,
+   "diff": "f6426db0",
+   "shift_mm": 403.512889432901,
+   "ts": 29.997,
+   "ts_band_mm": 20.0,
+   "ts_cens": true,
+   "quad_tilt_peak": 11.1173094269154,
+   "tilt_rise": 144.21098244391462,
+   "tilt_abs_peak": 143.66267356596921,
+   "over300_s": 29.258999999999993,
+   "over300_from": 0.7590000000000074,
+   "loss": [
+    "over 300 mm for 29.26 s from +0.76"
+   ],
+   "leaver_far_m": 3.1297386460293812,
+   "leaver_vmax": 1.1744519630940413,
+   "leaver_dist_1s_max": 2.283866439501087,
+   "leaver_closest_survivor_m": 0.6459939007060036,
+   "gap_deg": 143.94708821196383,
+   "unannounced": [],
+   "detach_lines": [],
+   "resize_ev": [],
+   "detach_ev": [],
+   "handover_before_s": 22.160999999999998,
+   "failed_lines": 0,
+   "slow": [
+    "1.92",
+    "2.00",
+    "2.00"
+   ],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0,
+    "failed": 0,
+    "rows_frac": 0.9852444038374062,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4010",
+   "name": "x8_hub_port",
+   "cell": "hub",
+   "arm": "port",
+   "leaver": 1,
+   "te": 49.36,
+   "tl": 79.359,
+   "t_abort": null,
+   "E_mm": 373.2788870959736,
+   "tE": 1.2100000000000009,
+   "dip_mm": 144.10021817987405,
+   "rtf": 0.7446880133841557,
+   "rows": 4038,
+   "diff": "f6426db0",
+   "shift_mm": 3.1195644167586405,
+   "ts": 7.716000000000001,
+   "ts_band_mm": 20.0,
+   "ts_cens": false,
+   "quad_tilt_peak": 13.897793812059692,
+   "tilt_rise": 118.62396685295515,
+   "tilt_abs_peak": 118.10324357431907,
+   "over300_s": 1.0020000000000024,
+   "over300_from": 0.8049999999999997,
+   "loss": [
+    "over 300 mm for 1.00 s from +0.80"
+   ],
+   "leaver_far_m": 1.980325109108613,
+   "leaver_vmax": 1.1318060687283449,
+   "leaver_dist_1s_max": 1.9459943115631193,
+   "leaver_closest_survivor_m": 0.56378978422681,
+   "gap_deg": 120.42014914589801,
+   "unannounced": [],
+   "detach_lines": [
+    "DETACH drone 2 (/drone_1) (slot 1); 3 drones remain on the load"
+   ],
+   "resize_ev": [],
+   "detach_ev": [
+    0.3500000000000014
+   ],
+   "handover_before_s": 22.162,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "DETACH",
+    "LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0008278145695364238,
+    "failed": 0,
+    "rows_frac": 0.9860003255738612,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4011",
+   "name": "x8_hub_port",
+   "cell": "hub",
+   "arm": "port",
+   "leaver": 1,
+   "te": 49.309,
+   "tl": 79.309,
+   "t_abort": null,
+   "E_mm": 371.8742364811605,
+   "tE": 1.222999999999999,
+   "dip_mm": 142.45672019672162,
+   "rtf": 0.7436713607408422,
+   "rows": 4020,
+   "diff": "f6426db0",
+   "shift_mm": 3.1796730859044566,
+   "ts": 7.692000000000007,
+   "ts_band_mm": 20.0,
+   "ts_cens": false,
+   "quad_tilt_peak": 13.834508706936177,
+   "tilt_rise": 118.45173861189994,
+   "tilt_abs_peak": 118.17552756922218,
+   "over300_s": 1.0229999999999961,
+   "over300_from": 0.7970000000000041,
+   "loss": [
+    "over 300 mm for 1.02 s from +0.80"
+   ],
+   "leaver_far_m": 1.9718550627702256,
+   "leaver_vmax": 1.1346405537543,
+   "leaver_dist_1s_max": 1.936336226526821,
+   "leaver_closest_survivor_m": 0.5657722668333465,
+   "gap_deg": 120.4356376219765,
+   "unannounced": [],
+   "detach_lines": [
+    "DETACH drone 2 (/drone_1) (slot 1); 3 drones remain on the load"
+   ],
+   "resize_ev": [],
+   "detach_ev": [
+    0.3509999999999991
+   ],
+   "handover_before_s": 22.157999999999998,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "DETACH",
+    "LAND",
+    "LANDED"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0008285004142502071,
+    "failed": 0,
+    "rows_frac": 0.9819590326971094,
+    "readback": {
+     "mode": null,
+     "net_law": "port",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4012",
+   "name": "x8_hub_quanu",
+   "cell": "hub",
+   "arm": "quanu",
+   "leaver": 1,
+   "te": 49.358,
+   "tl": null,
+   "t_abort": 1.220000000000006,
+   "E_mm": 1176.035738494971,
+   "tE": 4.851000000000006,
+   "dip_mm": 460.90978032320675,
+   "rtf": 0.727862077964245,
+   "rows": 2745,
+   "diff": "f6426db0",
+   "quad_tilt_peak": 90.16412860499938,
+   "tilt_rise": 3.7792026224701236,
+   "tilt_abs_peak": 4.044739163671885,
+   "over300_s": 0.5739999999999981,
+   "over300_from": 0.6640000000000086,
+   "loss": [
+    "fleet abort +1.22",
+    "ENVELOPE FAULT line"
+   ],
+   "leaver_far_m": 3.534461680865785,
+   "leaver_vmax": 3.396925258326064,
+   "leaver_dist_1s_max": 2.8139402148114474,
+   "leaver_closest_survivor_m": 0.7505028840683916,
+   "unannounced": [],
+   "detach_lines": [],
+   "resize_ev": [],
+   "detach_ev": [],
+   "handover_before_s": 22.157999999999998,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "FLEET_ABORT"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0,
+    "failed": 0,
+    "rows_frac": 0.9840053258680515,
+    "readback": {
+     "mode": null,
+     "net_law": "quan",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  },
+  {
+   "run": "R4013",
+   "name": "x8_hub_quanu",
+   "cell": "hub",
+   "arm": "quanu",
+   "leaver": 1,
+   "te": 49.349,
+   "tl": null,
+   "t_abort": 1.2110000000000056,
+   "E_mm": 1166.7094614821108,
+   "tE": 1.9490000000000052,
+   "dip_mm": 454.63247678712435,
+   "rtf": 0.7247377646567925,
+   "rows": 2742,
+   "diff": "f6426db0",
+   "quad_tilt_peak": 90.38107594414552,
+   "tilt_rise": 3.2704878386444425,
+   "tilt_abs_peak": 3.3035641725207743,
+   "over300_s": 0.5499999999999972,
+   "over300_from": 0.6700000000000088,
+   "loss": [
+    "fleet abort +1.21",
+    "ENVELOPE FAULT line"
+   ],
+   "leaver_far_m": 3.477373721904604,
+   "leaver_vmax": 3.162736939347633,
+   "leaver_dist_1s_max": 2.8482544896633177,
+   "leaver_closest_survivor_m": 0.7500183579936617,
+   "unannounced": [],
+   "detach_lines": [],
+   "resize_ev": [],
+   "detach_ev": [],
+   "handover_before_s": 22.181999999999995,
+   "failed_lines": 0,
+   "slow": [],
+   "events": [
+    "ARM",
+    "TAKEOFF",
+    "WAIT_LIFT",
+    "LIFTED",
+    "NET_HANDOVER",
+    "RELEASE",
+    "FLEET_ABORT"
+   ],
+   "validity": {
+    "reasons": [],
+    "late_max": 0.0,
+    "failed": 0,
+    "rows_frac": 0.9832488089749872,
+    "readback": {
+     "mode": null,
+     "net_law": "quan",
+     "drop_gap_deg": "200.0",
+     "reconfig_mode": "network",
+     "drop_tilt_deg_trackers": [
+      "180.0"
+     ]
+    }
+   }
+  }
+ ],
+ "bars": {
+  "L1": {
+   "cell": "hub",
+   "ours": [
+    "R4200",
+    "R4201"
+   ],
+   "port": [
+    "R4010",
+    "R4011"
+   ],
+   "ours_E_mm": [
+    287.257581839211,
+    288.33281670052423
+   ],
+   "port_E_mm": [
+    373.2788870959736,
+    371.8742364811605
+   ],
+   "bar_mm": 308.33281670052423,
+   "ours_mean_mm": 287.7951992698676,
+   "port_mean_mm": 372.576561788567,
+   "each_port_worse": [
+    1.0,
+    1.0
+   ],
+   "port_loss": [
+    [
+     "over 300 mm for 1.00 s from +0.80"
+    ],
+    [
+     "over 300 mm for 1.02 s from +0.80"
+    ]
+   ],
+   "verdict": "CONFIRMED"
+  },
+  "L3": {
+   "runs": {
+    "R4200": [],
+    "R4201": []
+   },
+   "verdict": "HOLDS"
+  }
+ }
+}

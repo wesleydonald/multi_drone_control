@@ -1,5 +1,6 @@
 #include "tejen_dynamic_planner/experiment_workspace.hpp"
 #include "dynamic_planner/committed_trajectory.hpp"
+#include <Eigen/Geometry>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -25,6 +26,13 @@ int main() {
             Vec3(.105, .105, .06), geometry, Vec3::Constant(.05));
     } catch (const std::invalid_argument&) { rejected = true; }
     if (!rejected) throw std::runtime_error("empty body workspace must reject");
+    const auto rotation = Eigen::AngleAxisd(std::acos(-1.)/2., Vec3::UnitY()).toRotationMatrix();
+    const auto rotated_bounds = tejen_dynamic_planner::assemblyWorkspaceBounds(
+        Vec3(-1., -1., 0.), Vec3(1., 1., 2.), Vec3(.1, .1, .3),
+        SuspendedGeometry{}, Vec3::Constant(.05), rotation);
+    if (std::abs(rotated_bounds.second.x()-.65) > 1e-9 ||
+        std::abs(rotated_bounds.second.z()-1.85) > 1e-9)
+        throw std::runtime_error("ROS workspace adapter must preserve full body rotation");
     // The Python generator advertises native central intervals of a uniform cubic,
     // not individually clamped pieces. Exercise the real consumer's C2 contract.
     CommittedTrajectory curve;

@@ -136,11 +136,11 @@ def test_the_figure8_has_its_own_size_knob():
 
 
 def test_the_position_limit_is_on_for_the_rig_only():
-    """pos_limit_m: 1.75 m on every rig profile (Wesley 22 Oct, after its critic and the LIM runs), off in the twin and
+    """pos_limit_m: 1.8 m on every rig profile (Wesley 22 Oct, after its critic and the LIM runs; 1.8 since 12 Nov), off in the twin and
     legacy profiles (their claim tables fly paths past it)."""
     for name_, a in every_default():
         if 'pos_limit_m' in a:
-            want = '1.75' if name_.startswith('real') else ''
+            want = '1.8' if name_.startswith('real') else ''
             assert a['pos_limit_m'] == want, f'{name_}: pos_limit_m {a["pos_limit_m"]!r}'
 
 

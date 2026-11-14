@@ -161,6 +161,7 @@ class CentralController(Node):
         #    after a flight, so no armed idle at zero throttle on the floor. Needs the planner's
         #    /drone_i/departed (received in this flight) and its tracker's /drone_i/down_alone. ──
         self._off_ring = set()
+        self._carrier_down = set()
         self._down_alone = set()
         departed_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                                   reliability=ReliabilityPolicy.RELIABLE)
@@ -171,6 +172,11 @@ class CentralController(Node):
             self.create_subscription(
                 Bool, f'/drone_{i}/down_alone',
                 lambda msg, drone_id=i: self._down_alone_callback(msg, drone_id), 5)
+            # a carrier the planner released on the landed ring while the LAND waits for QUAD4 (card
+            # 2026-11-05_carriers_down_alone): disarmed alone too, said as on the ring
+            self.create_subscription(
+                Bool, f'/drone_{i}/carrier_released',
+                lambda msg, drone_id=i: self._carrier_released_callback(msg, drone_id), departed_qos)
 
         # ── Tilt cut (card 2026-10-11_quad4_tilt_cut; off by default): a drone's tilt fault while it is off the
         #    ring (its mux forwards the partner or has cut it, or its on_load is False) lands the fleet, never the
@@ -270,6 +276,7 @@ class CentralController(Node):
             self._fault_land_sent = False
             self._limit_count = {}
             self._off_ring.clear()
+            getattr(self, '_carrier_down', set()).clear()
             self._down_alone.clear()
             self._arm_fleet()
         elif command == "TAKEOFF":
@@ -315,10 +322,18 @@ class CentralController(Node):
         elif self.flying:
             self._off_ring.add(drone_id)
 
+    def _carrier_released_callback(self, msg: Bool, drone_id: int):
+        # as _departed_callback: a latched True from an earlier flight is ignored
+        if not msg.data:
+            self._carrier_down.discard(drone_id)
+        elif self.flying:
+            self._carrier_down.add(drone_id)
+
     def _down_alone_callback(self, msg: Bool, drone_id: int):
         if not (msg.data and self.flying) or drone_id in self._down_alone:
             return
-        if drone_id not in self._off_ring or self.mux_state.get(drone_id) == 'partner':
+        carrier = drone_id in getattr(self, '_carrier_down', ()) and drone_id not in self._off_ring
+        if not (drone_id in self._off_ring or carrier) or self.mux_state.get(drone_id) == 'partner':
             self.get_logger().warn(
                 f"Drone {label(drone_id)} reports down at its rest, but the planner has not released it "
                 f"off the ring in this flight (or its mux forwards the partner): not disarmed alone.")
@@ -329,7 +344,8 @@ class CentralController(Node):
                                    f"(it idles until the fleet disarm).")
             return
         self._down_alone.add(drone_id)
-        _announce(self, 'info', f"Drone {label(drone_id)} is down at its rest off the ring: disarmed alone.")
+        where = 'on the landed ring (still on its plate)' if carrier else 'off the ring'
+        _announce(self, 'info', f"Drone {label(drone_id)} is down at its rest {where}: disarmed alone.")
         req = SetArming.Request()
         req.arm = False
         # once its tracker has stopped commanding, a disarm straight to its radio too: the tracker's own

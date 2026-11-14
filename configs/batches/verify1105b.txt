@@ -1,0 +1,3 @@
+configs/experiments/sq_pickup_hover_L100_p115_cppreattach_bd_noxy_over.yaml
+configs/experiments/cda_b_k1s_rearm.yaml
+configs/experiments/cda_d_k1s_rearm.yaml

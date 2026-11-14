@@ -1,0 +1,21 @@
+# attach_m1_1m_m2a_orbit_det15.yaml on the figure-eight (rig_nr8.sh, the 13 Nov trials: nro's detach and re-attach): his
+# TAKEOFF pauses the path, as on the circle (attach_pause_at takeoff, the default, typed for the read-back; the fig8
+# re-attach file holds the pause back to his re-attach leg). 12 laps (40.6 s each at 0.75 m and 0.125 m/s; the path held
+# while QUAD4 re-attaches does not count): a figure-eight lap ends at rest by itself and the last one starts the descent.
+# A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+traj_hold_s: 5.0
+attach_pause: true
+attach_pause_at: takeoff
+drop_tilt_deg: 55.0
+detach_detect_m: 0.15
+traj_laps: 12

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <utility>
 
 #include <string>
 #include <vector>
@@ -8,6 +9,15 @@
 #include "dynamic_planner/types.hpp"
 
 namespace dynamic_planner {
+
+enum class SwingEnvelope { LegacySquare, OuterOctagon };
+
+struct AssemblyWorkspace {
+    bool enabled = false;
+    Vec3 lower = Vec3::Constant(-5.0);
+    Vec3 upper = Vec3::Constant(5.0);
+    void validate() const;
+};
 
 struct ConvexComponent {
     std::string name;
@@ -36,6 +46,9 @@ struct SuspendedGeometry {
     Vec3 payload_half_extents = Vec3(0.05, 0.01, 0.003);
     Vec3 payload_center_from_magnet_center = Vec3(0.0, 0.0, -0.028);
 
+    // Appended to preserve positional initialization of the legacy fields.
+    SwingEnvelope swing_envelope = SwingEnvelope::LegacySquare;
+
     void validate() const;
 };
 
@@ -58,12 +71,34 @@ Eigen::MatrixXd axisAlignedBoxVerticesFromBounds(const Vec3& min_corner,
 Eigen::MatrixXd minkowskiSumVertices(const Eigen::MatrixXd& a,
                                      const Eigen::MatrixXd& b);
 Eigen::MatrixXd negateVertices(const Eigen::MatrixXd& vertices);
+// Remove convex-redundant points within equal-Z layers; no spatial inflation,
+// coordinate quantisation, or approximate equality. Preserves the convex hull.
+Eigen::MatrixXd compactHorizontalLayers(const Eigen::MatrixXd& vertices);
+// For an exact full-height vertical prism, configuration-space membership is
+// determined by XY alone when every legal tracked component lies within the
+// prism's Z interval. Extrude its exact XY projection to the original C-space
+// Z bounds. This contains the original hull globally and is equivalent inside
+// the supplied assembly-centre workspace; otherwise retain layer compaction.
+Eigen::MatrixXd compactStaticConfigurationSpace(
+    const Eigen::MatrixXd& configuration_vertices,
+    const Eigen::MatrixXd& physical_obstacle_vertices,
+    const ConvexComponent& tracked_component,
+    const AssemblyWorkspace& workspace,
+    const std::pair<Vec3, Vec3>& centre_bounds);
 
 // Relative occupied components. When suspended geometry is disabled this returns
 // only the body component, preserving B.3 semantics.
 std::vector<ConvexComponent> assemblyComponents(
     const Vec3& body_half_extents,
-    const SuspendedGeometry& suspended);
+    const SuspendedGeometry& suspended,
+    const Eigen::Matrix3d& body_rotation = Eigen::Matrix3d::Identity());
+
+// Snapshot-held body attitude only; hanging components remain gravity aligned.
+void validateBodyRotation(const Eigen::Matrix3d& rotation);
+std::pair<Vec3, Vec3> assemblyCentreBounds(
+    const AssemblyWorkspace& workspace, const Vec3& body_half_extents,
+    const SuspendedGeometry& suspended, const Vec3& tracking,
+    const Eigen::Matrix3d& body_rotation = Eigen::Matrix3d::Identity());
 
 // Cooperative peer components add the endpoint-derived M2D tether when enabled.
 // The tether prism conservatively contains a radius-r capsule around the segment.

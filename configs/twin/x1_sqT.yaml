@@ -1,0 +1,9 @@
+# X1's uneven cell sqT (card docs/experiments/2026-10-30_x1_release_ablation.md, addendum; Wesley 30 Oct): the S chain's
+# params (configs/twin/s_chain_pair.yaml: the T flies under drop_gap_deg 200 with min_survivors 2) with the trackers'
+# ring-tilt drop raised from 45 to 80 deg, twin only, so the square-to-T release (57-61 deg peaks) is not dropped by rule
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 80.0

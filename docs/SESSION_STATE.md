@@ -1,1380 +1,580 @@
-# Session state (read after every compaction; keep it short and current)
+# Session state (the LAB chat reads this first, via `/lab`; keep it short and current)
 
-Updated: Fri 30 Oct 2026, 11:41 AEDT (from `date`). Only what a new session needs to act. History: `git log -p docs/SESSION_STATE.md`,
-`docs/decisions.md`, `results/registry.csv`, and `docs/archive/`.
+Updated: Sat 14 Nov 2026, 13:42 AEDT. Branch **week8** at **bf52a8a** (the code
+freeze); everything since is UNCOMMITTED: src/ (tejen_mission, dissipative_planner, drone_communication, drone_magnet,
+bringup, simulation_communication), tools/ (console, experiment runner, mocap_stream_check, rig_cable_check,
+frozen_pose_desk_check), configs/experiments/rig_*_twin, docs, registry, results/rig/2026-11-1x scripts. Commit only on
+Wesley's word (never offer).
 
-## FRI 30 OCT LAB (from 08:00; sheet docs/rig/fri_2026-10-30.md) -- read first
-- Flown: sq6b_2 (LAND, bounce), sq6b_4 (QUAD3 pulled its magnet off plate 7 before liftoff), sq6b_5 (LAND 3.5 s into
-  the lift, bounce, then the 30 deg drop). Registry rows RIG-1030-sq6b_2/_4/_5.
-- OPEN, blocks every ring flight: every carrier bounces at ~1 Hz from liftoff (free climb, cables slack, the measured pull
-  not applied, reference as smooth as 29 Oct) and the bounce grows ~2x/s in the lift. Free climb, 1 Hz band: height 24-48 mm
-  vs 7-11 (29 Oct, 7 flights), throttle 14-42 vs 4-6 (x1000). Same as 29 Oct: code (tracker last edited 29 Oct 09:33),
-  params.json (only contact_ball_mass 0.06->0.15, never active: no object_attached), the tracker's solver, env, mocap rate,
-  jitter and gaps, radio LQ/rate, loop timing, packs, thrust per throttle (k 37-39) and hover throttle. So a hardware-chain
-  delay: Motive (smoothing/latency/camera mode), ELRS packet rate, FC, props. Asked Wesley 09:00. The heading rule was weak
-  (29 Oct flew tail placements clean); the sheet's "fly through the lift" line was wrong and is replaced.
-- 09:06 RIG-1030-solo1 (Wesley: Motive smoothing has always been 10): QUAD1 alone, free_hover 1.5 m, hovered CLEAN
-  (hover 1-2 mm, rates 0.03-0.08). The bounce needs the ring. Ring flights still match 29 Oct in geometry, timing and
-  solvers; differ in a harder liftoff (+20 cm over the reference vs +13) and a 3-4 cm pretension rise (vs ~1).
-  Proposed next: h3t (3-quad hover, dissipative mode, no QUAD4 stack) to split attach-mode from the ring setup.
-- 09:13 RIG-1030-h3t (3-quad hover, dissipative): the same heave, clean 2 s then ~2x/s; LAND +4.8 s then the 38.8 deg
-  drop. Not the attach launch. Mode: a heave (quads and ring in phase). Proposed: hardware questions (Betaflight, ELRS,
-  props, cable mounts), then h3tp = h3t with params_file configs/rig/planned_pull.yaml (cable_source model, one flight,
-  diagnostic: takes the measured-pull loop out).
-- 09:21 RIG-1030-h3tp (planned pull): no heave, but the ring stalled at 0.44-0.56 m (planned pull -12 %, the height
-  integral never started) and rocked to 22 deg. So the heave runs through the measured-pull loop. Mocap age at the
-  tracker unchanged (11-14 ms). Asked Wesley: hardware changes? / build a typed gain on the measured pull (default 1)?
-- 09:30 Wesley: no hardware change he knows of; "Don't build" the measured-pull gain. Lead: /proc/net/snmp
-  RcvbufErrors 322,435 since boot 08:02 (UDP packets dropped on a full socket buffer). Motive streams 10 bodies at
-  224 Hz (2,237 packets/s; bodies 6, 8, 11-14, 21-24). The mocap node alone keeps up (queue ~0, no drops, ~60 % of a
-  core). If it falls behind under the full stack, its 212,992 B buffer = ~100 ms stale poses (fits the 100-190 ms
-  throttle-to-climb lag). Wesley recalibrating Motive, then sq6b again; background logger on port 1511 (task
-  b61xbhroc, scratchpad sock_watch_*.log).
-- 09:42 RIG-1030-sq6b_7 after the recalibration: the same heave, LAND +3.3 s, 30.4 deg drop. Mocap socket kept up
-  in flight (queue ~6 KB): stale mocap ruled out. The recalibration turned the ring body ~16 deg (SLOT OFFSET 12-21 deg
-  on all three carriers): fix body 8 before flying. Proposed next: h4n (4 quads: each carries 25 % less of the ring;
-  29 Oct's 4-quad lifts flew), else stop ring flights and take a blackbox log on one carrier.
-- 09:57 RIG-1030-h4n (ring body re-oriented, slot errors back to +-2 deg): 4 quads heave too, faster; LAND +3.0 s,
-  31.2 deg drop. Lab stopped 10:00. QUAD4 blackbox of h4n saved: results/rig/2026-10-30/h4n_fc/h4n_QUAD4.bbl
-  (baseline: 2026-10-15/q4solo_fc). Decoder orangebox (PyPI, used 15 Oct) blocked by auto mode: asked Wesley.
-- 10:06 RIG-1030-h4n_bb (blackbox decoded, Wesley OK for orangebox): radio + mocap delay 95 ms today vs 4 ms on
-  15 Oct; the FC adds nothing (throttle in -> motors 0 ms; config identical; radio frames 250 Hz both days). The
-  extra ~90 ms is in the radio uplink or the mocap path. elrs_interface subscribes at depth 1 (no queue). Next: a
-  props-off bench split (QUAD4 on USB: MSP RC vs our command = radio; MSP raw IMU vs mocap, shaken by hand = mocap).
-  Decoder/scripts: scratchpad bb_read.py, bb_timing.py, bb_down.py (orangebox in scratchpad bbdl/whl).
-- 10:19 bench split (tools/bench_latency.py, no ROS: drives the TX disarmed, reads the FC by USB MSP and the mocap
-  UDP itself): run 1 void, QUAD1 had no battery (FC 0.0 V, receiver unpowered, no link: ROLL held 1500); mocap
-  cable in use by someone else. Pending: radio half (battery in, props off, 40 s, no one touches it); mocap half
-  (cable in, twist QUAD1 by hand 40 s). Prime suspect the mocap path (the FC gets radio frames every 4 ms; ELRS
-  does not queue) and the mocap network was shared today.
-- 10:26 RIG-1030-bench_radio: radio delay 6.5 ms (QUAD1, direct to the TX, corr 0.94): the radio is not it. Prime
-  suspect the mocap path upstream of our socket. Mocap half pending (cable). Two agents running: one re-checks the
-  blackbox split (gyro method, q4circle_2 baseline, other carriers); one tries +90 ms mocap / command delay in the
-  twin on the lab PC (exploratory rows).
-- 10:33 Arm refusals (Wesley asked): QUAD1/QUAD2 FCs believe 25-112 deg tilt at every !ERR* (QUAD3/4 read the
-  real 12-15). QUAD1 bench (new read-only `tools/fc_probe.py armcheck`): accelerometer 1.10 g up / 0.87 g down
-  (uncalibrated, ~0.11 g offset) -> outside Betaflight's 0.9-1.1 g trust window -> attitude on the gyro alone
-  (~10 deg/s drift) -> ANGLE. Fix = accelerometer calibration (fc_request.md step 2; FC change: supervisor's OK);
-  evidence added to docs/rig/fc_request.md. Asked: QUAD2 on USB to confirm; QUAD1's posture (gyro +-100 deg/s
-  with the battery in). Mocap bench half ~11:00.
-- Twin delay test (agent, lab PC, R2909-R2914, configs fri30_h3t_*): +90 ms mocap or command delay does NOT give
-  the rig's fast in-phase heave in the lift; it gives a slow out-of-phase ring rocking at ~1.2 Hz in the hover
-  (grows over 20-30 s); 45 ms flies calm. Delays on from 19.5 s (on from the floor the twin flips a quad at takeoff).
-  So 90 ms alone does not explain the heave in the twin (rigid ring, rod links); open.
-- RIG-1030-h4n_bb2 (agent re-check): the extra ~90 ms is mocap-side (+80..93; radio +0..13), on every quad
-  (QUAD2/3/4 downlink-mocap shifted -75..-113 ms from 29 to 30 Oct), before our mocap node stamps it.
-- Configurator (Wesley): QUAD1 still for 3 min, RPY drifted to ~10/10/23: the attitude drift on the bench.
-- 11:15 FC fix approved by the supervisor (decisions.md). QUAD1 done: acc_calibration 57,-112,-161 -> 33,-55,36,
-  small_angle 90 (Wesley's value); backups docs/rig/fc/QUAD1_diff_2026-10-30{,_after}.txt; bench armcheck PASS
-  (RIG-1030-q1_acc: 1.00 g, tilt steady 11.6 deg, no ANGLE). Next: QUAD2 (calibration + angle), QUAD3/4 angle;
-  console --small-angle 90 (the lowest set). Mocap bench half when the cable is free.
-- 11:35 ROOT OF THE 90 ms (RIG-1030-bench_mocap): the mocap forwarder on the mocap PC saturates at ~2,250 packets/s.
-  Body 11 alone: 240 Hz, 7.5 ms. All 10 bodies (as the morning flights): 225 Hz per body, 95 ms. QUAD2-4 FC fixes
-  done by Wesley (not checked). Only 1 quad may fly now (noise). Asked Wesley: fix = stream only the bodies in use
-  (<= 8 at 240 Hz; recommended) / Motive 120 Hz / fix the forwarder; a 5 s stream check at the start of each lab
-  day; re-fly h3t with it fixed to see whether the heave goes.
-- 11:41 Wesley: stream fewer bodies (DECIDED); tools/mocap_stream_check.py built and run (10 bodies at 226 Hz: NOT OK);
-  rule added to the working rules. OPEN: the 4-quad T1 needs 9 bodies (96 % of the limit); re-fly h3t/sq6b with the
-  reduced set when 3 quads may fly (only 1 today, noise).
-- ~11:50 Wesley (active, answers any time): up to 3 agents. Running: (1) rescope -> docs/plan_rescope_2026-10-30.md
-  ("how do I prove my approach has added value and what can it do", sim-heavy, 6 lab sessions Wed/Thu 8-11 to
-  19 Nov, hand-in Fri 20 Nov); (2) thesis audit -> docs/thesis_audit_2026-10-30.md + drafts in
-  ~/mdc_wt/thesis/docs/thesis_drafts/thesis_v3_full/Source/src/drafts_1030/; (3) 2-3 thesis figures (final sim results).
-- ~12:30 agents done: rescope draft, thesis audit (+3 drafts in drafts_1030/), 2 figures (docs/figures/review_2026-10-30/).
-  DECIDED (decisions.md): headline X1 + X4; freeze <= 19 Nov (aim 12); both rig setups; Quan port + published row.
-  Next asked: X4 pack budget B and announced swaps; resize_delay_s switch + critic waiver; twin ring mass; re-fly filter.
-- ~12:40 DECIDED: new twin-only switches approved (critic waived for resize_delay_s); X4 B = 5 min, announced swaps;
-  chain square-to-T unannounced as decided; twin ring 0.86 kg + one 1.15 cell. Agents running: X1 (ONLY one editing
-  src/ and using the lab PC: resize_delay_s, card docs/experiments/2026-10-30_x1_release_ablation.md, runs); X4 in an
-  isolated worktree (rota code, card, configs; no runs; merge after X1); thesis drafts (methods hardware update,
-  8-quad chain results) into drafts_1030/.
-- ~12:45 SUPERVISOR PACK (Wesley): a draft for feedback Sat/Sun; Wesley reads and rewords everything first. Sections:
-  contributions + results plan (placeholders for planned real-world results are fine), methodology (updated; he has
-  seen neither the new lit review nor the methodology, lit review not a priority), one results section as the template
-  (8-quad chain). Order: the drafts agent finishes -> continue it to assemble (contributions/results-plan section, cover
-  note, one PDF from a separate copy) -> a read-only fact-check pass -> fixes -> PDF to Wesley tonight.
-- ~12:50 drafts agent done (methods_hardware_update.tex, res_scale_8.tex in drafts_1030/; build 65 pp clean). Continued
-  it to assemble the supervisor pack in ~/mdc_wt/thesis/docs/thesis_drafts/supervisor_pack_2026-10-31/. Its open
-  questions (relayed): 30 Oct flights left out (void); drop-gap 200 deg is Wesley's 21 Oct rule; fig:geometry kept as
-  the earlier setup; re-fly filter OPEN. Unverified numbers flagged in comments (UAV mass 0.583, plate face ~25 mm,
-  ring inertias, old plates ~60 mm, magnet hold 9-10 N, twelve plates).
-- 13:10 Rescope APPROVED except X9 (dropped); 2-quad real-world = RIG-1028 pair flights (M2A, 0.55 m). Tejen asked the
-  1 m hanging length: from 29 Oct logs QUAD4 body pivot -> marker 1.039 m in hover (bench 1.041), marker then 34.1 mm
-  above the face -> ~1.073 m to the face, ~1.050 m to the marker as redefined today (22.6 mm above the face).
-- 13:08 Supervisor pack BUILT: ~/mdc_wt/thesis/docs/thesis_drafts/supervisor_pack_2026-10-31/supervisor_pack_2026-10-31.pdf
-  (30 pp: cover note 1, contributions 2, methodology 21, results template 4, refs 2; 9 planned boxes; orange = unverified).
-  Fact-check agent running (read-only) -> docs/thesis_factcheck_2026-10-31.md; then apply fixes, then Wesley reads/rewords.
-  Tejen reply drafted: ~/Downloads/tejen-reply-20261030.md (for Wesley to read and send).
-- 13:15 Wesley: he reads the FULL draft himself and picks what the supervisor reviews (the pack stays as one option).
-  Now: ~/mdc_wt/thesis/docs/thesis_drafts/full_draft_2026-10-30/thesis_master_plus_30oct_drafts.pdf (65 pp: Overleaf
-  master 28 Oct + the five drafts_1030). Missing: the 23 Oct result drafts (R, S, rejoin, U, C, pair swing) and the
-  contributions section -> one integrated full draft when an agent slot frees (after the fact-check).
-- X4 BUILT (worktree .claude/worktrees/agent-a6ad05d91f3a03b90, branch worktree-agent-a6ad05d91f3a03b90, on 284ffb4;
-  uncommitted): relay_task switch, relay: config section, tools/experiment/relay.py, tools/x4_metrics.py, x4_*.yaml,
-  card docs/experiments/2026-10-30_x4_endurance_relay.md, world eight_rigid_ground_rig_R50_m115_L100.sdf; tests pass.
-  DECIDED: B = 10 min (update the card before runs), new world OK, hover dwell = charge, 0.9 kg R0.5 ring for claims.
-  Merge AFTER X1 finishes; run: lab_batch --slots 2 --cpus 12 --wall-cap-min 180 --warm-from-config: x4_relay_short
-  first, then x4_relay_30min x2, x4_fixed_B x2, x4_relay_30min_m115 x1 (~2.3 h per 30-min run; ~5 h).
-- 13:25 Wesley happy with the draft so far; asked for a full Results and Discussion chapter (school: 15-20 pp, findings
-  with figures/tables, interpreted, linked to the gaps/objectives; thesis ideally <= 50 pp, conclusion ~1 p; over is
-  fine for now). Writing agent (the pack one) continued: chapter by gaps/objectives + C1-C4, placeholders for X1/X4/
-  planned real-world, figures_needed.md, then the integrated full draft ->
-  ~/mdc_wt/thesis/docs/thesis_drafts/full_draft_2026-10-30/thesis_full_draft_2026-10-30.pdf.
-- ~14:00 Wesley measured: UAV + 1 m cable 0.583 kg; M2A plates circular 55 mm; hold ~10 N; 12 plates on both rings; the
-  1.15 kg ring a thin disk 5-10 mm (sent to the writing agent). OPEN for Wed 4 Nov: measure attach_z (plate face above
-  body 8 pivot, payload_geometry.py); real.yaml 0.025 likely high. Put it on the Wed sheet.
-- ~14:10 FULL DRAFT BUILT: ~/mdc_wt/thesis/docs/thesis_drafts/full_draft_2026-10-30/thesis_full_draft_2026-10-30.pdf (78 pp,
-  main text 57; Results and Discussion pp. 39-56, 18 pp, source drafts_1030/results_discussion.tex; figures_needed.md:
-  bending/band-stop, the simulated join). Pack rebuilt with the fact-check fixes + measurements. Open for Wesley: Quan
-  published row; freeze bands for 4-12 Nov or narrow G5 (2/11 in band); attach_z (measuring now); the chain after the
-  square-to-T drop. Agent found one 29 Oct "loss" was a false trigger: three plate-0 losses, not four.
-- 13:46 Wesley style (memory thesis-figure-preferences.md): tables full borders; figures full box (all spines); legends
-  below the plot, framed, in columns. Set in tools/plot_style.thesis() + new legend_below(), and the thesis-figure skill.
-  Agent restyling every draft figure/table and rebuilding the full draft + pack.
-- 13:53 real.yaml attach_z 0.025 -> 0.028 (Wesley: use the 29 Oct reading; decisions.md); bringup tests pass.
-- 14:00 DECIDED: Quan comparison = our port + BOTH published arms as rows; G5 narrowed (trends; band hits as they are).
-  DECIDED 14:05: the chain restarts from the T after the square-to-T drop (the drop = the rule's boundary).
-- ~14:20 Full draft restyled (9 figures, 87 tables) and decisions applied; Wesley: contributions belong after the lit
-  review -> moved to 2.8 after 2.7 research gaps, each naming its gap; intro keeps a pointer. Rebuilt: 79 pp, clean.
-- 14:23 Wesley: a full list of sim runs and of everything before hand-in -> docs/sim_runs_todo.md, docs/handin_plan.md
-  (pointer in CLAUDE.md); keep them ticked. Appendix now compiled in the full draft (83 pp). Agents: writer closing
-  the orange items per Wesley (B: model inertias, drop the magnet-angle half-sentence, ref point = CoM; C: catch
-  radius 45 mm, re-fly with slope (DECIDED), at most eight wording; D: re-check switch counts and tick timing);
-  figure agent: solve-time distribution as flown (5 SQP iterations per tick, not 1).
-- 14:25 Orange items closed in the full draft (83 pp with appendix, clean): inertias model, magnet half-sentence
-  gone, ref point = CoM, catch radius 45 mm, slope for all sim, "at most eight" derived, switch counts confirmed
-  (26 = 20 + 6; 24-28 ms), solve times from the logs 27/33/56 ms median (2/3/4), 28 % over budget at four (some
-  ticks 3-4 iterations: the 60 ms budget cuts late ticks). Still orange: 6 mm confirmation, planned join cells,
-  abstract, conclusion. Figure agent next: redesign Fig 17 (rejoin) + pose-rendered snapshots replacing Gazebo
-  screenshots (tools/snapshot_render.py).
-- 14:35 Full draft 85 pp clean: 4.1 by trajectory (Tables 8-10 hover / figure-eight / spinny line, group rows per setup,
-  notes under), no separate Discussion (each result discussed in place), headings title case (tools/thesis_titlecase.py),
-  heading metric added to 3.5.3, circle/line/spin in Appendix E. Photos suggested to Wesley: ring in flight, a carrier
-  close-up, QUAD4 + tether, the earlier setup, the cage. Figure agent queue: solve time -> Fig 17 -> renders -> Fig 12.
-- 14:45 Wesley: put the draft on his thesis LaTeX. Overleaf origin/main unchanged since the draft base (9eea11f). Worktree
-  ~/thesis_full_draft (branch full-draft-1030 of ~/thesis) with the full draft + latexmkrc (nomenclature); latexmk
-  build 85 pp clean; commit 1f755ef (Wesley as author). NOT pushed: Wesley runs
-  `git -C ~/thesis_full_draft push origin full-draft-1030:main` (Overleaf branch: main). ~/thesis left
-  as it was (its two old local edits untouched).
-- 14:50 TWO CHATS from next week (CLAUDE.md "Two chats"): this file = the LAB AND RESULTS chat (real world + simulation
-  + code); docs/THESIS_STATE.md = the THESIS chat. Shared board docs/handin_plan.md. Nomenclature left TODO in the
-  draft (commit 7420c37 on full-draft-1030; Wesley pushes both commits). Still running at the switch: X1 (lab PC),
-  the figure agent (solve time, Fig 17, renders, Fig 12 -> a follow-up commit for the thesis branch). Then: merge
-  X4 and start its short check; the Wed 4 Nov sheet (S1: stream check, h3t heave check, sq6b with weld_radius 0.045
-  and attach_z 0.028, the 1 m release; arming check with --small-angle 90).
-- 14:55 Tejen's review back (~/Downloads/RIG_LATENCY_AND_GEOMETRY_REPLY_20261030.md). Key for Wed: body 24's new point
-  (22.6 mm above the face) changes W (~0.0165, was 0.028), L (~1.0525, was 1.041), P, Q and his magnet_drop_below_quad
-  (~1.050; our launch's 1 m geometry has 1.04, mpc_cable_length 1.0 stays): re-measure before the first attach. Bench
-  latency with the flight's body set before flying. Other follow-ups in docs/handin_plan.md section 6. Asked Wesley: add
-  X3b (8 quads at 1 SQP iteration per tick, ~6 runs) to the run list?
-- 14:57 Wesley: X3b, show 8 (and 9, as the reference paper) work in real time: 1 SQP iteration per tick + plan_res_every 0 +
-  plan_fast_refs (existing switches). Bench 24 Oct on this laptop: tick at 1 it 82.5 ms (8), 106 ms (9; residual 43 ms of
-  it). In docs/sim_runs_todo.md under X3; runs after X1, before X4's long runs; then the solve-time figure redone with
-  the ground computer's 1-iteration tick for 2-9 against the 100 ms period.
-- Planner 3-quad solver: .build_sig_3 02:18, .so 08:26 (loaded "geometry + sources unchanged", load_mass 1.150).
+## NOW (Sat 14 Nov 13:42): next week's plan (Wesley 14 Nov, decisions DECIDED 2026-11-14; CLAUDE.md updated)
+- Sessions 08:00-11:00: Mon 16 (Wesley: detach/re-attach x3 hover, figure-eight, circle; one 4 -> 2 -> 4; sheet
+  docs/rig/mon_2026-11-16.md, scripts results/rig/2026-11-16/scripts/), Tue 17 + Wed 18 (Te-Jen: drop-off x3 hover,
+  circle, figure-eight, then hero; sheet docs/rig/tue_2026-11-17.md), Thu 19 + Fri 20 (gaps, the best hero). Thesis takes
+  flights up to Thu 19; hand-in Fri 20 17:00.
+- DONE 14 Nov: twin regression of Monday's lines after the merge (R4474-R4476: no regression; the re-weld timeout is the
+  old twin artifact); runtime desk check of 4 -> 2 -> 4 PASS on wiring (decisions FINDING 14 Nov; CPU 8.5/12 on the ground:
+  sheet closes RViz for row 10); ~/rig_424.sh copied; the figure-eight rows press his TAKEOFF ~5 s after the release (a
+  carrier passed 0.37 m from the waiting QUAD4 in the twin, R4402); the note for Te-Jen sent to Wesley
+  (docs/rig/for_tejen_2026-11-14.md + zip: his OK for QUAD3, his descent, one C++ line, the paper wording).
+- WAITING on Te-Jen: OK for QUAD3; his descent choice; the C++ line. On the day: QUAD3's marker 23 + plate 3's record
+  (the second funnel is on plate 3); QUAD2's pack cells.
+- Thesis requests Q009-Q015 all closed (F109-F123).
 
-## OVERNIGHT 29 -> 30 Oct (loop 00:09-07:21: QUEUE DONE; morning report docs/reports/morning_report_2026-10-30.md) -- read first
-Wesley (~23:55): work overnight, as much as possible, lab PC when free; measurements first at the top of the sheet; no
-repeat of 29 Oct's problems (within reason: QUAD1's weak magnet stays); sq6b FIRST (10 cm, 1.0 s: "attempt as much
-as possible, it is frustrating when it gets stuck"); B2 skipped tomorrow; 0/3/6 again (Tejen's attach on carriers
-0/3/6, cap 0.95, fresh packs, short, the notch) AND a 0.86 kg ring version ready to swap to; the pickup and drop-off,
-with a fallback that starts QUAD4 with the object already on its magnet; "really really want our first proper attach":
-read 29 Oct's logs hard, the twin does not tell the full picture; also the ring's drift and the frozen-marker swing.
-Queue [status] (order of work; at most 2 agents; Gazebo on the lab PC only):
-- N1 re-fly fri30_sq6/sq6b/k1_5 [DONE 00:35: sq6/sq6b weld first descent (R2896/R2897, body <= 2.45 m); k1_5 R2898/R2899:
-  picked, carried, dropped in the net, BUT the body overshot to 2.61-2.62 m after the drop (MPC unload). Fixed 00:40: the low
-  route climbs 3 cm after the drop (drop_clear_height 0.17), the ceiling check counts a 0.20 m unload overshoot; gate passed]
-- N1b/N2/N3-previews/N5/N7 [DONE 02:12, lab agent, R2900-R2908, exploratory; checked 02:13 against events/run.csv]:
-  k1_5 R2900 body max 2.545 m (after the drop; was 2.62); sq036 R2901 welded 46.2 s, the T's loaded pair 0.80 throttle
-  (max 0.81), ring tilt up to 8.2 deg before the join; sq036m R2902 (0.86 kg) welded 46.4 s, pair 0.72, tilt 3.9 deg;
-  N2 C++ low route from outside the gap: attach R2903 and pickup R2904 STALL (authority granted, then his final
-  collision check fails 100+ times on one carrier's tether model although the real clearance stayed 0.70-0.75 m);
-  k1_7 R2905 delivery_rejoin: attached from 1.5 s, TAKEOFF accepted, dropped into the net 43.2 s, max 2.547 m;
-  sq6b_g R2906 welded 46.3 s (proof first try); frozen-marker pair R2907 (no G) / R2908 (G) both welded first try,
-  1.2-1.8 s later. The twin's freeze reaches only our /magnet_tip_pose (his MPC reads the gz-derived swing state),
-  so the twin cannot test his swing under freezes. Reel 21 min: results/videos/fri30_preview/reel_fri30_preview.mp4.
-- N3 sheet [restructured 00:30: order table, section A measurements first (thickness, body 24 markers, contact height,
-  ring geometry, catch spread for K), triangle group (sq6b first, k1_5/k1_6, B3), re-hang, square group (B4, sq036),
-  sq036m on the 0.86 kg ring (configs/rig/attach_m1_1m_m2a.yaml: load_ixx/izz are not launch args; desk 01:10 OK,
-  load_mass 0.860, the m2a solvers via MDC_RIG_ACADOS_ROOT; desk 00:50). sq036 desk OK 00:46. sq6b with G desk OK 00:57]
-- N4 attach gates [DONE 00:41, docs/analysis/attach_gates_2026-10-30.md]: (1) OUR co-motion proof rejects a real catch
-  on body 24 (f4, magnet caught on plate 9 in flight: 0 of 108 starts prove; noise + freezes; checked 00:52: body 24
-  repeats 6.5 % of samples caught on the plate, the other markers 0 %) -> BUILT, typed only: tip_skip_repeats (our
-  manager drops repeated tip poses) + comotion_d_ok / comotion_speed_window_s / comotion_lost / comotion_sep_xy
-  (common.yaml knobs, '' = defaults); the agent's replay: 107 of 108 with skip + 0.5 s + 8 mm; (2) K 0.024 = the old
-  plates': median 4.2 cm off -> sheet K 0.035 or the 5b bench catch spread + 5 mm; (3) his give-up 45 s -> typed 120.
-  Sheet G string + contact_give_up_s:=120 on sq6b/sq6/sq036/sq036m (WESLEY'S WORD: gates). Tests pass; gate passed.
-- N5 k1_7 [held-plate world three_rigid_ground_rig_attach_held_pickup_L100_p115.sdf + fri30_k1_7 (plate agent);
-  checked 01:02: the weld reads attached at spawn, the plate rests at (0, 2.399, 0.0125) after 13 s. Sheet line k1_7
-  (delivery_rejoin + attach_magnet_initial:=ON) DESK OK: with the object at the magnet his manager logs ASSUMED
-  ATTACHED and the TAKEOFF refusal stops. Twin R2905: dropped into the net 43.2 s]
-- Also 01:02: the new proof knobs had to be added to profiles.KEPT_COMMON (the real launch refused them as typed args;
-  the unit test missed it: its rig() helper skips the refusal). sq6b with G DESK OK. bringup flake8/pep257 tests were
-  already failing (799 issues at HEAD, 814 now: long lines in tonight's edits, the code's usual width); not in the gate.
-- N6 ring drift [DONE 01:19, docs/analysis/ring_drift_2026-10-30.md; checked on sq2_5: the carriers hold their refs to
-  0.3-0.8 cm (slow part), the refs' centroid wanders 2.0 cm, the ring 2.4 cm, corr 0.95/0.97]: the whole formation drifts
-  with the planner's references (weak position push-back, a 0.19-0.26 Hz mode); not the integral, filter, notch or
-  mocap. Nothing changed on sq6b. Optional sheet line h3tw (configs/rig/hover_wpos2.yaml, plan_w_pos_scale 2.0, a
-  planner gain: Wesley's word; bar frozen on the sheet; desk OK)
-- N7 the frozen marker in the twin [BUILT 01:06: magnet_tip_publisher freeze_frac/freeze_s (env SIM_TIP_FREEZE_FRAC/_S,
-  SIM_TIP_NOISE_SD; off by default; test passes); configs fri30_sq6b_frz (no G) / fri30_sq6b_g_frz (G), 14 % holds of 0.2 s
-  + 2 mm noise. LAB_ENV registered (the gate caught it). Gate PASSED 01:14; flown: R2907/R2908 both welded]
-- N9 final desk sweep [DONE 02:31: all 15 sheet lines came up and reached ready on the final tree, no refusal or crash]
-- Tejen note 02:15: docs/tejen/reply_2026-10-29/OVERNIGHT_0215.md (copy ~/Downloads/tejen-overnight-20261030.md):
-  his C++ low-route stall, the typed debounce/give-up, the drop-off, the frozen marker reaching his MPC on the rig
-- decisions.md OPEN 02:15: the attach gates (G, K, give-up 120) and h3tw
-- N8 the morning report [DONE 07:21: docs/reports/morning_report_2026-10-30.md; push sent; the loop stopped]
+## (earlier) NOW (Fri 13 Nov 17:05): lab session DONE (08:00-11:05, Te-Jen flew); next lab day Wed 18 Nov
+- Today (registry RIG-1113-*; decisions 13 Nov; Te-Jen's package emailed to him 13 Nov ~15:00 in 4 zips + supplement):
+  his C++ approach + Python return into the MOVING ring: 7 successes in 14 attempts that flew; on the FROZEN line (10:40)
+  4 of 4: fm9h8_13 (figure-eight), fm9hc_10, fm9hc_11 (circle), fm9h_2 (hover). Fixes that made it work: carrier state
+  timeout 1.0, splice 0.30, search 0.10 s, tracking brakes OFF (the supervisor), hard hover latched per episode, goal 3.0 m.
+- The hero fm9c_2: pickup (3rd try) and drop into the circling ring; re-attach missed (our contact window fires 4 cm up;
+  his lift proof starts before QUAD4 reaches the plate). OPEN fix (decisions): comotion_normal_max 0.01 (Wesley) and/or a
+  bottom hold before his LIFT_PROOF (Te-Jen).
+- No detach/re-attach-only flight today (nr8 launched with QUAD4 read on plate 6, stopped). The paper's re-attach count is
+  still 11 Nov's (nrtfc_2, nrtfc_5 held).
+- QUAD2's pack reached 18.9 V under load in fm9c_2 (3.15 V/cell): balance-charge, check cells.
+- RUNNING (agents, from ~16:58; outputs in results/analysis/): cpp_rig_2026-11-13 (C++ flights table, figures, draft rows
+  for fm9hc_10/_11, fm9h_2), reattach_contact_2026-11-13 (contact-rule replay), pickup_seat_2026-11-13, q009_x1_second_swing,
+  q010_tilt_while_away (thesis requests Q009/Q010: draft feed entries), 424_design_2026-11-13 (ours.md, tejen_stack.md,
+  rig_and_twin.md: the supervisor's 4 -> 2 -> 4, both returns by Te-Jen's attach, simultaneous commands; Wesley 17:00).
+- NEXT: append the C++ rows and the Q009/Q010 feed entries (close the requests), feed F109 (today's rig results for the
+  thesis: "C++ approach, Python return"; the hero), the 4 -> 2 -> 4 build plan to Wesley before 18:00, the 18 Nov sheet
+  (docs/rig/wed_2026-11-18.md: re-attach fix, 3-5 re-attach flights, the full mission, then 4 -> 2 -> 4 if built).
+- 18:21 MERGED the 4 -> 2 -> 4 build into the main tree (41 files; originals backed up in ~/mdc_424/main_backup_1816,
+  list in its FILES.txt), colcon build of the 6 packages, tools/gate.sh --quick PASSED (2319 passed, 19 skipped), today's
+  rig scripts dry-run clean, the five twin configs pass --check (the ring inertia warning is the old one). New script
+  results/rig/2026-11-18/scripts/rig_424.sh; sheet draft ~/mdc_424/work/sheet_424.md. Critic RUNNING on the card + diff
+  (~/mdc_424/diff_all_1815.patch). Then: the lab PC batch T1/T3/T4/T5/T7 (free at 18:16), score with tools/score_424.py.
+  Agent cap back to 2 (Wesley 18:15).
+- 20:15 STATUS: 4 -> 2 -> 4 twin-complete on the final planner (R4461-R4473; R4473 = both together: both caught first try,
+  the four share 2.40-2.46 N, ring <= 0.27 deg). 18 Nov sheet DRAFT docs/rig/wed_2026-11-18.md (rows: nrtf x3-5, the hero,
+  then 4 -> 2 -> 4 with its ~30 min re-hang; the order is Wesley's call). Left before 4 -> 2 -> 4 flies: the RUNTIME desk
+  check (fake mocap, both of his instances, one publisher per topic; critic finding 11), Te-Jen's OK, QUAD3's marker 23 and
+  plate 3 calibration on the day. Thesis: Q009/Q010/Q012/Q013 all ANSWERED (F109-F122, reviewed). Nothing committed.
+- 19:10 4 -> 2 -> 4: critic GO WITH CHANGES (card ## Critic); Wesley: fold in at once (no queue), both TAKEOFFs together,
+  55 deg, the square's split with lift + level rows (~2.4 N each). All merged (backups ~/mdc_424/main_backup_r2_1851,
+  _r3_*), gate --quick PASSED 2323 (before the split fix; planner suite 514 after it). Twin: R4461 (sequential, 43.6 deg
+  peak) and R4462 (set detach, 0.24 deg, 10.5 cm dip at the release) registered. RUNNING on the lab PC since ~18:53:
+  T4, T5, T7 + the critic's t5_land, t5_giveup, t8, t9, t10, t11 (synced BEFORE the split fix: re-fly T4/T5 after).
+  Sheet draft ~/mdc_424/work/sheet_424.md (to docs/rig/wed_2026-11-18.md once the twin is scored).
+  Thesis requests: Q009 (F110), Q010 (F109), Q012 (F112) answered; Q013 (real-world tables) items 3-4 agent RUNNING.
+- 18:12 BUILD STATUS (~/mdc_424/work): P planner DONE (511 tests, 39 single-partner scenarios bit-identical), G launch
+  graph DONE (28 legacy launch lines byte-identical to base; bringup 257, drone_magnet 178, drone_communication 48),
+  T his stack x2 DONE rig + twin (tejen_mission 1327 passed, the same 26 old failures), O console/rig_424.sh/
+  attach_424_pair.yaml/sheet_424.md DONE (46 console tests). W twin world/configs/score RUNNING. Card:
+  docs/experiments/2026-11-13_424.md (critic not run). NEXT (each needs Wesley's go, after 18:00): integrate work ->
+  main tree (diff vs base), colcon build, gate --quick, critic, twin T1/T3/T4/T5/T7 on the lab PC, desk check.
+- 17:40 BUILD RUNNING (Wesley 17:3x: the FULL 4 -> 2 -> 4 for 18 Nov): five builder agents in a SEPARATE copy
+  ~/mdc_424/work (pristine copy ~/mdc_424/base for the diff; today's tree untouched), contract ~/mdc_424/CONTRACT.md
+  (partners_file switch, default off = today identical; per-partner topics: drone 3 keeps today's names, partner d gets
+  /drone_<d>/... and /tejen_d<d>/...; /fleet/detach_set). P planner (dissipative_node), G launch graph + nodes, T his
+  stack as two instances, O console + rig_424.sh + attach_424_pair.yaml + sheet, W twin world + configs + score_424.
+  Then: integrate (diff work vs base into the main tree only after tests), colcon build, gate --quick, desk check with
+  fake mocap, card + critic (docs/experiments/2026-11-13_424.md), twin T0-T7 on the lab PC, the 18 Nov sheet.
+  Needs: Te-Jen's OK to run his stack on QUAD3; on the rig: a funnel on plate 3, QUAD3's marker 23 at its tip + plate 3
+  calibration, magnet pull test (the pair gets the two strongest), the pair-hang roll check.
+- 17:30 contact window 1 cm is the rig scripts' default (CNMAX, decisions); Te-Jen emailed the pickup/re-attach finding.
+- Videos: organise_rig_videos.py + rig_flights_2026-09-30_to_11-13.csv sent to Wesley (scratchpad videos_1113/).
 
-## 22:00-23:40 Wesley at the machine: "I never want the incoming quad to fly that high"; "guarantee we will not run
-## into the same problems tomorrow" (too high / never set off for plate 9 / never went down for the object); the pickup
-## object in sim and RViz = the rig's 100 x 100 mm square magnet plate, not a ball
-- DONE (decisions.md, CLAUDE.md lock, memory quad4-never-over-carriers): `transit` low (QUAD4 carries the object's
-  bottom 0.30 m over the plates, between the carriers; the pickup default; floor_join's untyped default stays over, the
-  sheet types V) and a RIG CEILING: the rig launch refuses any planned QUAD4 body height > 2.6 m unless transit:=over;
-  both paths print the per-leg heights. Tests: his suite 24 known fails, 1142 pass. Desk (23:20-23:40): sq6 2.37 m,
-  k1_5/k1_6 2.42 m. Sheet: a table of the three 29 Oct failures and why each cannot recur; backup line k1_6 (capture
-  8 cm / 0.20; replay of k1_4: 27 closures in 26 s vs k1_5's 19). A timed capture fallback in his code NOT built: his
-  descent shares the capture's alignment object (TieredDescent), so loosening one loosens the other; told Wesley.
-- DONE 23:50 (plate agent + me): the twin's pickup object is the rig's 100 x 100 x 25 mm 0.15 kg plate (RIG-1021-q1pick)
-  in every p115 pickup world (tools/make_attach_worlds.py plate_model; the triangle's at (-0.45, 1.75) in plate 9's
-  gap; 35 configs' ball_start z 0.0125), RViz draws a 0.10 x 0.10 x 0.025 box (fleet_viz; on the rig it sits ~4 cm high:
-  body 6's origin is its marker). Launch: G rig_twin_L100_p115 pickup_object plate (rest 0.0125, bottom 0.0525),
-  twin weld radius 0.04, target 0.0225, PLATE_PROFILE. RIG: typed `pickup_contact_height` (+ thickness, size) puts his
-  contact point on the real object (21 Oct: 0.018 -> -0.0045) instead of his puck's +0.012 (sheet bench step 0.6 measures
-  it with m1_irl_pickup measure:=true + tools/pickup_geometry.py; K1/K2 type PC). RIG_PUCK_MASS 0.06 -> 0.15 (our
-  take-back model of QUAD4 carrying it; the twin's contact_ball_mass stays 0.1). gate --quick PASSED 23:50; his suite
-  24 known fails, 1143 pass. Desk: k1_5 with PC reads -0.0045 in his planner and magnet manager.
-- RUNNING (lab agent, from 23:51): re-fly fri30_sq6, fri30_sq6b, fri30_k1_5 on the plate worlds + low route; replace
-  their videos (old ones kept as *_ball.mp4) and the reel.
-- For Wesley to confirm: the plate's thickness (0.025 is the 21 Oct estimate); the world changes (plate in the square
-  p115 worlds too, the triangle object moved, its 0.40 m newcomer bar).
+## (earlier) NOW (Fri 13 Nov 04:45): the 08:00 sheet for Wesley (docs/rig/fri_2026-11-13.md, final); Te-Jen flies it
+- Row 1 (Wesley to confirm by email): `CPP=on RET=direct PAUSE=takeoff bash ~/rig_fm9h8.sh` (his C++ over the figure-eight
+  stopped at his TAKEOFF, Python back). Backup: `RET=direct bash ~/rig_fm9h8.sh` (moving, direct route).
+- Twin batch 9, the rig line in the rig's order (R4435-R4440): row 1 2 of 2, circle 9/5 o'clock 2 of 2 (pause sequence:
+  tools/pause_sequence.py; ring at rest +3 s, C++ from +11 s); R4438 QUAD4 crashed alone in its loaded climb (twin rod
+  pendulum, as R4339); R4440 C++ into the MOVING figure-eight: no capture, 0.04 m. Batches 7-8 (R4423-R4434, R4423c):
+  still-ring only. All registered; decisions FINDINGs 03:25, 03:40, 04:39, 04:44; feed F106, F107.
+- Built tonight (all typed, tested; gate --quick PASSED 2230 at 03:49): scripts refuse CPP=on without PAUSE=takeoff on the
+  figure-eight/circle (CPPMOVING=1 overrides; copies in results/rig/2026-11-13/scripts/); his twin supervisor's
+  start_gate_min_traj_t (CHANGES_FROM_TEJEN); tools/dropoff_summary.py, tools/pause_sequence.py; make_t13_configs splice +
+  the gate. Real-time replay evidence: results/analysis/cpp_realtime_2026-11-13/ (README, evidence_compact.md,
+  zero_windows.md).
+- Videos: scratchpad/video_row1/R4435_baseline.mp4 (row 1), scratchpad/video_pause/R4428_baseline.mp4 (backup).
+- 04:45 EMAIL SENT to Wesley (row 1 decision, videos R4435/R4428, the sheet) + push. 05:16-05:31 batch 10: our LAND in
+  row 1's rig order 4 of 4 (R4441-R4444; Codex entry 19's gap). OPEN 05:16 in decisions: the bridge's frozen future
+  during the 3 s pause ramp (two candidate fixes, need Wesley/Te-Jen; row 1 relies on the observed >= 7.8 s).
+- Codex mailbox: our entries 1-18 sent, its 1-19 read and acted on. Nothing running on the lab PC. Nothing committed.
+- Next: the email to Wesley (row 1 decision); then wait for his answer; at 08:00 read each flight's log when Te-Jen or
+  Wesley reports it.
 
-## 19:38 Wesley: "make videos of all the runs I will do tmrw in sim from an isometric angle"; he can add Motive markers
-## to QUAD4's magnet (sheet step 0.5 now says: redefine body 24, pivot at the magnet face, redo the bench geometry)
-- DONE 21:32 (lab agent): every sheet line flown once in the twin, no abort, no drop (R2886-R2895, exploratory previews;
-  R2889 = k1_5 with a late LAND, re-flown as R2895). sq6 / sq6b welded first descent (46.0 / 46.2 s); k1_5 picked up,
-  dropped the ball in the ring at 77.6 s, held, landed. Videos results/videos/fri30_preview/<line>.mp4 + reel
-  reel_fri30_preview.mp4 (13.7 min). Rendered on the lab PC's CPU with a static ffmpeg the agent fetched from PyPI
-  (imageio-ffmpeg 0.5.1) into drones:~/mdc_render/ffbin (71 MB, left there): tell Wesley.
+## Thu 12 Nov 11:12: LAB SESSION DONE; next lab day Wed 18 Nov
+- Flown: fm9_2, fm9_5 (FULL MISSION complete, F103), fm9c (position limit at takeoff), fm9c_3, fm9c_5 (circle pickups failed),
+  fm9hc_2/_4/_5 (held object dropped into the circling ring + re-attach: 3 of 3 complete), nro PAUSE=off (no attach);
+  eight launches never armed (RIG-1112-launches). All registered; feed F104.
+- Built today, typed only: pos_limit_m 1.8 (real.yaml, Wesley), ARAD (his attach_radius_m; flown fm9c_5), PRESS (his
+  pickup_candidate_press_m; NOT flown), PAUSE=off for rig_nro.sh (configs/rig/attach_m1_1m_m2a_orbit_det15_nopause.yaml).
+- Te-Jen: the full message (sim demos + rig session + 3 questions) emailed to Wesley 11:23 to forward; attachments
+  ~/Downloads/tejen_rig_logs_2026-11-12.zip, ~/Downloads/tejen_fork_changes_2026-11-12.zip (attach radius + press), the
+  demo figures/clips in ~/Downloads/tejen_demo_videos. Wesley sends.
+- Disk 4.7 GB free: archive old rig days before 18 Nov (each session writes ~2-4 GB).
+- 16:37 Nothing running. Batch 3 done and registered: his C++ loaded transit with three carriers, twin (R4338-R4349):
+  C++ owned the transit 12/12, reached the drop 0/12 (hover stalled at the carriers; circle/fig8 never captured, up to
+  3.6 m; R4339 QUAD4 crash, tilt 75 deg); backend padded final check vs the carriers' tethers (decisions FACT 16:37).
+  R4350/R4351 (R4316's case, direct route, his reference recorded): both re-attached, cable >= 0.22 m. Diagnostics
+  zip for Te-Jen ~/Downloads/tejen_cpp_twin_2026-11-12.zip (24.7 MB). One-quad rig flights q4d_3/q4d_4 (C++ worked,
+  no carriers) registered.
+- WAITING FOR WESLEY (Te-Jen ~16:55): tomorrow C++ or nothing. Te-Jen's values for a twin batch: swing bound 3/5/7 deg,
+  spline_time_factor 4, workspace +-1.8 m x,y and z 0-2.9 m; build two typed switches + run ONLY after Wesley says so.
+- SYNC 3 PROPOSED (decisions FINDING 17:04, emailed to Wesley): we fly Te-Jen's 21 Oct planner (fd495db0); his branch is 143
+  commits ahead (09fef0b7, fetched read-only in ~/tejen/drone_cage_control). Wesley to decide: merge, gate, re-fly the 12
+  C++ twin cases, then the swing/spline/workspace sweep.
+- 17:40 SYNC 3 DONE (decisions DECIDED 17:40; CHANGES_FROM_TEJEN sync 3; backup ~/mdc_sync3_backup_*), gate 2225 passed.
+  RUNNING: lab PC batch (scratchpad lab_sync3.log): the 12 C++ cases + t13_hover_s9 + t13_circle_s1_gap on the merged code;
+  QUEUED after it (waiter): 8 tuned runs (t13_*_cpp_sw{3,5,7}_twin). Swing analysis of rig flights (scratchpad
+  sync3/geom.py -> geom.csv) running. To do: rerun his core's test_suspended_system quiet; registry rows; Te-Jen summary.
+- 17:58 TE-JEN LEFT; await Wesley. Agreed overnight (Te-Jen, Wesley's plan): read batch 1 (merged code, 14 runs, lab_sync3.log)
+  and batch 2 (tuned: swing 3/5/7 deg, spline 4, inflation 0.06, workspace 1.8/2.9; lab_tuned.log, queued by a waiter);
+  if C++ still stalls, SWEEP WITHIN LIMITS one variable at a time, hover 9 o'clock first: swing >= 3 deg, inflation >= 0.04,
+  spline <= 6, carrier body box >= 0.09 m half; no planner-code changes; backend diagnostics per run. His MPC: 2c1ebe03 already
+  ours (cable_length); 13b927bb is display-only (plan viz 10 Hz when watched): NOT taken, told Te-Jen. Rerun his core
+  test_suspended_system quiet. One-quad today on sync 3: RIG-1112-q4d_7 (C++ transit with the tuned geometry, drop 10.5 cm).
+  Scripts: CPP=on in rig_fm9h/hc/h8 now types the tuned geometry (SWING/SPLINE/TRACK/WSXY/WSZ), desk OK; rig_q4d.sh has
+  SWING/SPLINE/WSXY/WSZ (default 5/4/1.8/2.9). Rig cables unplugged; laptop on Wi-Fi (Tailscale to the lab PC).
+  For the morning: the sheet docs/rig/fri_2026-11-13.md (rewrite for C++ + 1 trial each, Te-Jen's proposal), morning report,
+  email Wesley. Wesley's rule: no one-quad flights 08:00-11:00 (Te-Jen asked for one during setup: Wesley's call).
+- 21:00 C++ TWIN STATUS (all registered): sync-3 code, his settings (R4352-R4363): 1/12 completed (R4362 circle s1, C++ on
+  both legs, 158 s). Tuned WITH workspace +-1.8 (R4366-R4373): VOID, no plan from the 1.9 m start (FINDING 20:27; CPP=on
+  scripts now type the workspace only with WSXY). Tuned WITHOUT workspace (swing 5, spline 4, infl 0.06; R4374-R4378):
+  circle s9 COMPLETED (R4377, C++ transit 86 s; but cable-to-carrier-cable 0.10 m, ball 0.07 m); hover 9/1/5 + swing 3:
+  stall 0.50-0.67 m from the centre (never inside his capture region over a still ring). RUNNING: sweep on hover s9
+  (infl 0.04, body 0.09, spline 6) + R4377 repeat (lab_sweep1.log). Next: Te-Jen diagnostics package, morning report,
+  the 13 Nov sheet for Wesley's plan (C++ hover not shown to work; circle 2 of ~6).
+- REMIND WESLEY WHEN HE PLANS TOMORROW (Te-Jen ~16:05, his words, no changes until Wesley decides): Wesley will write a plan
+  for Te-Jen to follow while Wesley is away. Aim: ONE trial each, not three: 1 hover, 1 circle, 1 figure-eight. Hover and
+  circle are known to work with the direct route ("the heuristic"): tomorrow they swap it for his C++ planner (CPP=on).
+  Then the figure-eight, the more uncertain one. One-quad today: q4d_3/q4d_4 his C++ flew the loaded transit (twice);
+  the settle wait fixed with the rig's gate (0.18 m / 0.20 m/s): 2.6 s; drop 12.8 cm off (lower release next: DZ=0.08
+  RELEASE=0.0, not flown).
+- FRI 13 NOV LAB (Wesley + Te-Jen, decisions DECIDED 12:45): hover x3, circle x3, figure-eight x3, QUAD4 holding the
+  object from 9/1/5 o'clock, ring stops for the re-attach on 9. Scripts ~/rig_fm9h.sh, ~/rig_fm9hc.sh, ~/rig_fm9h8.sh
+  (new; contact_rig_fig8, 12 laps; copies results/rig/2026-11-13/scripts/), switch LINEUP=gap. OPEN: Te-Jen's answer
+  on the route in (LINEUP=gap vs start within 1.0 m); the twin results; the critic. Sheet docs/rig/fri_2026-11-13.md
+  to write when they are in.
+- After Te-Jen's review (decisions DECIDED 12:12): ARAD 0.04 default in the pickup scripts; PRESS now a ramp (0.02 m/s,
+  floor = the latched contact target), typed only, NOT flown, props-off hand grip test first (Wesley); rig_nro.sh
+  PAUSE=off passes the raw twist; rig_flight.sh records /fake_attachment_point/pose again. Reply + nro extract
+  (~/Downloads/tejen_nro_extract_2026-11-12.zip) + package 12 (ramp) emailed to Wesley 12:13 to forward.
+- Old results archives: UNSW OneDrive via its web page (decisions 2026-10-23; ~/mdc_onedrive_upload/MANIFEST.txt).
+- Placement (asked 07:40, Wesley wants the object further out for less wind): the 1.3 m rule is a margin, not a gate
+  (the console only turns orange; the hard guard is the pickup box 1.9 m). QUAD4's pose froze only toward the +x,+y
+  corner (fm9c (0.65-0.71, 1.82-1.93), fm9c_4 (1.02, 1.72), fm9c_6 (0.29, 2.34)); pickups at y 1.63-1.80 with x -0.24
+  to -0.50 tracked fine. Advised: object straight out along one axis (|x| < 0.4) up to ~1.6-1.7 m, ring ~0.3 m toward
+  -y. OFFERED, not done: console warning past 1.7 m (or 1.4 m in y with |x| > 0.5) + the sheet's placement line.
+- Morning report docs/reports/morning_2026-11-12.md (emailed 02:19); its four decisions are still open (0.55 m demos, fig8
+  at 0.08 m/s, send Te-Jen the fork packages, disk).
+- TE-JEN'S DEMOS DONE (card docs/experiments/2026-11-11_tejen_app_demos.md; table results/analysis/tejen_app_2026-11-12/
+  table.md; videos ~/Downloads/tejen_demo_videos): 0.55 m cables (overnight choice, decisions 00:24 / 01:38, Wesley to
+  confirm): hover 5/5 (R4291, R4294, R4297, R4300, R4303), circle 0.5 m at 0.125 m/s 5/5 (R4288, R4292, R4295, R4298,
+  R4301), figure-eight 1.0 m at 0.08 m/s with looser limits + 120 s 5/5 (R4306-R4310). 1 m: hover 5/5 (R4254, R4257,
+  R4260, R4275, R4276); moving 0 of 12 (trail 5-6 cm at 0.125 m/s). Registry through R4310.
+- Open for Wesley: (1) 0.55 m for Te-Jen's demos (or 1 m with the pause, or report 1 m as not attaching); (2) figure-eight
+  at 0.08 m/s; (3) send Te-Jen the 11/11b/11c packages + videos; (4) disk 8.1 GB (archive 4-6 Nov rig days?).
+- Uncommitted as before (+ tonight: tejen_mission fixes, tejen_mpc/throttle_bound, drone_magnet test, bringup sim
+  switch, tools/app_demo_figure.py, tools/frozen_pose_desk_check.py, tools/rig_cable_check.py, lab_batch --keep-record,
+  configs tejen_app_*). Commit only on Wesley's word.
 
-## FRI 30 OCT PREP (loop, Wesley away 18:37 -> ~23:30; QUEUE DONE 19:35, loop stopped) -- read first
-Morning: docs/reports/morning_report_2026-10-30.md (4 decisions), sheet docs/rig/fri_2026-10-30.md. Nothing running;
-lab PC clean. Uncommitted since 284ffb4 (see git status).
-Plan: docs/plan_rig_fix_2026-10-30.md (Wesley 18:37: "fix everything that went wrong ... start getting real world
-results ... back in the lab tomorrow morning"). Loop: /loop 30m (CronCreate). Away rules: never block; switches default
-off; decisions for the morning. Lab PC: check who/load/containers before each batch. At most 2 agents.
-Queue [status]:
-- W1 formation thrust table [DONE 19:05, docs/analysis/rig_1029_replays.md]: under 0.95 with the 1.15 kg ring the
-  square (0.63), the triangle (0.71) and the four after the attach (0.74) fit; the pair / the T's pair (0.86, 0.96 after
-  90 s) do NOT; on the 0.86 kg ring the pair fits for ~90 s. Hover fades ~0.066/min. -> B2 only on the 0.86 kg ring
-  (Wesley's call).
-- W2 replays [DONE 19:05, same report; checked 19:08 against the bags]:
-  - RIG FINDING: QUAD4's magnet marker (body 24) freezes ~0.2 s at a time with fresh stamps (sq5_2 13.4 %, sq2_5
-    17.5 %, k1_4 2.7 %; ring and quads ~0); 3 of 6 sq5_2 restarts came on the jump after a freeze. (k1_4's drone_0
-    froze up to 7 s ON THE FLOOR before takeoff only.) New tool tools/mocap_freeze_scan.py.
-  - (a) the magnet >8 cm off 46 % of sq5_2's attach (plate itself 5.1 cm rms); full-descent survival in replay:
-    8 cm one tick 0 %, 0.3 s 2 %, 1.0 s 49 %, 10 cm + 1.0 s 85 %. So 0.3 s is not enough.
-  - (b) k1_4: the capture's SPEED term held it; 6 cm / 0.15 m/s closes 0.56 s into the hover.
-  - (c) the ring's drift is ours (triangle 1.9-3.4 cm rms below 0.3 Hz before QUAD4 comes near; square calmer).
-- W3 descent debounce switch in his planner (me) [DONE 18:43: `descent_debounce:=0.3` -> contact_abort_xy_debounce_s,
-  default off; 11 tests pass; his suite 24 known fails unchanged, 1138 pass; CHANGES_FROM_TEJEN.md; gate --quick PASSED 18:47.
-  19:10: a repeated (frozen) tip sample earns no time; launch arg `descent_abort_xy` (typed only); 1139 pass]
-- W4 twin, 0.3 s debounce [DONE 19:10, R2878-R2881, exploratory; checked]: the single-tick 8 cm restarts are gone; no
-  delay still welds (R2881, 46.2 s); at 60 ms R2878 still restarted (speed at the twin's 0.15 gate, and 12-14 cm while
-  the 60 ms carriers diverge), R2879 reached the bottom and held 17.6 s; 50 ms (R2880) reached the bottom, held 26 s; no
-  twin contact at 50/60 ms. The twin is confounded late (carriers diverge ~60 s at 60 ms): the W2a replay is the better
-  evidence. Report section in docs/reports/twin_timing_2026-10-30.md.
-- W4b twin, 1.0 s debounce and 10 cm [DONE 19:31, R2882-R2885, exploratory; checked 19:33]: at 60 ms 2 of 5 descents
-  went back up before the bottom (0.3 s: 3 of 5; none: 5 of 7), none on position (the twin's 0.15 m/s speed gate; the
-  rig's 0.25); the 1.0 s never ran out at the bottom; no off-plate touch; no-delay still welds (R2885 46.25 s)
-- Note for Tejen (19:20): docs/tejen/reply_2026-10-29/FROZEN_MARKER_1920.md (copy ~/Downloads/tejen-frozen-marker-20261029.md):
-  the frozen marker (his swing state is computed from the held tip: wrong, not frozen), the replay, the switches [DONE]
-- W5 sheet docs/rig/fri_2026-10-30.md, every line desk-checked (dry run + fake_mocap + preflight) [written 18:50;
-  DESK CHECK PASSED 18:58: all 8 lines (h4n ls4 f4n h3t ls3t f3t sq6 k1_5) up, params read back; B2 waits on W1]
-- W6 the morning report docs/reports/morning_report_2026-10-30.md [DONE 19:35]; the scorer gaps
-  (tools/attach_clearance.py, twin-only) DEFERRED: no rig value tomorrow
+## Thu 12 Nov 08:00-11:00: READY (sheet docs/rig/thu_2026-11-12.md; desk check 13 OK 22:27; gate --quick PASSED 2219 at 22:27)
+Order (plan approved 11 Nov 15:56, decisions DECIDED 15:56): (1) nrtf hover re-attach to 3 more clean (max 6; two misses
+in a row -> funnel v4); (2) fm9 full mission in hover until one completes (max 6; FORCE DROP if the drop stalls; two
+pickups failed in a flight -> fm9h); (3) nro x2-3 then `PAUSE=pickup bash ~/rig_fm9c.sh`; (4) QROD NOT recommended (R4251).
+Read each log within a minute of landing: outcome, catch offset, `python3 tools/rig_cable_check.py <name>` (QUAD4 slack).
+Script defaults now (all six pickup scripts / seven attach scripts; switches on the sheet):
+- his bands 0.05/0.05 (BAND=wide|mid); settle drop + release 0.03 (DROP=arrival, RELEASE=); pickup LOW hold 0.04
+  (PHOLD=0|0.03|0.05); the small object WITH its funnel: PC 0.011, PX -0.0090, PY -0.0098, PS 0.105, PT 0.050 (OBJ=bare);
+  the pickup box 1.9 m (PBOX=0 off; Wesley 20:19); FORCE DROP on the console (acts within 0.25 m of the drop point);
+  QROD off; PAUSE=pickup on fm9c.
+- Frozen-pose guard: OFF (Wesley 20:19: "I will disarm in this situation anyway"); code kept, MDC_MOCAP_FROZEN_S default 0.
+- Console: READY line orange when the object or QUAD4 is over 1.3 m out (fleet_viz summary carries x, y).
+- Motive: only 6,8,11,12,13,14,24; `tools/mocap_stream_check.py --expect 6,8,11,12,13,14,24` now fails on a shared ID.
+- The sheet has an "If this happens" table (button + next switch per failure) and the simulation table.
+- Not simulated (rig-only): the pickup hold, the object's funnel and aim point, his drop check wait. First full-mission
+  flight is their test. The funnel on the object is ~4 cm tall (Wesley 20:37): inside the hold's 8 cm, no change.
 
-## NOW (Thu 29 Oct 17:50) -- read first
-- **Branch** week7 at 284ffb4 (committed 15:05: the 28-29 Oct work, the earlier uncommitted work; no attribution; not
-  pushed). Uncommitted since: CLAUDE.md (the twin-links rule revised), docs/decisions.md (the afternoon decisions),
-  this file, registry rows R2866+, and the rig-timing twin work below (card, tri_* configs, two triangle _p115 worlds,
-  tools/make_attach_layout_worlds_p115.py).
-- **DONE (~16:40): the rig-timing twin on the lab PC** (card docs/experiments/2026-10-29_rig_timing_twin_attach.md,
-  report docs/reports/twin_timing_2026-10-30.md, R2866-R2871; the lab PC is clean). The triangle attach with sq5_2's
-  settings; S = QUAD4's swing (deg rms), E = magnet to plate 9 (cm); rig sq5_2 2.13 / 6.15:
-  E0 no delay 0.51 / 0.9, welded 46 s. E1 +50 ms 0.68 / 1.9-2.1, no contact: **FALSIFIED** (50 ms doesn't make the
-  rig's swing). E1c +60 ms 1.60-1.80 / 3.7, the rig's abort cycle appears (2-3 aborts), no contact: PARTIAL (E under its
-  4 cm floor); at 60 ms the carriers go unstable after the take-back (DROP AND LAND in both). E2 (Tejen's fix) not flown.
-  Reviewer not run (the agent could not spawn one).
-- **RIG FINDING (from the bags, checked 16:44):** during sq5_2's attach the ring itself moved 4.6 cm rms in xy, 3.3 cm
-  sd in height, tilt sd 2.2 deg (k1_4: 3.3 cm, 1.6 deg); the twin's ring 0.1-1.1 cm. Plate 9 is a moving target on the
-  rig: part of E is our carriers' hover (or QUAD4's downwash on the ring), which Tejen's fix cannot touch.
-- **DECIDED (Wesley 16:45): E2c = Tejen's fix on the 60 ms twin**, bars frozen 16:46 in the card. **Result
-  (17:19): VOID for the swing bar, and a new fault.** With partial_step, QUAD4 flips in its climb whenever the twin has the
-  delay: R2872/R2873 (60 ms) and the neighbour R2875 (50 ms), tilt 150-178 deg, before any approach. Without the delay
-  it is fine (R2874: climb normal, welded 46.7 s, swing 0.43 deg). His current send climbs normally at 0/50/60 ms
-  (R2866-R2871). Codex's send-path checks pass (first step +0.017 throttle vs +0.050). Reading, untested: his current
-  send leads by ~67 ms, which hides the loop delay; the fix removes the lead. So: no rig flight of the fix until this is
-  understood. Report docs/reports/twin_timing_2026-10-30.md; reviewer not run.
-  - QUAD4's flip did not land the fleet: by design (ruling F5, R0618: a fault behind a partner mux is his to handle;
-    newcomer_fault_land is off in partner runs). His controller kept the flipped QUAD4 armed at idle ~50 s (tell Tejen).
-  - Correction (agent): at 60 ms the ring sinks from ~60 s in every run, take-back or not (not the take-back).
-- **DECIDED (Wesley 17:20):** the fix stays off the rig. **Channel split DONE (17:46; exploratory, one run each):**
-  the fix with 60 ms on the throttle only (R2876) flips QUAD4 in its climb (vertical bounce ~0.7 Hz); on the rates only
-  (R2877) the climb is clean, then a ~0.7 Hz swing grows in the approach and QUAD4 flips at 45.5 s. So either channel's
-  delay destabilises it under partial_step; his current send flies both phases with the same 60 ms (R2870/R2871).
-  Note for Tejen, with the split: docs/tejen/reply_2026-10-29/TWIN_TIMING_1722.md (copy ~/Downloads/twin-timing-20261029.md),
-  ready to send. Next on the fix: his and Codex's answer (model the delay in his MPC?). Lab PC clean; agent finished.
-- **Decided this afternoon** (decisions.md): the timing fix = a twin check, then 1 matched rig run; his hand-over drift
-  stays 0.30 m; the twin's links stay hinged rods, the rig's delays first (segmented cables later); commit (done).
-- **Tejen**: his and his Codex's replies in docs/tejen/reply_2026-10-29/ (DECISIONS_1355.md = his recommendations);
-  `mpc_command_execution` built and code-checked, not flown; he is asking Wesley about the changes to his code.
-- **Open**: QUAD1's replacement magnet; a formation thrust check; Tejen's descent debounce and capture values after
-  the timing test; why the rig's ring moves 4-5x the twin's; commit the afternoon work; next lab not
-  set.
+## Tonight's record (11 Nov 15:56-20:57; all in decisions.md, registry, the card)
+- Twin runs R4245-R4252 (R4248 void, the restart): fm9 hover, FORCE DROP in the lowering, fm9c PAUSE=pickup: whole
+  mission each; QUAD4 mocap loss under his controller -> QUAD4 down alone (R4249); under ours after LAND -> fleet
+  EMERGENCY STOP (R4250, the standing rule); QROD worse in the twin (R4251); pickup box refuses (R4252).
+- Fly-away fm9c_6 EXPLAINED (decisions FINDING 17:27): the big object fell off by itself in the lift, slid to y 2.16,
+  his retry flew after it (ref to (0.25, 2.15, 2.54) at 0.8 m/s), QUAD4 overshot to (0.29, 2.34, 2.89) and was lost; his
+  planner had no bound -> the pickup box. fm9c_4 was a second blind landing (our take-back steps a loaded QUAD4 out to
+  ~1.65 m by design): sheet rule "object on: FORCE DROP before LAND".
+- Bounce (docs/analysis/quad4_bounce_2026-11-11.md): QUAD4's cable only just taut (17 % share, reference 2-4.5 cm inside
+  the cable, plate 9 low 11-19 mm); why three flights tipped into the 3-4 Hz slack-taut cycle is OPEN. Not fixed.
+- Te-Jen: note docs/rig/notes_for_tejen_2026-11-11.md; zips ~/wesley-rig-2026-11-11.zip (77 MB, note inside) and
+  ~/wesley-rig-2026-11-11-bags.zip (730 MB): WESLEY SENDS (Drive links).
+- Feed F102 sent and read by the thesis chat (it fixed 4.2.2's detach swing; the rest goes to Wesley).
 
-## THU 29 OCT LAB (08:00-11:00) -- done; read first
-Registry RIG-1029-bench .. RIG-1029-k1_5-7; sheet docs/rig/thu_2026-10-29.md (A, M, H, V, K lines as flown at the end).
-- 4 quads, 1 m cables, 1.15 kg ring: the ring BENDS at 5.1-5.5 Hz (saddle: opposite plates in phase) and each tracker's
-  measured pull fed it. Fix tried in order: 2 Hz low-pass (cable_lp_hz; helped), two stages (stopped it, but ~120 ms lag
-  -> the triangle swung at 1.1 Hz), then a 5.3 Hz NOTCH (cable_notch_hz, Q 1): the rig default now (real.yaml), LP off.
-  f4 (figure-8, 1 stage LP): 2.4 cm off the path. Critic waived (Wesley).
-- Plate 0's magnet released under load 3 times (h4, ch1, ch1b; original magnet); ch1b_2 (magnets swapped) was the T
-  sinking + a swapped-marker trigger, so the swap test is inconclusive.
-- The T (carriers 90 deg apart) cannot lift the ring on 1 m cables: the pair at 0.85-0.9 throttle (sq1, ch1b_2). The
-  triangle 3/11/7 + throttle_max 0.95 does (0.69-0.83) and held with the notch (sq2_5).
-- Tejen's attach on the rig: never welded. His C++ transit: stuck on the stationary hand-over (bounds now 0.12/0.30 on
-  the rig path), then on my search floor (sq4_5; the launch now refuses a typed floor within 0.10 m of the climb end);
-  with attach_cpp_transit false (sq5_2) the climb (climb_speed 0.3), transit and MATCH work, but 6/6 descents aborted:
-  the magnet on the 1 m cable swings 4 cm (median) round the target, past his 2.5-8 cm windows. Same cause stopped the
-  pickup (k1_4: capture 2.5 cm; pickup_xy/pickup_speed added, never flown).
-- New typed switches (all off unless typed; CHANGES_FROM_TEJEN.md): commit_backdate, tracking_check, climb_speed,
-  cpp_authority, end_after_drop, pickup_xy, pickup_speed; cable_lp_order; geometry in partner_args (graph_attach).
-- Afternoon: review docs/reports/rig_review_2026-10-29.md; Wesley SENT Tejen docs/reports/message_tejen_2026-10-29.md
-  (+ CHANGES_FROM_TEJEN.md). Hardware (Wesley): plate 0 is fine, QUAD1's magnet is weaker (replacement coming); every
-  cable is the same metal cable (bends, no stretch: QUAD4's magnet swings as a 1 m pendulum); the ring is bolted metal
-  sheets and flexes (photo of the bottom to come).
-- ~13:00, Tejen at the laptop (Wesley away ~2 h): his reply (Codex) read from ~/Downloads/wesley-rig-review-20261029.zip,
-  copied to docs/tejen/reply_2026-10-29/ (uncommitted): a review + evidence request, no code or gate approvals. Built
-  ~/Downloads/rig-evidence-20261029.zip (76 MB) for him: sq5_2, k1_4, sq2_5 (logs, bags, his backend/MPC folders, exact
-  commands, launch-rebuilt params of his nodes), provenance limited to HIS packages (diff of src/tejen_*), ANSWERS.md
-  (profile oct10; the 8 cm abort is measured magnet-to-plate, the speed is body speed; the ~4 cm is mostly swing:
-  k1_4 offset 1.4 cm, oscillation 5.1 cm rms at 0.59 Hz; sq5_2 offset 0.7 cm, 7.6 cm rms at 0.47 Hz). HELD for
-  Wesley: the diff of our own packages (planner, trackers, bringup). Wesley's call whether to add it.
-- ~13:10-13:35 with Tejen: his follow-up (docs/tejen/reply_2026-10-29/FOLLOWUP_1310.md): timing discrepancy confirmed
-  (oct10, first_stage_endpoint at ~30 Hz); port the elapsed-interval correction WITHOUT the oct14 weights; the
-  completion-collection fix is already in. Done, NOT flown: `mpc_command_execution` (tejen_mpc main.py, default
-  'profile' = unchanged; 'partial_step' = the elapsed-interval send path under oct10) + launch arg + tests (logged in
-  CHANGES_FROM_TEJEN.md). Wesley's call, after a twin check. Cable analysis for Tejen
-  (docs/tejen/reply_2026-10-29/CABLE_GEOMETRY_1330.md, copy in ~/Downloads): the cable is straight and taut in flight
-  (anchor-to-magnet 1.008-1.009 m vs 1.011 props-off), mean lean 0.5-2 deg, swing 1.6-5 deg rms at 0.5-0.9 Hz; his
-  MPC's logged phi/theta match the bag to ~0.1 deg. Swing, not a bend.
-- ~13:55 Codex's decisions for Tejen (docs/tejen/reply_2026-10-29/DECISIONS_1355.md), all recommendations, no patch:
-  (1) mpc_command_execution:=partial_step under oct10 IS the intended timing fix: verify its checklist (flag not
-  overwritten; initial command = last rounded command sent; history/UKF get the sent command; idle/re-arm resets; paused
-  sim time; metadata oct10 + first_stage_partial_step) in the twin, then ONE matched rig rehearsal, nothing else
-  changed. (2) Later: a 0.30 s debounce on the 8 cm POSITION reapproach only (keep the 0.25 m/s body-speed term). (3)
-  Capture 6 cm / 0.15 only if the timing-fixed run still can't capture, never in the same flight; MATCH 8 cm / 0.5 s
-  provisional (the 12.3 -> 1.7 s gain was confounded by zero twist); no wider LOW band. (4) Swing is real; swing cost
-  active (FREE_SWING, [20,20,2,2]); don't retune or change L in the first comparison. My cable write-up overstated the
-  chord test: corrected. (5) Hand-over: keep 0.12 m/s but drift back to 0.15 m (we set 0.30 on the rig path: Wesley's
-  call); prefer a higher endpoint over a 1 deg swing; commit_backdate is an approximation, not measured history (a
-  proper producer/receiver fix needs its own review); search floor: fix the launch/mission heights, no backend timeout.
-  (6) object_vehicle_mass_kg is inactive (object_mass_kg 0): record 0.583, no change.
-- ~14:05 code-read of mpc_command_execution against Codex's checklist (read only): all pass. Flag set only in __init__
-  (main.py:455/471); stage duration from time_steps[0] = 0.1 s (tf 2.0 / N 20), loop 30 Hz; the sent rounded command
-  replaces u (2513-2518) and is what control_history (2646) and the next initial command state (2430) and the UKF input
-  get; first send uses DT; reset when not taken off (2525) and on disarm (2655); node clock + clip [0, 1]; metadata
-  and the solver cache follow. Left for the twin: runtime send/history, idle->TAKEOFF, re-arm, variable intervals.
-  Tejen is asking Wesley about the changes to his code.
-- ~15:10 Wesley back. DECIDED: timing fix = twin check then 1 matched rig run; hand-over drift stays 0.30 m; twin links
-  stay hinged rods, rig delays in the twin first (segmented cables later); committed 284ffb4 on week7 (198 files, no
-  attribution, not pushed; LaTeX build files left out). ~15:55 an agent runs the RIG-TIMING TWIN on the LAB PC
-  (drones@drones, free at 15:48): card docs/experiments/2026-10-29_rig_timing_twin_attach.md, a triangle _p115 attach
-  world, E0 no delays / E1 rig delays (does the twin reproduce QUAD4's 1.3-2.6 deg rms swing, 4-6 cm magnet error?),
-  E2 = E1 + mpc_command_execution:=partial_step only if E1 meets its bars; report docs/reports/twin_timing_2026-10-30.md.
-- Nothing committed: Wesley commits later. Open: Tejen's reply (descent abort debounce, capture/MATCH windows, the
-  swing); a formation thrust check; the twin's rigid QUAD4 link vs the real 1 m pendulum (asked, not yet answered);
-  the 5.3 Hz notch on four quads (flown only on the triangle); the reviewer on today's claims.
+## Open, for Wesley
+- Archive the 4-6 Nov rig days (~5 GB back; 11 GB free, a lab day writes ~4.6 GB). Not needed for 12 Nov.
+- After 12 Nov: tick handin_plan's S3-S6 items with run ids; feed entry for the paper (re-attach count, full mission).
 
-## OVERNIGHT 28 -> 29 Oct (Wesley asleep; stop at 07:30 Thu 29; lab 08:00-11:00) -- the loop works this queue
-Card docs/experiments/2026-10-28_attach_ambitious.md (critic: rewrite; Revision 2 bars frozen ~23:00). Wesley ~23:05:
-transit at 0.30 m first, else shrink his collision boxes; the existing filter option (attach_twist:=zero); FIX the
-avoidance; by morning a VIDEO of each successful run and of the avoidance (QUAD4 starting on the wrong side, coming
-around); if something doesn't work, pick the best option and note it for the morning. Every edit to his code ->
-src/tejen_mission/CHANGES_FROM_TEJEN.md. Rules: laptop only (lab PC busy: check `who`/load first), one Gazebo run at a
-time, no src edits while a run is in flight, at most 2 agents, registry via scratchpad append_rows.py, no commits.
-Queue (status in brackets):
-1. A0 baseline: sq1 floor_join + pickup on the 1.15 kg square world, every switch off [DONE 23:5x: R2843/R2844 floor_join
-   welded 1st try ~38.6 s (bar met); R2845 pickup welded 2nd try, rigid-rod tip-over after LAND (twin artefact). His
-   launch: 'rig' = new ring, 'rig_m2a' = old; tools/attach_clearance.py scores the arms; safety floor rod min >= 0.238]
-2. V1 whole approach at 0.30 m: transit tip 0.30 above the plates + approach_offset_z 0.30 (search floor lowered to match);
-   floor_join 2 runs. If his collision model refuses the end (critic 1): shrink his boxes (swing envelope / inflation),
-   logged, re-fly. Then 0.15 if 0.30 passes with margin. [R2846 V1(0.30) STALLED as the critic said (his tether box covers
-   the end; QUAD4 0.6 m clear, parked 0.31 m short). R2847 = V1(0.30) with his margins shrunk (launch args
-   max_swing_angle_rad, cooperative_tracking_half_m), flying 00:0x] [R2847 PASS: margins swing 0.17->0.035 rad, tracking
-   0.05->0.03 m; transit 7.8 s, weld 32.1 s (A0 38.6), rod min 0.285 at the plate, 0.369 before the descent; R2848 repeat
-   flying 00:3x; then V1(0.15) x2 gated on the pre-descent minimum (clarified to the agent)] [R2848 STALL: tracking 0.03
-   is also his carriers' tracking-mismatch gate -> the rocking T disabled his backend (likely R2830/R2831's cause too).
-   Agent's 's' variant = swing shrunk only, tracking 0.05: R2849/R2850 PASS (weld 31.3/31.9 s). V1(0.15): R2851 PASS (weld
-   29.1 s, tip 0.133 at MATCH, 0.305 pre-descent, descent 1.9 s); R2852 PASS (30.6 s) but 0.268 m pre-descent (overshoot)]
-   DONE: swing 0.02 rad covers the twin's rigid rod, not the rig's slack tether (~3.8 deg): the real fix is a capsule tether
-   model in his C++ (Tejen's code) -> morning decision. Do not lower cooperative_tracking_half below 0.05 (R2848).
-4b. Demo world (QUAD4 behind the T) + configs for the pickup-C++, zero-twist, xy 0.08 arms [READY ~23:4x: sq_far_floorjoin,
-   _zerotwist, _xy08, _xy08_zerotwist fly as they are; _cppreattach needs 3 launch edits (flag passthrough; backend
-   require_payload_attached_for_enable off; drop_clear_height + attach_transit_clearance above his loaded search floor),
-   after the V1 agent. Twin default gate is 0.025/0.08/1.0 (rig 0.05/0.15): the twin xy08 arm is a no-harm check]
-3. Avoidance fix: his C++ planner owns TRANSIT_TO_REATTACH in pickup_delivery too (today floor_join only, critic 2);
-   pickup run. [CODE + LAUNCH DONE ~01:45 (sim path; backend require_payload off, hand-over/transit end above his loaded
-   floor); 7 new tests pass; logged. Arms agent flying from ~01:50: demo far (A0, V1 0.30), pickup cppreattach,
-   zerotwist x2, xy08 x2, candidate V1(0.30)+zt+xy08 x2, reel; stops new runs 05:45] [02:37: R2853 demo far (A0 height)
-   WELDED 65.6 s (transit 48.4 -> contact 64.0, ~16 s around the T), videos rendered; R2854 (far, low transit V1(0.30)s)
-   STALLED in TRANSIT (WELD_TIMEOUT 332 s, landed): low + far side = his boxes block the gaps -> capsule model needed;
-   R2855 pickup cppreattach running 03:0x] [03:37: R2855 STALLED: his backend disabled itself 0.5 s into the loaded drop
-   transit, all three carriers 'start_skew' at once (R2854 the same). Cause (code read): his ring world refreshes the
-   shared commitments in its tick BEFORE that tick's carrier states; his backend refuses a commitment starting after a
-   carrier's latest state and never recovers -> a random race (R2853 dodged it). Fix staged (03:50; applies after the
-   agent's last run): ring_bridge `shared_trajectory_backdate_s` / launch `commit_backdate:=0.04` (two 50 Hz bridge ticks; default off; our
-   subclass, his node untouched); test passes on a copy; card Revision 4 bars frozen; configs *_bd for far_v1a30s,
-   pickup cppreattach, the candidate. Agent told to stop after xy08 x2 (R2856-R2859) and build the reel; I fly the _bd
-   arms after it] [04:07: R2856/R2857 zerotwist WELDED (64.3/64.9 s run time), R2858 xy08 WELDED; R2859 xy08_2 flying
-   (ends ~04:20), then the agent scores + reel; then apply the backdate patch, tests, my batch_bd.py (scratchpad/overnight:
-   far_bd, pickup_bd, cand_bd, far_bd_2, cand_bd_2; STOP 06:00), reviewer, report] [04:30: agent DONE (R2853-R2859 in
-   the registry + card "Remaining arms"; zt x2 and xy08 x2 welded, R2859 one descent abort then weld; reel
-   results/videos/reel_2026-10-29_attach_overnight.mp4). start_skew found in 4/17 runs (R2846, R2854, R2855 decided;
-   R2857 harmless). Backdate APPLIED 04:26 (ring_bridge + launch commit_backdate + test 5 pass; 51 bridge/launch tests
-   pass; logged in CHANGES_FROM_TEJEN.md); gate --quick PASSED 04:29; batch_bd flying from 04:30 (task blz3bkzpn,
-   status scratchpad/overnight/status_bd.txt)] [05:11: R2860 far_bd: NO start_skew in 205 s of C++ transit (switch
-   did its job) but no weld: transit never captured (body at the goal per his backend, tip never in his 0.18/0.15 capture
-   region for 0.5 s; rod min 0.454, no contact), then tracking_mismatch at ROS 248.8 (T rocking, pack sag) and our
-   take-back at WELD_TIMEOUT. pk_bd_1 flying from 05:11] [05:34: R2861 pk_bd VOID (sim fault, not the variable):
-   the carrier on plate 3 (drone 2) never left the ground (cable 1.3 deg while drones 1/3 swept to 66), the ring never
-   lifted; I sent LAND at 05:33 so the runner closes it instead of waiting 420 s sim (~45 min). Batch goes on to cand_bd_1]
-   [05:53: R2862 cand_bd (low transit 0.30 + swing 0.02 + zero twist + xy 0.08 + backdate) WELDED 31.6 s after his
-   TAKEOFF, MATCH 1.1 s, rod min 0.286, proven try 1, no disable. Batch script stopped by me after cand_bd_1 started
-   (cand_bd_2 dropped for the pickup re-fly); chain_cand_pk.sh scored R2862 and started pk_bd_1b at 05:52 (batch_bd2.py,
-   STOP 06:10). R2860/R2861 rows appended. Next: reviewer on the table, report by 07:30] [05:55: R2862 row + R2862-note
-   (its MATCH comparison was wrong: V1(0.30) MATCH was 1.0 s, not ~2). Reviewer agent on claims C1-C10 (report by
-   06:50); critic agent on commit_backdate for the rig today (2 agents). R2863 pickup re-fly flying (chain b9pn9eezv)]
-   [06:09: critic DONE (card Revision 4 "Critic"): run it on the rig if Tejen agrees; the bridge ticks at 50 Hz on both
-   paths (card corrected; test/CHANGES after R2863); his tracking latch is ON in our partner backend (his IRL configs
-   off) = the likelier rig latch. R2863 WELDED try 1 and its loaded C++ drop leg passed (no start_skew), BUT
-   pickup_cpp_reattach NEVER ENGAGED (mission named pickup_delivery_reattach; the activation tested the name): R2855 and
-   R2863 flew the reattach on his Python transfer. Fix staged (scratchpad/patches/apply_modefix.py: module helper on the
-   launch mode + regression test + backdate test 50 Hz/0.04 + CHANGES). After R2863: apply, tests, gate, re-fly pickup]
-   [06:18: reviewer DONE: overall WEAK; C5 (start_skew decided only R2855) and C6 (switch FAILS its frozen bar on R2860's
-   tracking_mismatch) not supported; R2853 dropped the ring at LAND after a 0.23 m fold-in drift; R2859's abort cause
-   unshown. Rows R2863 + notes R2853/R2859/start_skew appended. Fixes APPLIED 06:12: pickup_cpp_reattach_applies (his
-   planner), graph_attach geometry pass-through (sheet's revert line was refused); tests 88 + 27 pass, his suite's 24
-   failures predate tonight (checked by swap); gate PASSED 06:17. R2864 = pickup re-fly with the fix, flying from 06:18
-   (task bz2e5h2nd). Report draft docs/reports/morning_report_2026-10-29.md; sheet section 4 has the overnight options]
-   [06:40: R2864 the AVOIDANCE FIX ENGAGED (his C++ reattach 113.3-115.4 s) and welded 116.1 s after his TAKEOFF (2nd
-   descent; rod min 0.247); tracking_mismatch from the ball-drop bob; QUAD4 touchdown tip-over after LAND (twin artefact).
-   Row appended; report updated (rig first, decisions 1-8). Reel v2 building (results/videos/reel_..._v2.mp4); then a
-   2nd pickup run (pk_fix_2, ends by ~07:15, before the 08:00 rig stack); loop stops 07:30]
-   [07:02 DONE: R2865 pickup with the fix WELDED cleanly (C++ reattach into its capture region, no backend trip, runner
-   ALL PASSED, 97.7 s). Rows R2843-R2865 + notes in the registry; card sections Revision 4 / its Critic / its results;
-   report docs/reports/morning_report_2026-10-29.md FINAL (rig first, decisions 1-8); reel v2 (+ _small 10 MB);
-   plan row 5 updated. No Gazebo running; the laptop is free for the rig stack. Nothing committed. NEXT (Wesley, 08:00):
-   decisions 1-2 with Tejen (commit_backdate on sq1; his tracking check), then fly the sheet] [07:37: loop 7acaadab stopped]
-4. Avoidance demo: QUAD4's mat on the wrong side (behind the carrier on plate 3, -y) -> the C++ transit routes around to
-   plate 9; recorded. []
-5. Gates: tools/match_gate_replay.py on the rig bags (a3_2, a1, t6f, t6f2_4, t6g_2, t6h5_3), one number at a time +
-   --zero-twist; one twin arm for the pick. [REPLAY DONE 23:05: pick xy 0.08 (opens 3/5 alone, 5/5 with zero twist);
-   twin arm after A0; needs a launch arg (the rig block hard-codes contact_match_xy 0.05)]
-6. attach_twist:=zero arm (the existing option), floor_join 2 runs. []
-7. Videos: every successful run rendered (record block), a reel per arm, the avoidance demo; docs/reports/
-   morning_report_2026-10-29.md by 07:30: table, verdict, decisions, which switches the sheet turns on; sheet lines updated. []
+## Wed 11 Nov lab session DONE (08:00-11:20); registry RIG-1111-*, feed F101; next list sent to Wesley for confirmation
+- Flown: nrtfc (void: QUAD4 started on plate 1), nrtfc_2 CAUGHT + held (cone bands, v4), nrtfc_3 caught then lost 4 s later
+  (loose magnet lead, fixed), nrtfc_4 magnet off in the pretension (same lead); k1zo drop into the circling ring worked but
+  the impact detached the ring (release 0.14); k1zo_3 our magnet-gate race (FIXED); fm9hc_8 drop into the circling ring OK
+  (release 0.03), his drop check gave up early (FIXED); fm9c / _3 / _4 / _6: pickups failed whenever the magnet arrived
+  4.7-9.7 cm off the object (7/7), lifted whenever within ~2 cm (4/4); the bigger object never passed his transit gate on
+  the circle (fm9c_4) and fell off in the lift (fm9c_6).
+- Built today (live, unit-tested, NOT simulated): magnet_gate held-OFF race fix; his drop check waits drop_puck_wait_s;
+  drop_release (RELEASE=, k1zo 0.03); attach_pause_at pickup_reattach (PAUSE=pickup on fm9c); OBJ=big on fm9c; nr1f plate 1
+  measured (W 0.0427); console DETACH / magnet OFF-ON. Plate 9 unchanged; body 6 centred.
+- Proposed next (awaiting Wesley's confirmation): (1) the pickup alignment (descent gate/band as the attach analysis);
+  (2) sim-check today's code + gate --quick; (3) Thursday's sheet in order nrtf (to 3-5 clean), fm9hc, fm9c with the pickup
+  fix; (4) the bigger object only with DROP=arrival or not at all; (5) minor: QUAD4 bounce, off-centre catch radius.
 
-## WED 28 OCT evening (newest) -> Thu 29 lab 08:00-11:00
-- Lab today (QUAD2/QUAD3 pair, 0.55 m, M2A ring): RIG-1028-hE1..ls2c in the registry. Slope filter chosen (hE1/hS1).
-  f2b and ls2c sank 17/57 cm with the measured cable pull over the 14.5 m/s^2 cap (low packs): open.
-- NEW PAYLOAD (1.15 kg, RIG-1028-payload) is the real-world default (real.yaml; inertia 0.0246/0.049 estimate,
-  attach_z 0.025 estimate); rig solvers rebuilt at 1.15; old ring: configs/rig/ring_m2a.yaml + ~/mdc_rig_generated_m2a_0p86.
-  Slope filter default real + twin (newcomer ema in attach mode). Config tests updated; gate --quick PASSED (21:5x).
-- Twin p115 (R2832-R2842, docs/reports/twin_p115_2026-10-28.md): 4 quads fine; the chain needs throttle_max 0.9 (at
-  0.8 the pair floored the ring, R2834); the rig pair should sit at the cap. Tejen's attach on the new ring not rehearsed
-  (his ring model is the old ring).
-- Sheet docs/rig/thu_2026-10-29.md (rewritten; old one in git 5f8bd51); every line resolves. Wesley's calls: the cap for
-  the chain (keep 14.5 / chain_pair_tip_cap20.yaml / LAND after the T); the thesis text still describes the old ring
-  (photos of the new one added, Overleaf 9eea11f).
-- Uncommitted: today's src edits (slope default, real.yaml payload, tests), tools (payload_geometry, ring_pivot_flip,
-  t1_four_markers.sh, make_carry_worlds_p115), p115 worlds and configs, plus the earlier uncommitted work.
+## Tue 10 Nov night: NEW RIG PLAN approved (decisions DECIDED 2026-11-10 23:10); lab Wed 11 at 08:00
+- Plan: (1) nrtf hover x8 then nro x3 (Wed); (2) k1zo x3, the drop into the circling ring (Thu); (3) held object into the
+  circling ring + re-attach, only if pickups fail; then the FULL MISSION on the circle (stop for the re-attach AUTOMATIC,
+  new switch, default off) on the 18th-19th, fallback fm9 hover. Dropped: rel, relo, fm9o, k1z (backup). Funnel v4, then
+  the supervisor's (105 mm). OPEN: the descent bands; the thesis freeze (Thu 12 vs 19).
+- Wesley asked to explain the pre-measurements BEFORE executing the plan (answered in chat 23:15). Then, in order: rewrite
+  the four sheets (wed_2026-11-11, thu_2026-11-12, wed_2026-11-18, thu_2026-11-19 + plan_sessions); k1zo script + desk
+  check + twin run; the automatic stop-at-re-attach switch + tests + twin run.
+- 23:42 DONE: descent bands (decisions DECIDED 23:42): v4 as flown; `BAND=cone` (0.05/0.5/0.05) for the supervisor's
+  funnel in the 7 attach scripts; summary results/analysis/attach_band_2026-11-10/summary.md. Morning report: put the band
+  result FIRST (Wesley). Built: attach_pause_at (src), console DETACH/QUAD4 magnet OFF/ON, scripts nr1f/k1zo/fm9c/fm9hc;
+  gate PASSED, desk 13 OK. Sheet docs/rig/wed_2026-11-11.md rewritten (one list; old in docs/rig/archive/).
+- RUNNING (laptop, the lab PC is in use by someone else): ~/mdc_overnight/plan1110.sh (pid file plan1110.pid; out
+  plan1110.out): twin checks rig_fm9c_twin, rig_k1zo_twin, rig_fm9hc_twin one at a time; a background wait task notifies.
+  Then: registry rows, the sheet's "Simulation checks" section, desk check re-run (BAND switch), morning report.
+- 06:38 Wed: discriminators R4243 (nrtf at 1.2 m: still no contact: twin plate artifact, centred pushed tip sinks)
+  and R4244 (fm9h re-fly: worked; R4236/R4240 a flake). Sheet + decisions FACT 06:45 + registry done. Morning
+  report sent in chat (bands first). Lab session 08:00-11:00: Wesley flies the list; read every log he reports.
+- 06:05 Wed: overnight twin checks DONE (R4228-R4242, registry rows written): fm9c, k1zo, fm9hc(arrival), fm9, k1z
+  and the settle options worked; nrtf/nro/nr1f/cone did not re-weld in the twin at ring 1.0 (tip pushed through the
+  plate, rigid rod); fm9h/fm9hc_settle never climbed (flake?). RUNNING ~/mdc_overnight/plan1111.sh: rig_nrtf_z12_twin
+  (ring 1.2) and rig_fm9h_retry_twin; then the morning report (descent bands FIRST).
+- 23:50 DROP switch (decisions DECIDED 23:50): circle default = his settle drop (DOA off, DH 0.48), `DROP=arrival`; hover
+  default = arrival, `DROP=settle`. QUEUED after plan1110: ~/mdc_overnight/plan1110b.sh (pid plan1110b.pid, out
+  plan1110b.out): fm9c_settle, k1zo_settle, nrtf, nro, nr1f, fm9hc_settle, nrtf_cone, k1z, fm9, fm9h, k1z_settle,
+  fm9_settle twins (configs/experiments/rig_*_twin.yaml). Waiters: a background task on each script's pid.
+- Funnel CAD done today: v5, v6 (cad/funnel/funnel.py), compare.py, render_on_plate.py; files in ~/Downloads/funnel/.
 
-## TUE 27 OCT evening (newest)
-- Overleaf: lit review + methodology only, pushed e92a065, 692f696, , bccff29, then 6e7f090 (28 Oct: one-page intro, figures-only results from review_2026-10-23_best, blank conclusion, one line per paragraph, no semicolons; earlier: short captions, [H], no bold leads, 2.1.3/2.3.3/2.4.5 and both roadmaps cut) (lit review 15 pp with 4 TikZ figures and a gap
-  table; methodology 16 pp, 2.5 Authority removed, its figure in 2.1.3; no rig/twin wording). PDFs in ~/thesis_snapshots/.
-  Open for Wesley: the text says 0.55 m rods, the hardware now flies 1 m cables; abstract is the old one.
-- Lab Wed 28 08-11: sheet `docs/rig/wed_2026-10-28.md` (rewritten 27-28 Oct; 2b square re-attach sq1-sq3 from R2825-R2831; 1 chain
-  soft-announced 4->3 then rider 3->2; 2 pickup + basket stretch; 3 spare-time baselines and pair A/B; old text in git 5f8bd51).
-- Twin: R2821/R2822 chain A pass (29 deg first-release peak, rider 2.2 deg); R2823 unannounced square release with no
-  tilt rule recovers but peaks 60.8 deg (the 60 deg envelope disarm is fixed on the rig): not for Wed.
-- Uncommitted as before (Quan R6c, Tejen 1cfc7a90 port) + configs c4_softdetach9_rider_L100_tip, c4_release9_L100_tip_notilt,
-  configs/twin/chain_pair_tip_tilt89.yaml. Before the lab: tools/prebuild_rig.sh, gate --quick.
+## Fri 6 Nov lab (16:40-18:00): DONE, Wesley packed up at 18:01
+- Flown (results/rig/2026-11-06/, registry RIG-1106-*, feed F064): q4f/q4f_2 CRASH (two stacks on QUAD4's radio,
+  --once commands; QUAD4's FC disarmed itself at the flip; VOID; decisions FINDING 17:29 + CORRECTION 17:33); q4f_3/q4f_4
+  no arm (FC crash lockout until a battery replug); q4f_5, q4f_6 funnel v4 seated first descent (7.2 -> 0.3 cm); q4p
+  pickup first try 0.9 cm; q4p_2 not armed. QUAD4 damage after the crash: not reported yet (ask).
+- Scripts (results/rig/2026-11-06/scripts/): rig_q4f.sh, rig_q4p.sh, rig_q4m2.sh (never flown), each refuses while any
+  flight stack is up and starts one_quad_panel_bridge.py (RViz ArmPanel -> his topics; refuses ARM while the FC reads
+  !ERR, normal for ~10-15 s after launch). Sheet docs/rig/fri_2026-11-06_one_quad.md.
+- His code changes live ONLY in the overlay ~/mdc_m2one_ws/src/tejen_mission (one-vehicle M2; LAND beside the magnet,
+  landing_side_step_m, default 0; 13 new tests): to port into src/tejen_mission + CHANGES_FROM_TEJEN.md after the lab
+  batch, on Wesley's word (keep or record-and-delete).
+- Open with Wesley: QUAD4 OK?; is the pickup worse with the carriers flying (fly 2-3 more q4p next lab day, then the
+  steel disc / fm9h / pickup-before-lift); the 'week8' thesis-chat question.
 
-## HANDOVER (Fri 23 Oct 17:41) -> NEW CHAT ON BRANCH week7: READ THIS FIRST
-- **Branch:** `week7`, made from day-1021 (be34f95). Its first commit (5f8bd51) holds everything up to 23 Oct evening: the 21-23 Oct
-  work, the tejen-sync2 merge, figures, both papers and these handover files. NOT pushed (working rules); Wesley pushes
-  `week7` and merges to main himself.
-- **Today in one page:** `docs/reports/day_report_2026-10-23.md`. Then the 23 Oct blocks below, and every
-  `DECIDED 2026-10-23` entry in `docs/decisions.md`.
-- **Lab (check it first):**
-  - Batch 18u (25 runs) was launched at 16:37 by the old chat (lab_batch PID 340122 on the laptop; log in the old
-    scratchpad). If that chat closed, lab_batch may have died and removed its containers.
-  - Check with `ssh drones@drones 'docker ps | grep wesley_'` and `ls results/2026-10-23/R27*`. Re-fly whatever is
-    missing from `docs/handover/2026-10-23/batch18u_list.txt` (`--wall-cap-min 60`).
-  - Then `batch18h_list.txt`: the centre-hook test, 14 runs. Its smoke pair is already valid.
-  - Then `batch18_list.txt`: S's 8-quad claims at 5 iterations plus the 7 harder cases, 16 runs;
-    `--slots 2 --cpus 12 --wall-cap-min 150 --warm-from-config`.
-  - Lab only when nobody else is on it: `lab_free_watch.py` waits for that.
-- **Batch 18u FINISHED 18:25** (the old chat's lab_batch is done; the lab is free): 25 runs. The paper's damping form at its
-  offline-best gains LOST the ring in all 6 runs (R2744-R2749: the ring tilts past 30 deg 20-30 s after the hand-over;
-  rows written). The Thu 29 rehearsal and the clearance A/B (R2738-R2743) all PASSED the runner and are NOT scored yet
-  (score with install_tally.py). Next: batch 18h, then 18.
-- **NEW CHAT (week7, 18:55):** lab free (load 0.03, no containers) -> BATCH 18h LAUNCHED 18:57 (task bt77zkxsn, log
-  <new scratchpad>/lab_batch18h.log, 4 slots, cap 60). Thu 29 re-flies + clearance A/B SCORED (rows R2738-R2743):
-  R2738 floor_join FAIL (no weld in 300 s, 0 of 1422 installed); R2739 Nr FAIL by 1.1 s (re-weld 301.1 s after
-  WAIT_REWELD; tilt and clearance fine); cc050 A/B: the 0.25 clearance is INNOCENT (grants 157/228/8.5/220 s, >95 %
-  discarded in all four): the wait is his install gate, as Tejen's note says. 18u fully scored (every id R2600-R2749 has a row). Batch 18 CHAINED (task b3zt9eonn: waits for 18h's PID 360088/360090, then lab_free_watch, then launches batch18_list.txt, 2x12 cores, cap 150; log <new scratchpad>/lab_batch18.log). Bench bar B AFTER batch 18 (it needs no lab sync; the lab is the scarcer resource).
-  **19:33:** 18h DONE 19:30 (14 runs, 34 min; R2753's runner FAIL = sim clock froze after LANDED, run valid). SCORED (rows R2750-R2763, card section appended): hover PARTLY THE GEOMETRY (net hub 12.2 vs rim 17.4 mm; yaw 0.1 vs 22-51 deg), lines THE PORT (40.0 vs 41.8, 102.4 vs 101.9 mm; lag ~1.2 s); A: our planner closer in all 3; O holds; our planner worse on the hub lines than the rim (31 / 72 vs 17 / 45 mm: the 2 cm pendulum). As-ported net on the hub HOLDS (R2762 17.7, R2763 23.5 mm) where it lost on the rim. c_metrics --table's default --out OVERWROTE the tracked results/analysis/c_compare_2026-10-23.json: restored from git; hub table in c_compare_hub_2026-10-23.json. REVIEWER on the hub table RUNNING. Papers: v1 our planner's rim cells filled (04c); v2 U placeholders filled (meas 20 cm radial / 8 cm rim, slot 6 / 4; v2 builds 8 pp) -- fig_u_catch_offset.pdf predates the re-flies (re-render owed). Hub + damping-form text in v1 DONE after the reviewer.
-  **19:38:** REVIEWER on the hub table: supported (strong), every number reproduces; 10 corrections APPLIED to the card (backup scratchpad/c_card.before_reviewer.md): A worded 'at least as close on the paper's own geometry'; the Reading cut back (yaw falls in hover / 0.2 but RISES at 0.4: 14 -> 20-28 deg; line error not shown to be the lag; our planner's worse hub lines: cause NOT tested, the OCP does model attach_z); correction row R2750c. OWED (card step 2): the network's rim pairs re-flown on this tree, docs/handover/2026-10-23/batch19_rimnet_list.txt (6 runs, 4 slots, cap 60) after batch 18. Paper v1: hub cells + the paper's form (LOSS 6/6) in 04c and tab:compare; builds 7 pp, 0 undefined. BATCH 18 LAUNCHED 19:37 (R2764-R2779, 2x12 cores, cap 150; task b3zt9eonn). CHAINED after it (task bu7ogotac; waits on lab_batch PID 368261): lab_free_watch -> batch 19 (rim re-flies, log scratchpad/lab_batch19.log) -> 2 min idle -> bench bar B on the laptop (solve_scaling per the S card, out results/analysis/s_bench_B_<date>.json, log scratchpad/s_bench_B.log; the chain logs uptime before: the card wants load < 0.5).
-  **21:15:** Wesley: Quan et al. EXACTLY (geometry changes OK; decisions.md DECIDED 2026-10-23 'Quan et al. exactly'). GAP-ANALYSIS AGENT RUNNING -> docs/analysis/quan_exact_gap_2026-10-23.md (every deviation: config / switch / world / flight-loop code; proposed world; build plan; why the paper's form loses the ring). Then: card + critic for any flight-loop code, switches default off. Sent Wesley the PDFs: RA-L v1, v2, thesis v3_full (148 pp, scratch build).
-  **21:50:** GAP ANALYSIS DONE (docs/analysis/quan_exact_gap_2026-10-23.md). Two findings checked and recorded: C's network flew diss_balanced_tensions FALSE (full-attitude frame, not yaw-only; CLAUDE.md's locked 'yaw-only' line vs C's configs: ASK Wesley); R2685 tipped past 30 deg at hand-over + 63.9 s (after its window; row R2685c, card, paper v1 corrected). Wesley's choices in decisions.md (text law, world C at the CoM, E1+E4, no port switches). E1/E4 FLYING on the laptop (task bnth0nfrg; configs c_net_paperfinal_hub_{hover,linex_v400}_L100; logs scratchpad/e_*.log). NEXT: after E1/E4 (laptop quiet), a BUILD AGENT in a git worktree (the lab's batch 19 must sync the 63b504f tree unchanged): quan_law.py + net_law switch + world C + configs both arms + card draft; then the critic; bars frozen by Wesley before any run.
-  **21:55:** E1/E4 DONE + scored (R2780, R2781; R2781c): the paper's form on the top-face hub: hover NOT lost (falsifier not fired) but rocks 10-25 deg, yaw 26.5 deg; line 0.4 LOST at hand-over + 42.9 s (rim ~23 s) after tracking with no lag (headline 62.7 vs the port's 102 mm). So the rim speeds the loss but is not the whole cause. BUILD AGENT RUNNING in a worktree (told 21:47 it may test). Wesley asked: the locked 'yaw-only' line vs C's full-attitude runs: ANSWERED (stand as flown; decisions.md).
-  **22:20:** RESULTS BACKUP to UNSW OneDrive (decisions.md 'Results backup'): rclone blocked by UNSW; per-day archives in ~/mdc_onedrive_upload (pack.sh, MANIFEST.txt) -> Wesley uploads in the browser -> then delete the uncited pre-15 Oct sim runs of those days (cited list = R ids named in docs/figures, docs/paper, tools, the thesis drafts; script in scratchpad cutoff). Round 1 (Aug-Sep) PACKED + verified (15 archives, 3.7 GB, MANIFEST.txt); WAITING for Wesley's browser upload, then delete those days' uncited runs + the archives, then round 2 (1-14 Oct). ~22:40 Wesley ran docs/handover/2026-10-23/cleanup_branches.sh: worktrees mdc_lag, mdc_safety, mdc_wt/tejen_sync2 removed, branches time-cascade / safety-defaults / tejen-sync2 deleted after tags archive/<branch>-<sha>; sync2's logs -> results/legacy/tejen_sync2_logs. Disk 5.6 GB free.
-  **22:30:** BATCH 18 DONE 22:27 (16/16 runner PASS, 171 min, R2764-R2779). S SCORING AGENT RUNNING (rows + S card Results). The chain (bu7ogotac) now: lab_free_watch -> batch 19 rim re-flies -> bench B. Build agent (exact law, worktree) still running. ~22:45 Wesley removed MATLAB (docs/handover/2026-10-23/remove_matlab.sh, 16 GB; .bashrc PATH line commented, backup ~/.bashrc.bak_matlab): disk 21 GB free. Round-1 upload still running in his browser.
-  **22:29:** EXACT-LAW BUILD DONE in worktree .claude/worktrees/agent-a4e026ca138b17b9f (branch worktree-agent-a4e026ca138b17b9f; NOT merged; gate --quick PASSED 1943): quan_law.py + net_law switch (port default, bit-identical), world C four_rigid_ground_rig_hubcom_L100.sdf, c_net_quan.yaml, 6 configs c_{net_quan,pl}_hubcom_*, card docs/experiments/2026-10-23_quan_exact.md (in the worktree). OFFLINE: the law holds the ring at NO gain (26-point search, 0 passed; k_ij alone diverges). CRITIC RUNNING on the card (readings first). For Wesley: smoke hover after the critic?; the trackers' 60 deg ring envelope still on in world C (gate threshold); the 300 mm/1 s loss band and Q bars are proposals; prebuild_planner --from-config c_pl_hubcom_hover before the first batch.
-  **22:45:** Quan SUPPLEMENTARY FOUND: S1-S9 + two cut methods sections sit commented out in the arXiv TeX source; extracted to docs/papers/quan2025_supplementary_S1-S9_from_arxiv_source.tex and ..._hidden_methods_... (S1: PX4 takes velocity AND acceleration commands; S2 full modelling; S4 proof; no numeric gains in the text). The authors' Simulink .slx unzip to readable XML (scratchpad quan_src/repo/*/slx). Both sent to the critic (running).
-  **23:00:** BACKUP round 1 DONE: 15 archives on OneDrive (multi_drone_control_results; sizes checked in Chrome against MANIFEST.txt); Wesley ran docs/handover/2026-10-23/delete_round1.sh (408 uncited Aug-Sep sim runs + the archives): disk 34 GB free. Round 2 (1-14 Oct) PACKING. MANIFEST.txt goes up once, after the last round.
-  **23:25:** Round 2 PACKED (12 archives 1-14 Oct, 4.8 GB): WAITING for Wesley's upload. S SCORED (rows R2764-R2779, S card Results 22:40, results/analysis/s_n_twin_2026-10-23.json): hover claim HOLDS; chain4back MISSES N4 position (6.36/6.35 vs 5.66 mm, both repeats; the last fold-in's swing) -> reported as missed; cases: none tripped a falsifier; case 1 on a path walks the formation ~1 m (orbit) -- needs a hold/weld-shift change before any claim. Quan CRITIC: rewrite the card (R7 = a per-quad integrator on a 4-rod self-stress mode); Wesley's answers in decisions.md (R7b, both node readings offline, 60 deg envelope off on world C twin only, S baseline re-fly). Build agent RESUMED with the list. Lab: batch 19 last run; chain bv6c0y1rx then flies s4_hover_L100_it5 x2 (batch 20). Bench B NOT chained: run it when the Quan offline work is done and the laptop is idle.
-- **Scoring owed:**
-  - whatever of 18u the scoring agent did not finish (U's re-flies, our planner's C cells, the paper's damping form;
-    the Thu 29 rehearsal and its A/B are DONE);
-  - 18h against the frozen G/P/A/O bars (C card);
-  - 18 against S's frozen bars: N2 is 8.83 deg; N4 opens 2 s after the last blend (`tools/s_metrics.py`);
-  - cases 6 and 7: their rows carry "critic waived by Wesley 23 Oct".
-- **Offline owed:** S's bench bar B, which needs an idle laptop and no lab sync.
-- **Rig:**
-  - Wed 28: `docs/rig/wed_2026-10-28.md` (15/15 lines resolve on the final tree).
-  - Thu 29: `docs/rig/thu_2026-10-29.md` (5/5 resolve; the 60 s GIVE UP rule for Tejen's install gate;
-    carry_clearance 0.25).
-  - Wesley sends Tejen `docs/rig/note_tejen_install_gate_2026-10-23.md`.
-- **Papers (IEEE RA-L):**
-  - `docs/paper/ral_2026-10-23/`: v1, with the comparison.
-  - `docs/paper/ral_2026-10-23_reconfig/`: v2, reconfiguration focus, reviewer-polished; `REVIEW.md` lists what's
-    left. Pending results are red `\placeholder{}`s.
-- **Figures:** `docs/figures/review_2026-10-23/` and `review_2026-10-23_best/` (Wesley's style: memory
-  thesis-figure-preferences).
-- **Tools copied from the old scratchpad:** `docs/handover/2026-10-23/`. `append_rows.py` backs the registry up beside
-  itself, so COPY it into the new scratchpad before using it. Also `check_sheet.py`, `check_thu_eval.py`,
-  `install_tally.py`, `e5.py`, `lab_free_watch.py`.
-- **For Wesley:**
-  - send Tejen's note;
-  - 2 SQP iterations on the rig (a launch default: twin closed-loop check plus reviewer first);
-  - case 6's path keep-out and clearance;
-  - merging `week7` into main.
-- **Thesis worktree** `~/mdc_wt/thesis` (branch thesis-rig): today's drafts and the two corrected chapters, committed
-  there (dd6aeac).
+## RUNNING (second resume Sat 7 Nov 08:09, after the disk filled overnight)
+- Overnight: the laptop disk filled (~23:30); X3 had finished (32/32 by ~23:15); X3b's R3980/R3981 ran but their
+  fetch failed and lab_batch crashed (R3982/R3983 NOT RUN, registered). 08:05: Wesley OK'd deleting the replays (already
+  gone), the journal (needs his sudo: `sudo journalctl --vacuum-size=200M`, not done) and logs/m2_attachment (done,
+  2.8 GB), and "delete what you need to": R3978-R3981 fetched by hand from the lab PC; the October sim results archived
+  to results/archive/*.tar.zst (32 GB -> 11 GB; ~/mdc_overnight/archive_october.sh); 24 GB free.
+- `~/mdc_overnight/claim1107_resume2.sh` (pid file claim1107_resume2.pid, log claim1107_resume2.log): X3b rest as
+  R3984/R3985, then 5_x2, 8c_rejoin, claim1107 6, 7, 8a, 8b, 8d, 9; disk guard before each chunk (< 8 GB: archive
+  2026-11-01..04 oldest first, verified; still < 8: stop). Same tree (hash 5e7b1d3bd133), no sync. Watcher task on each
+  chunk's EXIT (re-arm after each).
+- Then `claim1106_x1old.sh` (pid file; waits on claim1107_resume2.pid): X1 old masses (sync + build), void re-flies.
+- `x3b_bench_night2.sh` (pid file): tonight 00:30-06:30.
+- DONE 7 Nov: X3 old masses (R3922-R3927, R3954-R3979) F065 + reviewer F066 (R3922c); X3b chains (R3980, R3981, R3984,
+  R3985) F067 + reviewer F068 (R3980c). Queued after X1 (~/mdc_overnight/void_refly.txt, Wesley can veto): x3b_s8_hover_rt,
+  x3b_s8_fig8_rt, x3b_s9_hover_rt on the earlier masses x2 (configs/experiments_oldlinks/, made 08:50) so C8 and N9 sit
+  on one quadrotor model. Open with Wesley: keep the old-mass X3 (N4 miss explained) as the thesis numbers?
+- DONE 7 Nov: X2 old (R3986-R3991) F069 + reviewer F070 (R3986c; card section added): A FALSIFIED in one repeat, B
+  CONFIRMED. Rejoin table old (R3992-R3999) F071 + reviewer F072 (R3992c): all bars hold; bars were set by the lab chat
+  23 Oct before each case, not frozen by Wesley (card note added). X8 (R4000-R4013) F073 + F074 (R4000c); 4.1/4.2 (R4014-R4033) F076 + F077 (R4014c: yaw tool alignment bug,
+  fix after the batch); X11 U (R4034-R4093) F078 + F079 (R4034c: 10 landing aborts on a touchdown spike, rim ordering
+  reversed since 23 Oct, thesis draft results_discussion.tex:201 stale); X11 joins (R4094-R4107) F080 + F081 (TB14 landing aborts); Quan
+  (R4108-R4139) F082 + F083 (draft line 325 stale); gap table (R4140-R4149) F084 + F085 (draft lines 79-96 stale).
+  X1 (claim1106_x1old.sh) started 15:30: sync + build OK, flying; then the 8 queued runs.
+- Wesley 7 Nov ~16:00: bars on every sim claim arbitrary, results as is, compare with other papers where possible (F086,
+  BATCH1107d); Te-Jen's one-quad overlay not needed (deleted; diff in results/rig/2026-11-06/scripts/); no one-quad tests
+  in sessions (multi-quad only 08:00-11:00; CLAUDE.md); QUAD4 fine; 'week8' = the thesis chat (nudged with F061-F086);
+  laptop left idle tonight for the X3b bench. Wesley 7 Nov ~10:10: X3 ACCEPTED after the
+  run (bars arbitrary; F075, R3922d); X3b six runs + X8 hub noxy x2 queued after X1. (X2 etc.: F086 covers it.)
+- 7 Nov ~18:40: batch DONE (18:20). Drop-rule fix APPLIED to the working tree (gate --quick PASSED, desk 9 OK; worktree
+  redundant, Wesley removes it). October results archived: tools name ~300 October runs; extract on demand (F092);
+  restored for the gate R1140/1145/1206-1208/1211-1213/1459/1460/1626. F090 (X3b one model) reviewed -> F093 (N9 NOT confirmed:
+  R9a pending, R9b void); F091 (X8 hub noxy + x1_both_models table) reviewed -> F094. ALL CLAIMS FINAL AND REVIEWED, incl. X3b's
+  R9a bench (8 Nov 00:30; F095 + F096: R8a / R9a hold; R8 FALSIFIED by R8b; N9 not confirmed). THE SIMULATION SET IS COMPLETE.
+- 10 Nov: funnel v5 (Wesley: the base as high as the electromagnet): v4 with the bore 20 mm (81 mm tall, play 10.5 mm,
+  80 g); cad/funnel/funnel.py VARIANTS['v5'], drawing cad/funnel/draw.py; files in ~/Downloads/funnel/funnel_v5.zip.
+- 9-10 Nov: Q011 (the thesis chat, Wesley) the 4.3 joins re-flown on the 0.86 kg ring on PLATE worlds (new:
+  tools/make_m2a_plate_world.py, his geometry rig_twin_L100_plate), LAND +30 s: R4214-R4227, F097 + F098, Q011 CLOSED;
+  first attempt R4202-R4213 void. Figure 15: R4227. Tonight: X3b bench 00:30-06:30 (laptop idle).
+- DONE 7 Nov: tools/yaw_track.py aligned on t_ready_sim (F077's numbers reproduced); gz_record already opt-in. Left: port the overlay
+  ~/mdc_m2one_ws changes on Wesley's word, the drop-rule merge, gate --quick + desk check before Wed 11.
 
-## SAT 24 OCT (Wesley back ~09:10; overnight loop STOPPED, cron ac77ba48 deleted)
-- His answers: decisions.md 'DECIDED 2026-10-24' (rig keeps 5 it; Quan split + k_att 8 + delete R6b; bars after videos/
-  figures; test the overshoot's cause; h_c from init.m; commit the Quan code; round 2 uploaded; S chain after videos;
-  Tejen's note sent to him).
-- COMMITTED 413ec0e (Quan code as flown, R6b included; authored Wesley, no attribution). Tonight's docs/registry/papers/
-  report NOT committed (ask).
-- Backup round 2 verified on OneDrive (12 sizes match); delete script docs/handover/2026-10-23/delete_round2.sh for him
-  (601 uncited 1-14 Oct sim runs, 8.8 GB). Round 3 (the rest, backup only) not packed yet.
-- VIDEOS RENDERING (task b5nxoszze, scratchpad/videos_1024/): R2805 R2808 R2809 R2795 R2793 R2791 R2806 R2807 R2792 R2810
-  R2811 R2764 R2766 -> <run>/video/; then a reel + send.
-- 09:42 VIDEOS SENT: results/videos/reel_2026-10-24_quan_world_c.mp4 (11 runs; a 16 MB copy sent) and
-  reel_2026-10-24_s8_claims.mp4 (R2764, R2766).
-- 09:45 AGENT DONE (uncommitted; gate 1952 green; card updated): R6c split = the seeded constant to the mm; R6b deleted
-  (configs c_net_quan_const* git rm'd; c_net_quan.yaml now rod 0.055 split + k_att 8); new switches quan_aexp, quan_centre,
-  and R7c (quan_vcmd feedforward: a_cmd only in the acceleration feed-forward). OVERSHOOT CAUSE (offline): R7b applies the
-  path's acceleration ~1.3x (feed-forward + kv dt), riding a soft 15 s formation mode; R7c: overshoot 117/209 -> 34/46 mm;
-  R3 and the gains are not the cause. BATCH 28 RUNNING (T0 split hover + lines, T1 aexp0 line 0.4, T3 springs x2 line 0.2;
-  log scratchpad/lab_batch28.log). T2 (R7c) waits: Wesley's waiver or a critic (a reading change in the flight loop).
-- 09:50 Wesley asked for the harder S cases' videos (they flew in batch 18, R2768-R2779; only the claims were in the reel):
-  RENDERING all 12 + reel results/videos/reel_2026-10-24_s8_harder_cases.mp4 (task brq0qfrdx). Send when done (re-encode
-  under 30 MB if needed).
-- 10:00 BATCH 28 SCORED (rows R2813-R2817): R6c split = the seeded constant in the twin (hover 109 mm, -5 mm height;
-  lines 202 / 245 mm, amplitude 1.31 / 1.40); a_expected zero -> amplitude 0.66, 209 mm short, 2 s late (the ends are driven
-  by the path's acceleration); springs x2 -> 1.16 at 0.2. R7c critic WAIVED by Wesley (decisions.md): T2 = R2818 flying
-  (batch 29, bgla8v3j0). Figure script docs/figures/review_2026-10-24/fig_quan_lines.py (ours / law / R7c on both lines):
-  render when R2818 lands, then send.
-- 10:15 R2818 (R7c, line 0.4) SCORED: amplitude 1.12 vs 1.40, headline 204.5 vs 244.9 mm; but asymmetric (far end short 0.82,
-  start end ~0.15 m past; R2818c). Card '## Line overshoot: the twin check' added. FIGURE SENT: docs/figures/review_2026-10-24/
-  fig_quan_lines.png (ours / R6c / R7c, both lines). Next for Wesley: freeze the Quan bars (he wanted videos/figures first),
-  R7b vs R7c as the law's reading, commit the R6c/R6b-deletion change.
-- 10:40 HARDER-CASES REEL SENT (results/videos/reel_2026-10-24_s8_harder_cases.mp4, 12 runs, 45 min; sent in two 16-18 MB parts).
-  Waiting on Wesley: S chain reporting (after the videos), the Quan bars / R7b vs R7c / commit.
-- 10:47 TEJEN replied (via Wesley): agrees it is install starvation; his latest 73e7b7fe still has the gap (worker accept ->
-  ROS-side installCertifiedReplacement rejects on world_version_changed with no install-time recheck); his preferred fix is
-  OUR option 1 (a bounded install-time recheck against the current world, keeping the epoch, splice-deadline and final atomic
-  version checks); no movement tolerances, no lower carrier rates; no gate change implemented yet. Sent Wesley for him:
-  scratchpad/for_tejen/ (README_R2695.md with fd495db0 / 6483d90 / 5f8bd51, R2695_replans.csv, R2695_backend.csv).
-  Thu 29: the 60 s GIVE UP rule stays until his fix is in, synced and re-rehearsed in the twin.
-- 11:00 Tejen's 2nd reply: port his 1cfc7a90 (completion wakeup) first. PORTED (decisions.md; backups scratchpad/*before_1cfc7a90;
-  uncommitted), built, completion test 10/10, gate 1952 green. BATCH 30 RUNNING: thu29_floorjoin_hover_L100 x2 on the lab
-  (log scratchpad/lab_batch30.log; ~35 min at RTF 0.15). Then install_tally + completion_to_collection_ms + certified vs
-  installation versions vs R2695/R2738 -> a note + CSV for Tejen.
-- 11:20 BATCH 30 SCORED (R2819, R2820): THE FIX WORKS: installed/accepted 33/34, 34/35 (R2695 2/551); settle -> install
-  0.2 / 0.4 s (115 s); weld 64.4 / 64.3 s (179.3); every install on its certified world version; clearance >= 0.64 m; fold-in
-  tilt 1.8 deg. Note + R2819 CSVs sent to Wesley for Tejen (scratchpad/for_tejen2/). Thu 29: the hold should now be short;
-  keep the 60 s GIVE UP rule as the backstop. The port is UNCOMMITTED (ask).
-- 11:25 Wesley ran delete_round2.sh (601 runs): disk 41 GB free. ROUND 3 PACKING (backup only, nothing deleted; task bztj7zolb):
-  15-23 Oct days, rig, videos, analysis, logs, legacy, desk, backups, compare, launch_gate, preflight, registry.csv, README.
-  Then Wesley uploads it + MANIFEST.txt (the last round); 2026-10-24 waits until today's runs are done.
+## After each chunk lands
+Register (append rows, LF), one-tree hash (claim_batch manifest section 5; the old-mass chunks share 3ff122e74ceb with X4 old),
+score (section 10 scorers; X3 needs its bases: tools/x3_metrics.py <X3 ids> <bases>), feed entry, a reviewer agent, tick
+sim_runs_todo/handin_plan. X3/X3b/X4/X1 final numbers = the OLD-MASS runs (Wesley 6 Nov ~10:30, 'only claims with returns' +
+X1 ~11:35); the final-mass runs R3772-R3820, R3821-R3906 stay as recorded comparisons.
 
- (Wesley asleep from ~22:45; check-in cron ac77ba48 at :13 and :43 (45 min cannot be a clean cron; 30 chosen); STOP at 10:00 Sat 24 Oct: CronDelete ac77ba48)
-Rules: no questions (take the best option, note why, ask in the morning report); push notifications only for a
-decision he must make (not progress); at most 2 agents at once; no commits; anything needing his word (launch defaults,
-world SDFs, params.py, gate thresholds, freezing bars) is built behind a switch (default off) and asked in the report.
-Queue, in order (update the status inline):
-1. Lab: batch 19 (rim re-flies R2782-R2787) -> score with c_metrics (rows; then the hub G/P re-read against the
-   same-tree rim pairs, BOTH reported, the frozen verdicts unchanged). Batch 20 (s4_hover_L100_it5 x2, chain
-   bv6c0y1rx) -> score n1/n4 with s_metrics; re-read the S N1/N4 verdicts against the same-tree baseline, both reported.
-2. Quan build agent (worktree .claude/worktrees/agent-a4e026ca138b17b9f): when it reports, read its offline table. If a
-   reading holds offline: a second critic pass on the rewritten card; if the critic does not block, merge the worktree
-   into the main tree WORKING COPY (no commit; gate --quick green; prebuild_planner --from-config
-   c_pl_hubcom_hover_L100) and fly the EXPLORATORY smoke on the lab: quan hover x1, the port on world C hover x1, our
-   planner c_pl_hubcom_hover x1 (one registry row each with its falsifier). No claim runs (bars need his freeze). If
-   nothing holds offline: no twin runs; report.
-   STATUS 23:25: build agent DONE (gate 1946 green): R7b + ALGEBRAIC nodes holds offline at a low start (hover 124 mm
-   standing offset; lines 187/222/244 mm headline, 0.4 farthest 319 mm vs the 300 band); dynamic nodes (S2/S4) do not;
-   R7's wind-up is common-mode, not self-stress; h_c 3.41 L from init.m; payload_tilt_envelope switch (twin only, off on
-   world C); port-on-world-C neighbour config; card rewritten (bars PROPOSED). CRITIC PASS 2 RUNNING (smoke go/no-go).
-   Lab: R2787 stuck ~40 min (cap 60 ends it ~23:45), then batch 20 (S baseline x2) starts.
-   23:26: CRITIC PASS 2: FIX FIRST then FLY THE SMOKE (nothing unsafe): get code + world C + 3 twin params into the
-   flying tree (patch scratchpad/quan_exact.patch, apply --check OK on main), colcon build, prebuild --from-config
-   c_pl_hubcom_hover, gate; write its 3 per-run falsifiers into the card §6 (incl. 'held, X mm off (datum shift Y)'); record
-   that the smoke does NOT set the bars. APPLY ONLY AFTER batch 20 has synced (its S re-fly must fly 63b504f's tree).
-   23:58: batch 19 SCORED (rows R2782-R2787; R2787 VOID, re-flown R2790 on the old tree, running): same-tree hover
-   re-read = THE PORT (rim 14.2 vs hub 12.2 mm), lines as frozen; C card section added. Batch 20 SCORED (R2788/89):
-   baseline reproduces, S verdicts unchanged (chain N4 6.36 > 5.69 mm). QUAN PATCH APPLIED to the main working copy
-   (no commit; backup of main's prior diff scratchpad/premerge_backup/; search JSONs copied); colcon build OK; card §6
-   per-run falsifiers + 'the smoke does not set the bars' written. GATE running (scratchpad/gate_quan.log); chain
-   bvpaqjzyj: when the gate passes AND R2790 ends -> SMOKE TRIO on the lab (batch 22, log scratchpad/lab_batch22.log).
-   NOTE for the report: from here on the main tree carries the Quan code (switches default off).
-   00:01: GATE PASSED on the merged tree (1949). R2790 SCORED (valid, 104.9 mm; rim line 0.4 pair 102.6 vs hub 102.4:
-   P, as frozen). Smoke trio launching (bvpaqjzyj).
-   00:15: SMOKE DONE + scored (rows R2791-R2793): our planner on world C 1.0 mm (baseline O usable); the port 12.3 mm,
-   yaw 0.1 (holds); THE LAW: HELD but 466 mm off, a VERTICAL standing offset (+0.45 m: the fleet climbed 0.57 m in 3 s at
-   the hand-over, then level, quads leaning 27-28 deg), LAND stalled at 0.52 m (load down never fired); the 72 deg
-   fault/abort lines are after the run's 160 s end. Cause of the climb: TO DIAGNOSE (pull model vertical is right).
-   BENCH B RUNNING on the idle laptop (load 0.17 before; log scratchpad/s_bench_B.log): no laptop work or lab sync until
-   it ends. Then: a diagnosis agent for the climb (planner tick log a_cmd per term at the hand-over; the paper on how
-   the vertical is commanded).
-   00:50: BENCH B DONE (rows S-BENCHB-1024 + c; S card): rig N_max 3/4/4 at 5/2/1 it (as expected): the 8-quad
-   REAL-TIME claim FALSIFIED; idle 4/6/8 (latency). CLIMB DIAGNOSIS AGENT RUNNING (main working copy; adds a reading behind a
-   switch, offline before/after, gate; appends '## Smoke R2793: the climb' to the Quan card). Lab idle; laptop: the agent.
-   01:05: morning report DRAFTED (docs/reports/morning_report_2026-10-24.md; rig first: bench B says 5 iterations fit only
-   3 quads on the rig laptop, Thu 29's 4-quad phase needs 2). NEW exploratory configs s4_{hover,fig8big_h5_v200,release9_3915}
-   _L100_it2 (--check ok; one change from it1: plan_sqp_iters 2): fly x2 each on the lab WITH the climb re-fly once the
-   diagnosis agent reports (it edits src in the main tree: no lab sync until it is done); score against S's C bars.
-   01:18: CLIMB DIAGNOSED (card '## Smoke R2793: the climb'; results/analysis/quan_climb_R2793_2026-10-24/): quan_rod_mass
-   0.075 double-counts the rod already in the twin's drone_mass 0.55 (+0.74 N/quad at the hand-over, held by k_i 1 N/m);
-   the 27-28 deg 'lean' is a 2.6 Hz wobble likely from vel_k_att 16 (also in R2780/R2744: a confound for the paper-form
-   losses). New reading R6b (quan_fz autopilot: a per-quad vertical integral; default 'model', gate 1953 green). BATCH 23
-   LAUNCHED (bk837xe72, log scratchpad/lab_batch23.log): c_net_quan_rod0 + c_net_quan_rod0_katt8 (config-only) + the six
-   s4_*_it2. CRITIC on R6b RUNNING (asks: differential wind-up of four per-quad integrals on rigid rods; common-mode form?).
-   01:25: R6b CRITIC: rewrite/FIX FIRST (card '## Critic (R6b)'): R6b = R7 restricted to z; the error is a known constant
-   (the seeded b(0) already is the whole correction); falsifier blind to differential wind-up; point-load worlds only;
-   NOT asked for: Wesley's word (if the ki-0 constant matches it, record + delete the code). R6b does NOT fly tonight.
-   Its config-only control c_net_quan_const_hubcom_hover_L100 (rod 0.055, fz autopilot, fz_ki 0) CHAINED after batch 23
-   (batch 24, log scratchpad/lab_batch24.log). For the report: the clean fix may be the critic's one-line split of R6's
-   pull (vertical (m_L/n) g, horizontal (m_L/n + r) g cot phi): a reading, his word.
-   01:39: BATCH 23 SCORED. Quan: R2794 (rod 0): no climb (double count confirmed), sank -0.27 m, wobble stays; R2795 (rod 0 +
-   vel_k_att 8): WOBBLE GONE (k_att 16 was its cause), FIRST VALID RUN of the law as read: held level, 181 mm (a -0.16 m
-   vertical offset, = offline), landed. S it2 (R2796-R2801, R2797c): C1-C7 hold in every cell; solve p50 ~16 ms vs ~93
-   at it5 (S card section). CHAINED after batch 24 (bj7s66y5g): batch 25 = R2795's reading on line 0.2 and 0.4 + the
-   constant at gain 8 (c_net_quan_const_katt8_hubcom_hover_L100); log scratchpad/lab_batch25.log.
-   01:56: R2802 (const, gain 16): vertical -0.11 m (rod 0: -0.27), wobble drift -> band LOSS at 81 s; falsifier marginally
-   fired. BATCH 25 SCORED: R2803/R2804 (R2795's reading on lines) VALID, headline 282 / 299 mm (overshoot 80 / 113 mm,
-   lag ~0); R2805 (const + gain 8) VALID: height -3.6 mm mean, a SETTLED 110 mm horizontal offset: the best reading.
-   BATCH 26 RUNNING (our planner on world C's lines + the best reading on both lines; log scratchpad/lab_batch26.log).
-   02:08: BATCH 26 SCORED (R2806-R2809): our planner on world C lines 24.3 / 65.4 mm; the law's best reading on lines 201.7 mm
-   (valid) / 252.8 mm (band LOSS at the ends: overshoot 175 mm, amplitude 1.42; quads calm). BATCH 27 RUNNING (no task
-   notification: started with &; check scratchpad/lab_batch27.log at the check-ins): the port on world C's lines + a repeat of
-   R2805 (the best hover).
-   02:24: BATCH 27 SCORED (R2810-R2812): the port on world C lines 40.8 / 100.0 mm; R2812 REPRODUCES R2805 (118 mm, -3.7 mm
-   height). Quan card 'Results so far' written; MORNING REPORT updated (verdict, rig first, 8 decisions). No more twin runs
-   planned tonight: the next steps (readings, bars, overshoot cause) are Wesley's word. Lab and laptop idle.
-   02:26: two REVIEWERS RUNNING (read-only): the it2 rig check (R2796-R2801 + bench B) and S's final claim table (C, N, B).
-   Fold their corrections into the cards and the morning report when they land.
-   02:32: REVIEWERS DONE. S table: supported (strong), wording corrected (S card note; rows S-BENCHB-1024c2, R2766c). it2:
-   WEAK as rig evidence (bench B ran with plan_fast_refs on, off on the rig: n=4 at 2 it then 104.7 ms; the rig flew 4 quads
-   at 5 it under the 60 ms budget cut on 7-8 Oct; no 3->4 fold-in at 2; the it2 scorer double-shifted node logs: R2796c).
-   MORNING REPORT corrected: rig stays at 5 for Thursday. PAPERS: both drafts' chain paragraph rewritten around the claim
-   runs (R2766/R2767: N4 6.4 vs 5.7 mm missed; releases one at a time 15 s apart), the figure caption marks R2597 as the
-   earlier exploratory run, N_max as a projection, v2's stale limitation fixed; v1 8 pp, v2 8 pp, 0 undefined. Backups
-   scratchpad/*before_rev.tex. 02:35: THESIS S DRAFT AGENT RUNNING (res_scale.tex from the reviewed S card; backup
-   scratchpad/res_scale.before_1024.tex; builds in scratchpad/thesis_build2).
-   02:39: THESIS S DRAFT DONE (res_scale.tex rewritten from the reviewed card; res_rejoin.tex's chain line points at the
-   claim runs; backups scratchpad/res_*.before_1024.tex; thesis builds 152 pp, 0 undefined, scratchpad/thesis_build2).
-   Open for Wesley (in the report): how to report the chain (missed as written vs a later-runs-only N4 window); the
-   chain figure is still R2597's (1 iteration). QUEUE DONE except the 09:30 report polish; lab and laptop idle.
-   08:55: MORNING REPORT FINAL (docs/reports/morning_report_2026-10-24.md: verdict, rig first, housekeeping, 9 decisions).
-   The loop stops at 10:00 (CronDelete ac77ba48).
-3. Bench bar B (S card) once the laptop is idle (no Quan offline work running, no lab sync): the solve_scaling command in
-   the S card §5 B, out results/analysis/s_bench_B_2026-10-24.json; uptime before (< 0.5).
-4. Thesis draft fix (~/mdc_wt/thesis .../drafts_1023/res_compare.tex): "measured yaw" -> "measured attitude"; the R2685
-   late tilt; the hub results as in paper v1 04c. Backup first; build in a scratch copy. DONE 22:55 (backup scratchpad/res_compare.before_1024.tex;
-   thesis builds 149 pp, 0 undefined, in scratchpad/thesis_build).
-5. Backup round 2 waits for Wesley's upload (12 archives in ~/mdc_onedrive_upload); nothing to do overnight.
-6. Morning report docs/reports/morning_report_2026-10-24.md by 09:30 (table, one-line verdict, decisions for him),
-   then stop the loop at 10:00.
+## Done today (6 Nov), in one place (details below and in decisions.md / feed F052-F063)
+- X4 FINAL on the old masses R3910-R3914 (F062 + reviewer F063): 26/26, packs 575-589 s, 2.9 B, laps one carrier short 21-34 mm.
+- X1 (final masses, R3821-R3906, F059/F060) superseded by its old-mass re-fly (Sat). X3/X3b final-mass R3779-R3820 (F055/F057).
+- Slower returns = the 4 Nov model change (A/B R3907/R3908, F058); old-mass worlds by tools/make_oldlink_worlds.py (R3909 smoke).
+- QUAD4 drop-rule fix BUILT in the worktree .claude/worktrees/agent-aa650a10b71d57ce6 (critic waived; R3915-R3917): MERGE after
+  the X1 old-mass re-fly (Sat), then gate --quick + the desk check, before Wed 11. Then remove the worktree (Wesley).
+- The paper (decisions 6 Nov): sessions plan APPROVED (docs/rig/plan_sessions_2026-11-11_to_19.md); sheets wed_11, thu_12,
+  wed_18, thu_19 rewritten; scripts rel, relo, nrtf, nro, k1z, fm9, fm9h, fm9o (drop_on_arrival_xy 0.08); desk check 9 OK
+  (16:18); twin checks R3918-R3921 PASS (watch-points in the sheets); the paper's tables (results/analysis/paper_rig_2026-11/)
+  and single-run figures (results/analysis/paper_figs_2026-11/); attach ideas (docs/analysis/attach_ideas_2026-11-06.md).
+- Funnel v4 (TPU, 85 mm base, 85 mm tall, 207 x 157 mm mouth, 45 deg, 2 outer bolts, zip-tie notch, 83 g): cad/funnel/funnel.py,
+  ~/Downloads/funnel/funnel_v4.*; v2/v3 do not pass the magnet's wire fitting.
+- Reviews of 5 Nov night (docs/reports/reviews_2026-11-05/), memory/CLAUDE.md fixes, rig docs archived (docs/rig/archive/).
+- Open with Wesley: is the 'week8' session on this laptop his thesis chat? (the F061/F062 nudge not sent until he says).
 
-## ULTRACODE PUSH (from Thu 22 Oct ~14:20) -- READ THIS FIRST
-**23 Oct morning (07:27): Wesley's answers to every open decision are in decisions.md (DECIDED 2026-10-23). DISK 99 %
-(1.9 GB free): nothing heavy (renders, lab batches, worlds) until Wesley decides on space; his rule is delete nothing.
-Queue from his answers: Wed sheet MDC_PLANNER_CPUS=0-7; pair-swing round C world + 4 runs; S claim cells; U grid (bars
-frozen with his four answers); R's five 1 m worlds + ~36 runs; rejoin leaning-pair test; highlight videos + reel.**
-**07:47 status:** Wesley freed the DUPLICATE scratch only (the backup's wave1/verify + check, 3 GB; refresh.sh now
-excludes them): 4.7 GB free. Wed sheet: MDC_PLANNER_CPUS=0-7 in w5 (done). Highlight videos rendered (R2597, R2464,
-R2594, R2578, R2446, R2427, R2433; frames checked) + reel results/videos/reel_2026-10-23_overnight_highlights.mp4.
-Running: agent 1 = round C tip-hinge world (attach_z 0.0575) + R's five 1 m worlds + their configs; agent 2 = the
-rejoin leaning-pair config (config-only) + U's bars frozen on his answers + the U grid list. Then lab batches: round
-C x2 per arm, the lean test, R's new tables, the U grid (~3 GB of results: S's 8-quad claim cells wait for storage).
-**08:09:** Wesley freed ~/.ros/log older than 7 days (9.4 GB) and the scratchpad's reviewer scratch (2.9 GB): 18 GB
-free. Built (gate green): round C tip world two_rigid_ground_rig_tip (hinge 0.0575, cable 0.53) + configs typed0175 /
-typed0575 (bars FROZEN 08:05); R's five 1 m worlds (Tier B 3969/gap135/gap165/gap180, push) + 18 r1m configs; the 3-quad
-T push world + rj3_..._lean / _leanneg (+3 / -3 deg; leanneg -0.0110 N m); U bars FROZEN 07:56 on his answers (56-run
-list); --check now refuses a WRENCH on a world without the push plugin. BATCH 16 LAUNCHED (87 runs, ~4.5 h): round C x2
-per arm, lean, leanneg, R's 25, U's 56.
-**09:29:** Wed sheet checked: all 15 launch lines resolve (tools/launch_dump; fig8 0.75, dist 0.75, cable 1.0, limit
-1.75); plan status table updated. Wesley picked all four next items: (1) Thu 29 readiness agent RUNNING (merge
-tejen-sync2 into main, QUAD4 at 1 m, twin rehearsal configs, sheet docs/rig/thu_2026-10-29.md); (2) thesis drafts agent
-RUNNING (~/mdc_wt/thesis, new files only; index DRAFTS_2026-10-23.md); then (3) pair-swing round D (card + critic) and
-(4) S's claim cells on the lab after batch 16.
-**11:18:** Drafts agent DONE: five results sections in ~/mdc_wt/thesis (.../Source/src/drafts_1023/, one \input at
-Results_and_Discussion.tex:25, index ~/mdc_wt/thesis/DRAFTS_2026-10-23.md; builds, pp. 69-86). It caught MY C error: the
-twin's "retuned" R2468/69 flew the search's stage-1 point (emit got only diss_c, vel_kp_pos); the real best never flew
-(morning report corrected). Wesley: fly the best (configs/twin/c_net_portfinal.yaml + c_net_tune_portfinal_* x2 each);
-correct system_overview latency + reconfiguration drop rule (done, thesis worktree; backups scratchpad/*.tex.bak).
-Round C NULL (R2598-R2601 rows written: M1(b) 0.08-0.09 < 1.0 testbed bar). Wesley: reduced round D (slope x2,
-cable_source model x2 on thr060; bars FROZEN 11:14 in the card) and delete rate_kff / thr_tau_s / rate filter / tip
-world (agent RUNNING; keep the per-channel delay). Thu 29 agent DONE (sync2 merged, uncommitted; backups
-scratchpad/sync2_merge/backup/; new configs/rig/attach_m1_1m.yaml; sheet docs/rig/thu_2026-10-29.md; gate green 1887).
-Wesley: carry_clearance 0.25 (in $H and the thu29 twin configs), Nr on our announced DETACH. Scoring agent RUNNING:
-R2602-R2628 (lean pair + R's new worlds). BATCH 17 READY (scratchpad/batch17_list.txt, 15 runs: C portfinal x6, round D
-x4, thu29 floorjoin x2 + Nr x3 for the Nr band, frozen before Thu 08:00): launch when batch 16 ends (~12:20) AND the
-deletion agent's gate is green; it now has 27 runs (+ S's s4 C cells x2: hover, fig8big, release9 at it5/it1). Then
-BATCH 18 (scratchpad/batch18_list.txt, `--slots 2 --cpus 12 --wall-cap-min 60 --warm-from-config`): s8_hover x2,
-s8_chain4back x2 (claims), s8_fig8, s6_chain4, s8_chain2back, s9_hover (x1). S's bars stamped FROZEN (Wesley ~07:25).
-S bench bar B (laptop, idle, offline) after the U scoring agent: the drafts' 3/3/4 limit predates the speed-ups.
-U's 56 (batch 16) get a scoring agent when the batch ends.
-**11:31:** Deletion agent DONE (backups scratchpad/del_rt/backup/, 25 files; 9 rt/tip configs + the tip world +
-test_rate_filter deleted; per-channel delay kept; gate --quick PASSED 1874; my re-run of the touched tests 103 pass).
-Checks on the merged tree: Wed 28 sheet 15/15 lines resolve (fig8 0.75, dist 0.75, cable 1.0, lim 1.75); Thu 29 sheet
-5/5 lines resolve with bench stand-ins (W 0.0285, L 1.033) via test_real_mode_launches.evaluate (launch_dump lacks
-ResetEnvironment); the typed W=0/L=0 and a 0.55 m-era QUAD4 record are refused as designed; carry_clearance 0.25
-lowers his transit heights by 0.25 (minimum_search_z 3.44 -> 3.19 m). Thesis builds clean with my two edits (135 pp,
-0 undefined refs; scratch copy scratchpad/thesis_build). S bench bar B needs the laptop idle with NO lab sync: after
-batches 17/18 (tonight). Note: his launch makes an empty log folder in logs/tejen_dynamic_planner/ each time it is
-merely evaluated (gate tests too: 130 today); harmless, nothing deleted.
-**11:33:** R scoring agent DONE: R2602-R2628 rows written (registry checked: 1 header, LF end). R now 19 hold / 6 do not
-/ 2 unresolved / 0 skipped (table doc updated). Tier B at 1 m: G165 crosses the 30 deg drop line 2/2 (28 deg at 0.55 m);
-G150p no longer drops (peak 29.81); B5 "freed drone disarmed alone" fails as written (G165: every quad disarmed at
-z 0.10 m with the fleet, on the ground: bookkeeping, not a hazard); G180's in-air fleet disarm (1.85-1.99 m) is the
-designed drop-off envelope fault. tab:faults' tilt-over-30 row: cite G165 at 1 m (my call under his re-fly-at-1-m
-decision; he can keep the 0.55 m history instead). E5 lean pair: R2602 +3.26 deg PASS, R2603 -2.67 deg PASS (lean before
-LAND 1.88 vs the 2 deg bar): each gets its 2nd run in batch 17 (now 29 runs). Reviewer for R's new rows RUNNING.
-**11:47:** R reviewer 2 [weak]: every number reproduces (0.01), all 25 runs valid, no bar re-set; corrections applied to
-docs/analysis/refly_1m_table_2026-10-23.md (backup scratchpad/refly_1m_table.before_reviewer2.md): B4 a MARGINAL hold
-(0.19 deg, repeats 2.50 apart; the tier_b must-not-say stands), B5 NOT CONFIRMED (not "does not hold"), G165's drop is an
-S MISS 2/2 (its post-hoc ">=" exemption withdrawn), C-D1 vertical and C-D4 EMPTY holds. Tally 19 / 5 / 2 / 1 not
-confirmed. 11:45: at Wesley's request, the 23 Oct highlights reel emailed to wesleydonaldnz@gmail.com (his Chrome Gmail
-account) in 3 lossless parts (Chrome's upload limit 10 MB per file; parts in scratchpad/email_reel/); confirmed SENT.
-make_reel's title cards clipped long lines (run id cut off at the left): FIXED in tools/make_reel.py (verdict wrapped to <= 3 lines of 56 chars; checked on R2446 and R2603 cards). Today's emailed reel keeps the old cards.
-**12:23:** BATCH 16 DONE (87/87 ran; one runner FAIL, R2634 u_slot_t04; exit 1 from that). U scoring agent RUNNING
-(R2629-R2684 against the 07:56 bars). gate --quick re-running before batch 17 (log scratchpad/gate_pre17.log); batch 17
-(29 runs) launches when it passes.
-**12:27:** gate PASSED; BATCH 17 LAUNCHED (task bgpo2gnxe, log scratchpad/lab_batch17.log, 4 slots, lab idle): C
-portfinal x6, round D x4, thu29 floorjoin x2 + Nr x3, S s4 cells x12, E5 lean + leanneg x1 (~1.5 h). Then batch 18 (S
-8-quad, 12-core slots).
-**14:05:** BATCH 17 DONE 13:55 (29 runs, 79 min; 27 PASS). Scored: round D CONFIRMS both arms (slope 0.07/0.06, cable
-model 0.01/0.01 vs 7.39/7.36 deg; R2691-R2694; card updated with rounds C and D); C's real best (R2685-R2690): line 0.4
-99-105 mm vs our planner's 46 (stage-1 156), yaw 14 deg on the line, 22-51 deg in hover (C card has a Results section
-now); E5 2nd runs: R2712 FAIL (5.28 deg, the cap's dip), R2713 PASS; reported as is (Wesley). U answers (Wesley): 6
-owed runs on today's tree; rim mechanism NOT SHOWN. Runner fixed: no mocap-staleness check after /fleet/landed (R2634's
-race; test added; gate PASSED). Thu 29 rehearsal: R2696/R2697 killed by the 30-min wall cap while his planner's C++
-transfer search kept failing its final collision checks (time to TRANSIT 84 to >284 s; pre-merge 22-84 s): the merged
-C1F backend and/or carry_clearance 0.25: INVESTIGATION AGENT RUNNING. S s4 claim scoring AGENT RUNNING (its C verdict
-decides whether S's 8-quad claims fly at 1 iteration). LAB BUSY (another user, 23 of 24 cores): batch 18u stopped at
-14:03 (R2714-R2724 VOID); watcher b6a3vcas0 (scratchpad/lab_free_watch.py) exits when the lab is free -> relaunch
-scratchpad/batch18u_list.txt (11 runs), then batch18_list.txt (S 8-quad, --slots 2 --cpus 12 --wall-cap-min 60).
-**14:15:** S's C CONFIRMS (R2700-R2711: C1-C7 hold in both repeats of every cell; it1 as good as it5, the figure-8 1.6 mm
-closer; closest margins R2711's release cell, 0.31 / 0.37 deg). But the card picks 1 iteration only if Q holds too, and
-Q had never run: Q1-Q5 (planner_replay over the nine flights, task bgxt5ipp0, log scratchpad/s_q_replay.log) and Q6
-(solve_scaling n 8 --quality, task b6kvbx05i, log scratchpad/s_q6.log) RUNNING on the laptop (untimed; they rebuild
-solvers in <repo>/generated: prebuild_planner.py before the next LAPTOP twin batch; ~/mdc_rig_generated untouched).
-The 8-quad claims (at it1) wait for Q and the lab. tools/s_metrics.py: clocks unaligned (planner /clock vs runner, 3-23
-s) and node logs read past run.csv's end (false VOIDs): FIX AGENT RUNNING (the scorer's wrapper scratchpad/s_c_score/
-is the reference). Thu 29 investigation agent still RUNNING.
-**14:28:** Thu 29 investigation DONE: the stall is Tejen's merged install gate (execution_authority.hpp runIfVersionCurrent;
-every carrier/ring sample bumps his world version): 3,533 of 3,541 plans discarded (R2695-R2699, verified with
-scratchpad/c1f_diag/install_tally.py); not the clearance (18 final-check failures in 3,689). Wesley: Tejen's fix (note
-docs/rig/note_tejen_install_gate_2026-10-23.md, Wesley sends it); sheet: 60 s GIVE UP stop rule + the hold note;
-carry_clearance stays 0.25. Rows R2695-R2699 written (R2696/R2697 VOID, wall cap). batch18u_list.txt now 17 runs (+ the
-two re-flies and the cc050 A/B x2): launch with --wall-cap-min 60 when the lab is free. lab_batch does not bring his
-logs back (logs/tejen_dynamic_planner on the lab): the A/B's replans.csv must be fetched (install_tally.py does).
-**14:33:** s_metrics FIXED (agent: run clock via the manifest's t_ready_sim, node logs cut to run.csv; test; gate PASSED;
-R2700-R2711 reproduce the wrapper exactly). N4 REVISED (Wesley) for the claim runs: opens 2 s after the last
-REJOIN_BLEND_OVER (s_metrics n4; n4_resize = the original; test added); R2597 6.3 mm / 0.89 deg revised, 19.3 / 1.65
-original. Design agent RUNNING: harder S cases (trajectories, tasks while away), a PROPOSED addendum in the S card.
-**14:37:** S Q6 DONE (n = 8): i1 misses Q1-Q4, i2 misses Q4 by 0.016, i5 passes (card Results, Q6). Wesley: the 8-quad claims
-fly at 5 iterations -> new configs s8_hover_R50_L100_it5, s8_chain4back_R50_L100_it5 (--check ok); batch18_list.txt is
-now those 4 runs (the it1 list kept as batch18_list_it1_superseded.txt); launch AFTER batch18u with --slots 2 --cpus 12
---wall-cap-min 150 --warm-from-config. The nine-flight replay (Q1-Q5, task bgxt5ipp0) still running.
-**14:52:** While the lab is busy, Wesley picked: (1) thesis figures -> FIGURES AGENT RUNNING (his style brief in memory
-thesis-figure-preferences: simple, one message, minimal words, red/blue, supervisors' papers as reference; output
-docs/figures/review_2026-10-23/ + contact_sheet.pdf; NOT into the thesis until he has looked); (2) update the five
-drafts with today's results + write U's section -> agent when the design agent finishes (max 2); (3) today's videos +
-reel -> RENDERING 12 runs on the laptop (task bwpe9f9ts, scratchpad/videos_1023/): R2695 R2699 (Thu 29 rehearsal),
-R2450 R2691 R2693 (pair swing: no fix, slope, cable model), R2448 R2689 R2685 (C: ours vs the network's best),
-R2639 R2684 (U), R2712 (leaning rejoin), R2710 (S release at 1 iteration); then make_reel.py ->
-results/videos/reel_2026-10-23_afternoon.mp4. No laptop twin runs (not picked).
-**14:59:** S Q1-Q5 DONE (nine flights): i1 misses Q1/Q2 on all four rig flights and the twin spinny line (f2slope Q4
-too); i2 passes Q1-Q5 on all nine (misses only Q6's feed-forward at n = 8). Card Results updated. The 8-quad claims stay
-at 5 iterations (Wesley). Open idea for Wesley (not asked yet): 2 iterations on the rig (n <= 4: converged by every Q
-bar, ~half the solve time; the rig planner runs near its tick at 5): needs a twin closed-loop check at it2 + reviewer,
-and his word (a launch default).
-**15:12:** Design agent DONE: "More complex cases (proposed)" addendum at the end of the S card (7 ranked; 9 configs, --check
-ok, gate 1876). Wesley: all five no-code cases fly as exploratory first passes in rank order after the claims ->
-batch18_list.txt is now 13 runs (4 it5 claims + 9 cases; --slots 2 --cpus 12 --wall-cap-min 150 --warm-from-config);
-N2 comparator 8.83 deg (card revised); cases 6-7: critic WAIVED, build behind switches when a slot frees (QUEUED:
-next agent after figures/drafts). DRAFTS AGENT RUNNING (today's results + U's section, ~/mdc_wt/thesis drafts_1023/).
-FIGURES AGENT RUNNING. Videos rendering (bwpe9f9ts).
-**15:26:** FIGURES DONE: 13 in docs/figures/review_2026-10-23/ (+ index.md, contact_sheet.pdf rebuilt; sent to Wesley);
-ring now black (plot_style.PAYLOAD_LINE), pair-rig like for like, "t after". VIDEOS DONE: 12 rendered (frames all ok),
-reel results/videos/reel_2026-10-23_afternoon.mp4 (24 min; sent in 2 lossless parts, scratchpad/email_reel/). Wesley
-asked why the network's yaw grows: explained (point-load model vs our rim-hung ring + our yaw-following); he chose the
-paper's own geometry test: PAPER-GEOMETRY AGENT RUNNING (centre-hooked world + both arms' configs, PROPOSED C section).
-Drafts agent still RUNNING. Queued for a slot: cases 6-7 build (critic waived).
-**15:44:** DRAFTS DONE (5 updated + U's new section res_catch_offset.tex; index rewritten; before-copies scratchpad/
-drafts_1023_before/). Wesley: fly the paper's FORM at its best gains (c_net_tune_paperfinal_* x2, in batch18u, now 23
-runs); C draft cuts done; tab:faults + system_overview timing fixed; thesis builds 148 pp. BEST-RESULTS FIGURES AGENT
-RUNNING (Wesley: best 2/3/4-quad hover/trajectory/detach, rig first, one figure per component: trajectory, error
-components, throttle, tension, reaction time... -> docs/figures/review_2026-10-23_best/). Paper-geometry agent RUNNING.
-Queued for a slot: cases 6-7 build. Lab still busy (watcher b6a3vcas0).
-**16:22:** BEST-RESULTS FIGURES DONE (docs/figures/review_2026-10-23_best/, 9 figures, contact sheet; sent); Wesley: r302_3,
-spin in, ls3c, more colour -> the agent is REVISING (resumed). PAPER-GEOMETRY DONE: hub world + 6 configs (gate 1878);
-Wesley froze G/P/A/O, hub as built, + the as-ported net on the hub -> smoke pair at the front of batch18u (now 25), the
-rest in batch18h_list.txt (14). CASES 6-7 BUILD AGENT RUNNING (critic waived; switches default off): DO NOT launch a
-lab batch until it reports gate green (the batch syncs the tree). Lab order when free: 18u (25, --wall-cap-min 60) ->
-check the hub smoke pair -> 18h (14) -> 18 (S 8-quad, 13 runs, 2x12 cores, cap 150).
-**16:29:** Best-results set REVISED with colour (fleet: 2 orange #f79143, 3 rose #cc4778, 4 purple #6a00a8, plasma;
-red/blue for planned vs measured, survivors vs released; grey references); sent. A re-render after Wed 28 needs only new
-run ids in docs/figures/review_2026-10-23_best/best_data.py. The rig's "spin" is a 0.5 m circle with one yaw turn.
-**16:37:** LAB FREE (16:31). Cases 6-7 agent paused src edits at a coherent point (its switches default off, 570 tests);
-BATCH 18u LAUNCHED 16:37 (task bkxctkz0a, log scratchpad/lab_batch18u.log, 4 slots, wall cap 60): the hub smoke pair
-first, U's 6, C ours x5, the paper's form x6, Thu 29 re-flies x2 + cc050 A/B x4. Next: read the hub smoke pair as soon
-as it lands; after 18u: 18h (hub 14) then 18 (S 8-quad 13, 2x12 cores, cap 150; after the cases 6-7 agent's gate).
-**16:55:** Cases 6-7 CODE FINAL, gate green (1927; switches default off; no prebuild needed). Configs s8_chain4task (case
-6), s8_fig8laps (case 7 base), s8_chain4back_fig8laps (case 7) --check ok, appended to batch18_list.txt (now 16 runs).
-Their registry rows must carry "critic waived by Wesley 23 Oct".
-**17:29:** JOURNAL DRAFT BUILT (Wesley: IEEE RA-L, in-flight reconfiguration story, authors Donald/Torok/Deghat, results:
-release + rejoin first, then scalability and the comparison): docs/paper/ral_2026-10-23/ (main.tex + sections/,
-figures/, refs.bib), main.pdf 7 pp, 0 undefined; sent. Written by 4 parallel agents (Wesley lifted the 2-agent cap for
-this, medium effort). Red placeholders: affiliations; the rig newcomer attach (Thu 29); the real-time bench; the
-8-carrier claims at 5 iterations; the full hub test and the paper's damping form; our planner's hover/0.2 C cells;
-the release table's resize times for all three rig releases (only R303_4's 0.51 s is measured). Check: the method's
-description of the weld-height cap (the agent's reading of the rejoin card).
-**17:34:** VERSION 2 (Wesley: full focus on reconfiguration, no mention of the other method, scalability kept):
-docs/paper/ral_2026-10-23_reconfig/ main.pdf 8 pp, 0 undefined, no trace of Quan/the network; new subsections: what sets
-the release transient (Tier B gap curve at 1 m and 0.55 m; measured pull 0.63x the planned at 150 deg, not "halves")
-and how far off its plate a newcomer can catch (U: radially 16 cm measured vs 8 cm slot; rim 6-8 vs 2-4 cm); sent.
-Version 1 (with the comparison) unchanged in docs/paper/ral_2026-10-23/.
-**16:59:** HUB SMOKE PAIR VALID (R2725 ours 1.4 mm, yaw 0.0; R2726 network 11.8 mm, YAW 0.1 deg vs 22-51 on the rim): rows
-written; 18h flies after 18u. Cases 6-7 agent DONE; open notes (not asked, case 6's first pass is hover): (1) on a path
-the task keep-out counts every ring point of a lap, so every task on the 0.5 figure-8 is refused; (2) the task keep-out
-passes 0.3 m from carriers vs the draft 0.5 m bar (reported on the first pass); (3) the descent guard rides on
-traj_lap_hold_s (kept bundled, my call); (4) a release inside a lap-end hold cuts it to 1.5 s (resize holds overwrite the
-counter; documented, not changed: the counter is shared with every run). Backup refresh loop ended 11:0x; its
-restart was blocked by the permission classifier (Wesley may restart ~/mdc_backup/2026-10-22/refresh.sh).
+## Fri 6 Nov ~14:30-15:00: the paper first (decisions 6 Nov); agents unlimited (Wesley: "ultracode no limit on agents")
+- The combined paper (supervisor + Te-Jen; Overleaf clone multi_drone_swung_payload_item_collection_wesley_version/, git-
+  ignored): attach and detach performance (detach = the unannounced release; moving = the orbit, stop-and-attach) 5 static
+  + 3 moving each, and the full mission (fm9, triangle, funnel; fm9h with the object held). Plan APPROVED:
+  docs/rig/plan_sessions_2026-11-11_to_19.md. Thesis framing (F061): structure sim then real; X1 supporting; Setup 3; radii as flown.
+- **16:38 the paper's single-run figures** (results/analysis/paper_figs_2026-11/: paper_figs.py attach|detach|application
+  <flight>, README; examples sq8_2, nr9m, fm9y_2 in figs/; same definitions as paper_rig.py). Re-run after each session.
+- **16:11 X4 FINAL on the earlier masses** (R3910-R3914, registered, feed F062): 26/26 in all three relays (planner logs; the
+  event list misses the last weld in two), packs 575-581 s (R7 holds), 2.9 B, R4 not confirmed (31-34 mm laps, the massless
+  plan). Reviewer DONE 16:20: SUPPORTED WITH CORRECTIONS (R3910c, feed F063: 26/26 is a logging gap not LAND; laps one
+  carrier short 21-34 mm, no cause; returns ~3 s slower than 3 Nov). X4 is final. Rig scripts' twin checks R3918-R3921 PASS
+  (watch-points in the sheets; desk check 9 OK 16:18). Old-mass X3 + bases (32 runs, from R3922) from 16:11; watcher on its EXIT.
+- **~15:30-16:00 funnel:** v4 (TPU): 85 mm base (the magnet's wire fitting), 85 mm tall, 207 x 157 mm mouth, 45 deg, two outer
+  bolts, a zip-tie notch, 83 g; v3 back to its 72 mm base; no spare (v2/v3 do not pass the fitting); files ~/Downloads/funnel/
+  funnel_v4.*; sheets say v4 (decisions 6 Nov). Agents now: the rig scripts' twin checks (laptop); the paper's single-run
+  figure scripts (results/analysis/paper_figs_2026-11/). X4 old: 4/5 done (R3910/R3911 26/26, packs 580 s), R3912 ~16:20.
+- **Done ~15:20:** the QUAD4 drop fix BUILT in the worktree (decisions BUILT; R3915-R3917; merge after Sat's X1 re-fly, then
+  gate + desk check); rig scripts relo/fm9/fm9h/fm9o + 4 sheets (desk check 9 OK at 15:22, with drop_on_arrival_xy 0.08:
+  Wesley); attach ideas doc (funnel v3 on every flight, bench check in Wed's sheet); lab_sync.sh excludes /.claude/.
+- (earlier) Agents running: the QUAD4 drop rule in a worktree (.claude/worktrees/agent-aa650a10b71d57ce6, critic waived, twin runs on
+  the laptop); the rig scripts (relo, fm9, fm9h, fm9o) + the four sheets + desk check + twin configs; the attach ideas
+  (docs/analysis/attach_ideas_2026-11-06.md); the paper's rig metrics (results/analysis/paper_rig_2026-11/).
+- Cleanup (Wesley: "clean up some old stuff"): 21 past-day rig docs git-mv'd into docs/rig/archive/ (README; registry
+  paths unchanged by name); the 5 Nov ~/rig_*.sh copies and 118 finished overnight scripts/logs moved to
+  ~/mdc_overnight/old/; nothing deleted. The X3b night bench re-armed (the restart had stopped it).
 
+## Fri 6 Nov 11:22: X1 done; the old-mass batch running
+- 14:20 disk (1.3 GB free): Wesley said no replays; lab_batch now skips gz_record/ from the next chunk (decisions
+  DECIDED 14:20); Wesley deleted the 157 existing replays himself -> 11 GB free. The X4 chunk's last 3 runs still fetch theirs.
+- X1 chunk done 11:22: 43 runs scored (R3821, R3822, R3865-R3906; R3903 VOID: the runner hung after LAND, re-fly
+  x1_h4p115_ours x1 after the batch), registered, feed F059 (B1/B2 falsified as on 30 Oct; the resize's effect is the
+  settled level; sqT settles 1.7 deg). X1 reviewer running.
+- `claim1106_old.sh` (pid 27393): synced + built 11:22 (lab PC has the 7 worlds, 9 models, 28 configs); old-mass X4
+  R3910-R3914 flying since 11:22 (~5 h), then X3 + bases, X3b chains, X2, rejoin, then chunks 6, 7, 8a, 8b, 8d, 9.
+  Watcher on the X4 chunk's EXIT.
+- X1 reviewer: SUPPORTED WITH CORRECTIONS (R3821c, feed F060: no faster settle; 0.1 deg more level at 8 quads; the T's dip
+  -8 mm; the T cell depends on the masses). **Wesley ~11:35: X1 re-flies on the old masses too.** Staged outside the repo
+  (~/mdc_overnight/x1_oldlinks_stage/: 2 worlds, 22 configs, oldlinks1106_4_x1.txt 44 runs, the tool with p115 support);
+  `~/mdc_overnight/claim1106_x1old.sh` (pid file = the script) waits for claim1106_old.sh, installs, --check, syncs +
+  builds, flies X1 old, then the configs in ~/mdc_overnight/void_refly.txt (edit that file, not the script). R3903's
+  re-fly is moot (X1 re-flies).
 
-**OVERNIGHT LOOP ENDED 23 Oct 07:09: report docs/reports/morning_report_2026-10-23.md; the decisions for Wesley are its
-section 'Decisions for you'. Nothing committed. Lab PC idle.** Was: OVERNIGHT LOOP 22->23 Oct (Wesley ~23:40, asleep until 09:00): NO QUESTIONS; take the best option, note why, ask in
-the morning report. At most 2 agents at once. Use the lab PC (4 slots, or 2 x 12-core for S's 8-quad runs; check
-who/load first, yield to anyone). His 5-hour usage limit resets ~01:50 AEDT: if work stops, the 01:55 cron restarts the
-loop. Morning report `docs/reports/morning_report_2026-10-23.md` by 08:45 (rig first; table, one-line verdict,
-decisions), then stop the loop. No commits. Overnight queue, in order (update the status inline):**
-0. After the sim-C merge: bringup suite + gate --quick (pos_limit_m 1.75 now in real.yaml); check QUAD4 is exempt from
-   our limit while Tejen flies it (his pickup ball sat at (1.6, 2.0) in the 1 m twin world); fix if not (switch-free
-   safety fix, tested). tools/prebuild_rig.sh again as the LAST step of the night (merges touched the planner).
-1. Lab smoke runs of the merged packages, falsifiers / bars frozen by the integrator before each run (note the time in
-   the card): rejoin E0 (re-weld smoke), then E1 x2; C's smoke hover at today's gains (c_net_hover_L100) and
-   c_pl_linex_v400_L100; S's s8_hover first pass (a 12-core slot; report RTF and late ticks).
-2. Wave 2, one agent at a time (designs in results/analysis/push_1022_designs.json; the critic's integration notes in
-   docs/analysis/push_1022_plan.md): pair-swing (loop_timing.py, pair_mode.py, per-channel delay, emulator rate filter,
-   rate_kff per the Betaflight note, LAB_ENV names, card 2026-10-23_pair_mode_timing with frozen bars for rounds A-C;
-   no tip-hinge world: world SDFs need Wesley's word) -> rounds A and B on the lab PC.
-3. U (catch offset): build, card, its runs. 4. R (the 1 m re-fly): build make_refly_configs etc., then R batches on
-   the lab PC through the night. 5. The yaw-lag log columns (the plan's yaw and cable azimuths per tick).
-6. Score every finished batch (registry rows via scratchpad/append_rows.py), keep this list's status current.
-   STATUS 00:10: sim-C MERGED (report scratchpad/wave1/sim-C_merge_report.md; card Response; 7 items need Wesley, in
-   its Response). Item 0 DONE: the limit's launch test updated for the rig default; QUAD4 exempt from our limit while
-   the partner flies it (mux 'partner'/'cut'; test added); gate --quick PASSED. Lab smoke batch R2445-R2448 running
-   (E0 rj0_reweld_floor, C smoke hover + line v200, our planner line v400; E0's bars frozen 00:08). Next: pair-swing
-   agent once the batch has synced. 00:25: smoke batch SCORED (rows R2445-R2448): E0 FAIL on tilt (the floor re-weld
-   locked off-plate: ring 5.6 deg toward the re-welded quad; joint mechanics fine); the network as ported CAPSIZES in
-   yaw in the twin too (R2446 230 deg, R2447 602 deg: the C retune is needed); our planner at 0.4 m/s clean (R2448).
-   Next lab batch (after both agents finish editing): E1 x2 (bars to freeze first), S's s8_hover exploratory pass
-   (12-core slot), pair-swing rounds A/B once frozen. 00:28: C's offline retune search started on the laptop
-   (nice 10, 6 workers, both forms, ema; out results/analysis/network_tune_search_2026-10-23.json, log
-   scratchpad/network_tune_search.log): exploratory, re-scorable if Wesley changes the card's tolerances.
-   00:31: sim-U BUILT (card 2026-10-23_catch_offset.md, 33 configs u_*, suites green; for Wesley: the measured arm's
-   claim cut to 12 cm along the rim (16 cm puts the newcomer 0.23 m from a carrier < his 0.30 m), traj_hold_s 75, three
-   new sim.yaml attach knobs at today's defaults). TODO after pair-swing ends: add
-   src/dissipative_planner/test/test_attach_point_source.py to gate.sh step 2 (+ make_catch_offset_configs --check in
-   step 4). U critic DONE (pasted; REWRITE: B1 the rim comparison is decided by the 0.30 m rule, M1 VOID hides FAIL,
-   M2 the slot arm also changes z, M3 off-plate welds are not catches, M4 no mechanism bar); U response agent running.
-   No U runs until pair-swing has landed (one frozen tree).
-   00:45: pair-swing BUILT (gate PASSED 1807; rate_kff 0.012 calibrated offline to ~30 ms mean attitude; rounds A 7 runs,
-   B 14 runs; card bars FROZEN 00:42; att040 swapped for att060; body-rate filter lag fit 36-48 ms). E1 bars FROZEN.
-   Batch 4 queued (scratchpad/batch4_list.txt: round A x7, round B's calibration run, E1 x2) for when the U response
-   agent stops editing.
-   00:58: U critic ANSWERED (B1 d_task = min(d_tol, d_sep); M1 FAIL before VOID; M2 slot xy + captured z; M3 wording
-   + t116 cells; M4 mechanism bar; 35 configs; U's grid bars wait for Wesley: 4 questions in its Response). Gate
-   --quick PASSED on the full tree. Batch 4 LAUNCHED (R2449-R2463: round A x7 incl. the cd060 re-fly, round B's
-   calibration run R2456, E1 x2 R2457/58, U's E-runs R2459-63). 00:59: batch 4 synced; R build agent and a small
-   agent (planner yaw-plan log columns + yaw_track --plan; MDC_PLANNER_CPUS P-core pin switch, default off) running.
-   01:51 (after the usage-limit reset at 01:50; both agents had died at the limit, work saved): batch 4 DONE
-   (R2449-R2463; 2 runner FAILs in round A); scoring agent running; R build agent RESUMED; the yaw/P-core agent paused
-   (its planner columns and MDC_PLANNER_CPUS are in and pass tests; yaw_track --plan and the gate left). S's s8_hover
-   R2464 on a 12-core slot. C's offline retune DONE (results/analysis/network_tune_search_2026-10-23.json): the port
-   form's best (diss_c 12, vel_kp_pos 1) passes every offline guard, J 115.1; the paper form has no passing point.
-   Twin confirmation configs written: c_net_tune_portbest_{hover,linex_v400}_L100 (next batch).
-   01:59: batch 4 SCORED, rows R2449-R2463 in (bak103). Round A CONFIRMS: the throttle path carries the swing (thr060
-   7.4 deg, att060 0.6-0.8; att060 grows a slower rig-shaped mode). R2456 calibration outside band -> rate_kff 0.027 in
-   the rt configs (not nokff). E1 R2457/58 FAIL on fold-in tilt 5.8/5.3 deg (0.2-0.4 s over) BUT the configs never set
-   attach_traj_hold_s: blend 1.5 s, not 10: configs fixed (10.0), E1b re-fly queued. U E-runs: plumbing clean; at
-   16 cm along the rim the slot arm beat the measured arm (fold-in 4.6 vs 8.7 deg; measured separation 0.16 m);
-   radially the slot arm 15 deg vs measured 0.8. Batch 6 queued (scratchpad/batch6_list.txt: calibration re-fly,
-   E1b x2, C portbest hover + line v400) once S's R2464 frees the lab.
-   02:04: S's R2464 DONE (8 quads lift and hover level, tilt <= 0.08 deg; RTF 0.28; whole tick p50 79 / p95 101 ms,
-   the residual 44-51 ms doubles the solve: critic M1 holds); row in. Batch 6 LAUNCHED (lab_batch PID 147299, log
-   scratchpad/lab_batch6.log; ids from R2465).
-   02:11: the yaw/P-core agent DONE: planner log columns yaw_ref0, plan_yaw1, plan_yaw5, az1_k, az0_k (log only; the
-   next rig spin shows where its lag enters: tools/yaw_track.py <run> --plan); MDC_PLANNER_CPUS (unset = today) gives
-   the planner nodes `taskset -c <cpus>` on every graph: Wesley decides (e.g. 0-7 on the rig laptop's P-cores). Suites
-   and gate --quick green.
-   02:15: R BUILT (53 r1m_* configs, 95 runs, ~3 h at 4 slots; tools make_refly_configs / thesis_runsets / refly_score,
-   release_bands --factors; card 2026-10-23_refly_1m.md, bars FROZEN 02:15). Skipped (no 1 m world; ask Wesley): Tier B
-   (3969 / gap135 / gap165 / gap180 L100 worlds, 11 configs) and the push rows (push_L100, 7 configs). Batch list
-   scratchpad/refly/batch_list.txt; launch after batch 6 (with round B's rest if the calibration re-fly is in band).
-   02:18: batch 6 DONE (R2465-R2469, all runner PASS; scoring agent running). Calibration re-fly R2465 in band at the
-   edge (pitch 35/37 ms; filter unreadable in a calm hover; M1 0.07: the rig-timing twin still damps). BATCH 7
-   LAUNCHED (task btqt4sity, log scratchpad/lab_batch7.log): round B's other 13 runs, then the 95-run R re-fly (~4 h,
-   ids from R2470).
-   02:25: batch 6 SCORED (rows in, bak105). E1b R2466/67 VOID as E1b (attach_traj_hold_s never reached the planner:
-   the detach graph does not pass it) and FAIL as E1 repeats (5.82/5.75 deg): FIXED with a planner param
-   rejoin_blend_s (default 10 s, rejoin only; test; dissipative suite 317 green); E1b re-fly after batch 7. C's
-   retuned port (R2468/69): no capsize but the yaw guard fails (grows x1.14/s to +-60 deg; offline it held <1 deg:
-   twin and offline disagree, so per section 3.3 the next offline candidates fly in the twin); on the 0.4 m/s line its
-   headline is 156 mm vs our planner's 46 (R2448). Note: the network's LAND tips its quads (174-176 deg) after LAND.
-   03:00: round B SCORED (rows R2470-R2482, bak106): FALSIFIES "the rig-timing twin reproduces the rig pair" (calm
-   with either filter at the rig's timing; +50 ms throttle swings in the twin's own vertical mode). Round C (hinge
-   world) needs Wesley; the card's delete of rate_kff / thr_tau_s / rate filter is held for his call.
-   04:08: R part 1 SCORED (55 rows R2483-R2537 appended, bak108): ledger W4 / W5, Tier A T3 / T8 / T9, T15 (narrowly),
-   drop D1 / D4 all HOLD at 1 m; T7t does NOT: orbit_v300 is just outside at 1 m (path 25.7 / 25.9 mm vs bar 25, radius
-   ratio 0.9499 / 0.9495 vs 0.95); the other 14 T7t cells inside; spin_v300 went from outside to inside. R2511 = a lab
-   runner stall after LANDED (flight complete), scored valid (Wesley may overrule). REGISTRY REPAIR: the 03:00 round B
-   append had written 13 header lines (the rows were dicts): restored byte-exact to bak106, re-appended as lists
-   (bak107); append_rows.py now refuses anything but lists of 12 strings.
-   04:51: batch 7 DONE (108 runs; runner FAILs in x0 / C-D5 mapneg / one robust arm, being classified by the R part 2
-   scorer). Gate --quick running, then batch 8 = E1b x2 on the rejoin_blend_s fix. C: the next passing port
-   candidates differ only in ki_load / k_att at diss_c 12, kp_pos 1, so they would likely repeat R2468's yaw growth: not
-   flown. The offline harness lacks the 4 cm pivot lever (critic, network_tune.py:18), the likeliest reason it misses the
-   twin's yaw mode: a harness fix is for Wesley (C is time-boxed).
-   04:59: R part 2 SCORED (40 rows R2538-R2577 appended): R tally 14 HOLD (W4, W5, T3, T8, T9, T15, drop, C-X1, C-X2,
-   C-R1..R4, C-L2), 3 DO NOT (T7t orbit_v300 = the only claim changed by 1 m; C-L1 and C-D5 failed the same way at
-   0.55 m), 0 void, 3 tables skipped (tier_b, gain, push rows: no 1 m world). Every runner FAIL is the harness check its
-   0.55 m original also failed. New at 1 m: the L-S landing stalls 0.14-0.17 m up on the rigid 1 m rods (twin artefact):
-   Wesley keeps it as a labelled result or drops the cell. Full table docs/analysis/refly_1m_table_2026-10-23.md.
-   05:07: E1b R2578/R2579 flown on the rejoin_blend_s fix: blend 10.1 s, fold-in tilt 1.27 / 1.30 deg (bar 5; the 1.5 s
-   blend gave 5.3-5.8), weld 24.9 s after REJOIN_START, no abort, landed; full E1 scoring + rows by an agent. R
-   REVIEWER: [weak] overall: verdicts recompute, but C-L2 is OUT (L-S misses S: 13 holds, not 14), the L-S stall is not
-   attributed (cable + land_rearm_touchdown both changed), C-D5 relabelled, T7t orbit_v300 not attributed to the cable,
-   and 5 of 15 T7t cells rose > 1.5x; R2485's read-back lacks /tracker_2. Correction rows by the same agent.
-   Attribution re-flies LAUNCHED (task b97meqbr4): traj3_orbit_v300 x2 and app_land_straight x2 at 0.55 m on this tree.
-   05:13: E1b SCORED: PASS every frozen E1 bar (rows R2578/79 + 4 correction rows, bak110). E2-E4 bars FROZEN 05:13;
-   batch 10 (E2 rj3_pairrelease, E3 rj4_..._land, E4 rj4_..._fig8stage) queued after the attribution re-flies.
-   05:15: attribution re-flies SCORED (rows R2580-R2583, bak111): T7t orbit_v300's slip is mostly the TREE (0.55 m on
-   this tree 22.7-23.7 mm / 0.954-0.956 vs 15.2 / 0.975 on the old tree; the cable adds ~2.6 mm); the L-S landing
-   stall IS the 1 m cable (passes at 0.55 m on this tree). R table updated (docs/analysis/refly_1m_table_2026-10-23.md):
-   13 hold, 3 do not, 3 skipped. Batch 10 (E2-E4) RUNNING (PID 180538, waiter armed).
-   05:25: batch 10 DONE (R2584-R2586 runner PASS; E2-E4 scoring agent running). Batch 11 LAUNCHED (task b6ci006xq, 2 x 12-core
-   slots): S's exploratory s8_chain4 (8 -> 4) and s8_chain4back (8 -> 4 -> 8 with rejoin_departed).
-   05:33: E2-E4 SCORED (rows R2584-R2586, bak112): each FAILS one frozen bar: E2 tilt 10.6 deg (the blend raised the
-   rejoiner's planned height 4.6 cm on the T), E3 landed 1.179 m vs 1.2 (reference stopped short), E4 staged at x
-   1.709 vs +-1.6 (ramp overshoots its clamp). Fix agent running; re-fly E2-E4 after batch 11 if time allows before
-   the morning report.
-   05:55: batch 11 SCORED (rows R2587/R2588): the 8-quad chain 8 -> 4 flies (tilt max 3.48) and the FULL 8 -> 4 -> 8
-   with four rejoins flies (each on plate in 16-18 s, 10 s blends, tilt max 3.25 deg). Exploratory; S's claim waits for
-   Wesley's N_max / real-time decision.
-   05:59: the rejoin fixes DONE (E2: _rejoin_cap holds the rejoiner's reference at or below its weld height through the
-   blend; E3: exact out point + REJOIN_OUT_MARGIN_M 5 cm; E4: the staging ramp brakes on the bound and every node is held
-   inside, bound 1.57 m = 3 cm inside the card's 1.6 for tracking). Suites + gate green. For Wesley: _rejoin_cap changes
-   a carrier's reference in the flight loop (twin-only switch): critic or not. Batch 12 LAUNCHED: E2, E3, E4 + E1 x1.
-   06:25: batch 12 SCORED (rows R2589-R2592): E2, E3, E4 and E1 all PASS on the fixes. R2593 (twin 0.75 m spin with the
-   plan columns): the plan itself trails (node0 0.14 s, node5 0.09 s). Rig prebuild re-checked (fresh). Critic on the
-   rejoin fixes: "run it", no blocker; M2 (hold the path for the 10 s blend) being fixed now, then re-fly S 8->4->8 and
-   E2 x2 (+E1) on that tree before the report is final. Morning report drafted: docs/reports/morning_report_2026-10-23.md.
-   06:33: M2 FIXED (a rejoin holds the path for rejoin_blend_s; the cap's binding logged at REJOIN BLEND OVER; suite 323,
-   gate green). Batches 14 (E2 x2, E1) and 15 (s8_chain4back, 12-core) LAUNCHED in sequence (task br9esrx23, one shell).
-   07:08: batch 14 SCORED (E2 x2 PASS 1.45 / 2.25 deg, E1 PASS 1.55; rows R2594-R2596) and S's R2597 (8 -> 4 -> 8 on the
-   final tree: tilt max 3.35, the cap barely binds) logged. Morning report FINAL; loop stopped.
-   00:15: pair-swing agent AND sim-U agent building in the main tree (U told not
-   to touch gate.sh / config.py / simulation_communication; U's gate tests to add by hand after).
-   STATUS 23:58: S critic ANSWERED (card Response; bar B now 3.5 x whole-tick p95 <= 100 ms -> N_max ~4: the 8-quad
-   real-time claim should fail; Wesley picks twin-only "not real time" (recommended) or N_max chain). RIG FINDING
-   (logs h3/f3h): the planner at 3 quads, 5 iterations runs near its 100 ms period on the rig (tick spacing p95
-   116 ms, 10-12 % over 110 ms; in flight 2-3.4x the bench); pinned to an E-core it is 2.6x slower than on a P-core
-   (laptop: CPUs 0-7 P-cores 4.8 GHz, 8-11 E-cores 3.6 GHz). Queue item 7: a default-off switch pinning the planner
-   to CPUs 0-7 (launch prefix), tested offline; Wesley's word before the rig. Rows S-BENCH-1022, S-CALIB-1022 in.
+## Fri 6 Nov ~10:30, Wesley: the claims WITH RETURNS re-fly on the pre-4 Nov masses (decisions DECIDED 2026-11-06)
+- Built 10:30-10:38: tools/make_oldlink_worlds.py (same generator, old masses; worlds byte-identical to 9f20f8b's), 7
+  *_oldlinks worlds + 9 models, configs/experiments_oldlinks/ (28 configs, same names), configs/batches/oldlinks1106_*
+  (55 runs: X4 5, X3 + bases 32, X3b chains 4, X2 6, rejoin 8); CLAUDE.md, claim batch manifest section 11.
+- The resume script (pid 3893) was stopped ~10:28 so X2 never started on the final masses; X1's runner (pid 3954) finishes
+  chunk 4 (~12:30). Checking now: gate --quick + one laptop smoke run of the old-mass rj3 tip (expect ~17 s return).
+- 10:49: gate --quick PASSED (10:42); smoke R3909 returned in 17.5 s (as R3908). **RUNNING: `~/mdc_overnight/claim1106_old.sh`
+  (pid file = the script itself, log claim1106_old.log)**: waits for X1's runner (pid 3954), syncs + builds, the five old-mass
+  sets, then chunks 6, 7, 8a, 8b, 8d, 9 on the final masses (~19 h). Watcher on X1's end: then score X1 (R3821, R3822,
+  R3865-R3906). R3793's re-fly is moot (X3 re-flies).
 
-**SAFETY / RESUME (17:25; Wesley ~17:24: near the session limit, slow down, lose nothing):**
-- Backup on disk: `~/mdc_backup/2026-10-22/` = the whole scratchpad (wave-1 patches and reports, design caches and
-  scripts, registry backups), the main tree's patch vs be34f95 plus its untracked files (tgz), and each workflow
-  worktree's patch plus untracked files. Nothing is committed (Wesley's rule).
-- **Wave 1 DONE ~21:20**; reviews in `scratchpad/wave1/verify_results.json`.
-- **Fix A DONE ~21:55** (wf_0946430b-ce9): every 1m-defaults finding fixed in the main tree and checked (report
-  `scratchpad/wave1/1m-defaults_fix_report.md`, check in `fixA_result.json`): the solver-cache CODE_DIR bug (sim-S's
-  hunks), the main cache rebuilt at 0.55 for n=2-4 (n=5-10 signatures removed), legacy/0.55 m clearances unchanged
-  (scaling only by max(0, cable_len - 0.55) cos(elev)), the body-to-tip arm check (40 exemptions gone), lazy imports,
-  tests. Suites and gate --quick green. Open: TB-1m must fly before the 1 m clearance scaling stands; the rig's 0.583
-  prebuild before Wed 28.
-- **Critics DONE** (pasted under ## Critic): position limit, rejoin_departed (worktree -4 card), paper comparison
-  (worktree -2 card). All three say REWRITE THE CARD before runs. Position limit: M1 a freed quad's clamped step-out can
-  land it across its own tether (R0567 kind); M2 the rig cannot type pos_limit_m on a Wed line (one params_file, no
-  CLI) -> each rig file or real.yaml (Wesley's word); M3 5 cm between clamp and LAND line; add LIM-e (forced breach)
-  and LIM-0 (replay the rig logs through the check). Rejoin: B1 the weld gate may never pass in the twin (undamped
-  ball joint, open-loop end height), B2 the fold-in does not wait for the joint. Compare: B1 bars can confirm and
-  falsify one cell, B2 shared hover cell, M1 each arm scored against its own target.
-- **Smoke runs R2417-R2422 SCORED, registry rows appended (bak99):** V1-V5 pass (V1 = R2409/12 within 0.2 mm;
-  V3 fold-in tilt 1.63 vs R2308 1.66; V4 no distance rejections; V5 full pickup). TB-1m R2422 FAIL on its frozen
-  falsifier: clearances hold (QUAD4 1.39 m, ball 0.63 m from any carrier) but QUAD4 tipped at touchdown (the ball hit
-  the floor with QUAD4 1.14 m up; the twin's rigid 1 m rod levered it over, 67 deg, disarm). TB14 mechanism; the
-  rig's tether goes slack. Wesley ~22:40: the clearances stand as they are, the tip recorded as a twin effect, no
-  twin fix (decisions.md). Was (task bf0tnjkuq, log `scratchpad/lab_v_batch.log`): V1 b3_fig8s09_defaults_L100,
-  V2 traj3_L100_fig8_v200, V3 m1c_floorjoin_hover_L100_rod, V4 twin_r9_held_L100, V5 m1_full_hover_L100,
-  TB-1m m1c_land_transit_L100. Once its sync is done (task bj4hy7jw1), the main tree may be edited again.
-- **Evening answers (~22:05, decisions.md):** rig paths 0.75 m (real.yaml fig8_size 0.75, traj_distance 0.75; twin
-  keeps 0.9 / 1.0); the rig's own solver folder ~/mdc_rig_generated (rig_flight.sh, rctl/rdiss; tools/prebuild_rig.sh,
-  started 22:15); QUAD4 under Tejen's LAND accepted; at most 2 agents. Position-limit agent DONE 22:20 (gate green; card Response + bars FROZEN 22:25; LIM-0 replay: at 1 m reach the
-  1.0 m paths would trip, the 0.75 m ones peak 1.655 m) (critic fixes M1/m1,
-  tools/limit_replay.py = LIM-0, card Response, lim_*.yaml on the size-0.75 figure-8). Band configs for the 0.75 m
-  cells written: b{2,3,4}_{fig8s075,linespinc075}_h5_v200_L100_{ema,slope} (12, --check ok): lab batch once the V batch
-  AND the position-limit agent are done (never sync a half-edited tree). Then the Wed sheet: 0.75 m lines (drop
-  traj_radius:=0.9), the new bands, prebuild_rig.sh in the bench list.
-- **Lab batch 2 DONE ~23:00** (19 runner-PASS; R2438 FAIL: the 60 ms delayed 2-quad pair on the 0.75 figure-8 with
-  ema swung at 1.38 Hz until a drone disarmed (see-saw 50, roll 58 deg p-p; not the limit); R2439/R2440 FAIL: LIM-e
-  tripped at takeoff, the quads start ~1.225 m out past the 1.2 m test limit (config error). Scoring agent running:
-  bands -> n2_bands + sheet, LIM verdicts vs frozen bars, LIM-e2 config (WRENCH push past 1.75), rows to
-  scratchpad/batch2/rows.json.) Was: **Lab batch 2 R2423-R2444 running from 22:26** (task bokqw9h9o, log `scratchpad/lab_batch2.log`): the 12 band runs
-  for the 0.75 m paths (R2423-R2434) and LIM-a (R2435-R2438), LIM-e x2 (R2439-40), LIM-c on x2 / off x2 (R2441-44).
-- **Wed sheet updated 22:27** for the 0.75 m paths (no traj_radius typed; spin ~32 deg/s; prebuild_rig.sh as bench
-  item 0); the path bands are PENDING until R2423-R2434 are scored (then add the fig8s075/linespinc075 cells to
-  tools/n2_bands.py --set b22 and fill the table). Rejoin-departed merge agent running in the main tree (with its
-  review and critic fixes); scoring agent on R2417-R2422 running.
-- **rejoin_departed MERGED ~23:00** into main (report `scratchpad/wave1/rejoin-departed_merge_report.md`; pre-merge
-  copies in `wave1/rejoin_merge/backup/`): every review and critic finding answered (B2 fold-in waits for the joint,
-  M1 landed wait +30 s only while a rejoiner lands, M2 rejoiner absent until its blend ends, M3 no ATTACH while a path
-  runs, rod re-measured, closed loop on the end's z). B1 numbers: a released rod's end still swings ~3.6 cm at 10 s
-  (R2312, tau 3.9 s; riders 13-17 s): if E0/E1 stall on swing, Wesley picks x/y damping or a damped joint. Card
-  rewritten (Response, staged bars PROPOSED), E0-E4 configs pass --check. Tests and gate green. QUAD4's combined-M1
-  fold-in bit-identical.
-- **Batch 2 SCORED ~23:15, rows R2423-R2444 appended (bak100).** 0.75 m bands in `--set b22`, the Wed sheet table
-  and `results/analysis/bands_075_2026-10-22.json` (b2/b3/b4 figure-8 ema 31.4/34.0/35.2 mm, slope 28.9/31.2/32.2;
-  spinny line ema 33.4/31.0/28.9, slope 28.9/26.7/25.9; tilt 3.8-5.2 deg). LIM-a R2435-37 PASS (reach <= 1.469 m);
-  R2438 FAIL (delayed pair swing, not the limit); LIM-e R2439/40 FAIL (config error: tripped at takeoff, carrier landed
-  1.226 > 1.17); LIM-c R2441-44 FAIL on clearance in BOTH arms: the plate-0 detach at 1 m tilted the ring past 45 deg
-  in 0.5 s (full drop); dropped quads step 1.2 m from where the ring WAS, the ring lands 0.2-0.3 m toward one, which
-  then comes down 0.86-1.14 m from it (the R0567 layout; not the limit). The limit put the freed quad at 1.63/1.64 m
-  (off arm 1.89/1.91). Wesley ~23:20: drop step-out not important (quads may land on the payload); no 1 m push world
-  (LIM-e2 dropped, config removed). Open for Wesley: how the rig turns the limit on (real.yaml recommended).
-- **sim-S MERGED ~23:20** (report `scratchpad/wave1/sim-S_merge_report.md`, backups `wave1/simS_merge/backup`): main's
-  _departed_clear_r kept, res_ms logged after plan5_*, s8 return configs fixed for the rejoin checks (420 / 600 s),
-  s_metrics N1/N4 as carded, NaN branch matched, lab_batch prebuilds every resize size; identity tests, all suites,
-  verify_dissipative and gate --quick green; card bars PROPOSED, Critic pending.
-- **S critic DONE ~23:35** (pasted into the card): REWRITE. B1 the 8-quad bar is an idle bench, the rig's h3 solve
-  ran 2-3x slower; M1 the whole tick is unbarred; M2 one iteration untested at the lift and releases; M4 no comparator.
-  An agent is answering it (calibration replay of h3/f3h, tick bar, lift/release cells, Response).
-- **Now:** sim-C merge agent (with C's critic fixes and a Response) + the S critic-response agent. Then: paste
-  S's challenge, an S Response/fix pass, a critic re-look at C's rewritten card only if Wesley wants it, then wave 2
-  (pair-swing tools and switches, U, R) in the agreed order, two agents at most.
-- Was next: merge rejoin-departed, then sim-S, then sim-C into main, ONE agent at a time (conflicts in the reviews), each
-  followed by suites + gate; score R2417-R2422 with registry rows.
-- Was: **Wave 1 RESUMED 20:55** after the reboot (task wpcrjr4ej, same run id; scratchpad restored from the backup, trees
-  matched it; backup loop task b2qpz3qgk). Was: **Wave 1 PAUSED 17:30** (TaskStop, Wesley's word: near his usage limit; restart when it resets). All four
-  implementations are DONE: patches and reports in `scratchpad/wave1/` (1m-defaults is applied in the main tree;
-  sim-C, sim-S and rejoin-departed are in worktrees `.claude/worktrees/wf_d62e7db2-b9f-{2,3,4}` and their `.patch`).
-  Only the four verifiers were stopped mid-way (they may have left partial edits: compare against the 17:30 backup
-  patches before trusting a tree).
-- **Restart, same session:** `Workflow({scriptPath: "~/.claude/projects/-home-wesley-multi-drone-control/f2a54328-3214-4ac3-989e-f5a0c5208168/workflows/scripts/push-1022-wave1-wf_d62e7db2-b9f.js", resumeFromRunId: "wf_d62e7db2-b9f"})`:
-  the four implementations come back from the cache, the four verifiers re-run. **New session:** resume is impossible;
-  run the four verifications directly on the main tree and the three worktrees (script and journal copied to the backup).
-- Backup refresh loop stopped 17:38 (the backup is final and checked: every tgz tests clean, patches complete). Re-run
-  `~/mdc_backup/2026-10-22/refresh.sh` in the background if work resumes.
-- **After a reboot** /tmp is cleared: first restore the scratchpad with `rsync -a ~/mdc_backup/2026-10-22/scratchpad/
-  /tmp/claude-1000/-home-wesley-multi-drone-control/f2a54328-3214-4ac3-989e-f5a0c5208168/scratchpad/` (the paths above and the
-  workflow's prompts point there), then restart the workflow as above.
-- Next (after the pause), in order: integrate the worktree patches; critics (position limit card `docs/experiments/2026-10-22_position_limit.md`,
-  rejoin_departed, C's law changes); V1-V5 + TB-1m smoke runs (1m-defaults report's table); prebuild `--drone-mass 0.583`
-  after the last laptop twin run before Wed; n2_bands fig8s09 cells; Thu-29 band runs; Wed sheet (tip_replay exit 2 =
-  NOT A PASS; figure-8 lines type `fig8_size`); the pair-swing card (with the Betaflight rate_kff note); the yaw-lag log
-  columns.
+## Fri 6 Nov ~09:50, Wesley: "focus on the sim runs now"
+- X1 rest (42 runs, R3865-R3906) flying since 09:13 (~3.3 h); R3865's harness FAIL is the frozen clock after LANDED (its
+  flight and run.csv are complete, as R3565). R3823/R3824 registered VOID (the restart). Watcher bv4ud1sxf on its EXIT.
+- **X4 reviewer done (~10:00): SUPPORTED WITH CORRECTIONS** (numbers and verdicts stand; R3772c2, decisions CORRECTION,
+  feed F056): the ring is 0.9 kg; the slower return's mechanism I gave was wrong (the old link already had its magnet at the
+  end; cause = the link change by elimination); R4/tilt follow the massless plan. X3/X3b reviewer still running.
+- **X3/X3b reviewer done: weak as written** -> R3779c, feed F057: three returns never welded (R3781, R3795, R3796), every X3
+  return case falsified, C8 and N9 falsified as cards, N6 miss (x3b_metrics does not apply n6_ok), the slower return's cause
+  NOT established (the 8/9-quad worlds already had the magnet at the end; tracker/dissipative code changed too).
+- **A/B done 10:22 (R3907/R3908, feed F058, decisions FINDING):** the frozen code returns in 37.0 s with the final models and
+  16.6 s with the 4 Nov models: the slower return is the model change, not code. Asked Wesley: report as flown (recommended)
+  or look for a faster end hold before the freeze.
+- (done) Exploratory A/B on the laptop (from ~10:05, ~/mdc_overnight/ab_links.sh, pid file = the script):** rj3_pairrelease_rejoin
+  _L100_tip on the frozen tree (A, final links) and the same with the 4 Nov world + drone models (B, files outside the repo in
+  ~/mdc_overnight/oldlinks/: rod 0.075 kg, airframe 0.475). Old tree: its returns took 16.6-17.7 s (R2594/R2595). A slow and
+  B fast = the links; both slow = the code (then bisect the 4-5 Nov code); A fast = the slowdown needs more quads.
+- (done) Reviewers: X4 (R3772-R3776, F054) and X3/X3b (R3779-R3820, F055). Their corrections go
+  in correction rows and a feed entry before the thesis chat writes them up.
 
-**Authority (decisions.md, DECIDED 2026-10-22 ultracode push + push answers 1-24):** Wesley said "use ultracode to work
-through as much as possible". Scope: Wednesday readiness (bands, sheet, RViz; the 1 m defaults; the pair-swing cause)
-and the thesis sims U, S, C, R. Code may go as far as needed, defaults included; report what fails and delete it,
-report every improvement. NO commits until Wesley says (do not even ask). The lab PC may be used whenever free (check
-who / load / containers first, at most 4 slots, or 2 x 12-core for S's 8-quad runs; yield to anyone). No time
-constraints: work through the order, one thing finished well, then the next. Disk: delete nothing (Wesley is getting
-400 GB of storage; watch free space, ~17 GB on 22 Oct).
+## RESUMED Fri 6 Nov 09:13 after the restart: `~/mdc_overnight/claim1107_resume.sh` (pid file = the script itself, log
+   claim1107_resume.log): X1's remaining 42 (from R3865), then chunks 5-9, then R3793's re-fly; watcher on X1's EXIT.
+- Funnel v2 (Wesley 09:1x: "make the edge 45 degrees, steeper, same horizontal distance"): cad/funnel/funnel.py v2 at 45 deg,
+  mouth 174 x 144 mm as before, now 75 mm tall (was 56), 34 g; files in ~/Downloads/funnel/ (funnel_v2*.step/.stl,
+  funnel_v2_45deg_cut.png; the old comparison renamed _OLD_v2_at_32deg). The catch recount (funnel_catch.py, cache
+  ~/mdc_overnight/joins_cache) done: triangle plate 9, into the mouth / disc fully inside: v2 at 45 deg 20/24 / 11/24 (v1
+  22/24 / 16/24; v2 at 32 deg was 22/26 / 10/26, kept in ~/mdc_overnight/scratch_1106/funnel_catch_v2_32deg.md).
+- Funnel strength (Wesley ~09:20: "a fillet where the base meets the funnel ... how can we make it not break"): both
+  variants now have a 15 mm outside round at the knee, a 2 mm lead-in round on the bore's top edge, the cone 1.6 mm ACROSS
+  the wall (the first drawing's 0.8 mm sideways offset left 0.4-0.6 mm across: one printed line), a 2.4 mm bore wall, a 6
+  mm base ring and four 2 mm ribs under the cone (0, +-96, 180 deg; clear of the bosses and the zip tie). Mass: v2 93 g
+  (was 34), v1 121 g (was 40). Files and funnel_v2_strong_preview.png in ~/Downloads/funnel/. Asked: keep 93 g or lighter.
+- **Funnel DECIDED (Wesley, this morning): he prints v2 (93 g) and v3** (v1's mouth at 45 deg, 97 mm tall, 1.2 mm wall, 2 radial ribs,
+  97 g; plate-9 descents into the mouth / fully inside 22/24 / 15/24). decisions.md; ~/Downloads/funnel/funnel_v2.stl,
+  funnel_v3.stl (+ _in_ring_frame.step, funnel_v2_v3_print.png). Thursday's nrtf: re-measure W with the magnet in the funnel.
 
-**The plan:** `docs/analysis/push_1022_plan.md` (six package designs and the critic's integration order, gaps and run
-schedule; full designs `results/analysis/push_1022_designs.json`). Day review: `docs/reports/rig_review_2026-10-22.md`.
-Wed sheet (draft): `docs/rig/wed_2026-10-28.md`. Card: `docs/experiments/2026-10-22_velocity_filter.md`.
+## (09:13: resumed, see above) PAUSED Fri 6 Nov 08:30 for Wesley's laptop restart ("can you pause work")
+- The claim batch was stopped cleanly in chunk 4 (X1): the script (pid 26001) first, then lab_batch with TERM, which
+  removed its lab PC containers (none left). Done and fetched: R3821, R3822 (x1_h8_ours). Interrupted, no run.csv:
+  R3823, R3824 (x1_h8_nors; register VOID). Chunks 1-3 are done, registered and posted (F054, F055).
+- **Resume after the restart:** `cd ~ && setsid nohup bash ~/mdc_overnight/claim1107_resume.sh > ~/mdc_overnight/claim1107_resume.log 2>&1 &`
+  (X1's remaining 42 configs in ~/mdc_overnight/x1_remaining_configs.txt, then chunks 5-9, then R3793's re-fly; no sync:
+  the lab PC keeps the synced tree; new ids from R3865). Record the script's own pid. Re-arm the watchers and the X3b
+  night bench (~/mdc_overnight/x3b_bench_night2.sh). Scratch files backed up to ~/mdc_overnight/scratch_1106/ (the
+  scratchpad in /tmp is cleared by a restart).
 
-**Decided today (values a session must not re-derive):**
-- Twin = rig's mocap velocity filter: payload_mocap_emulator defaults SIM_MOCAP_VEL_FILTER `ema`; configs set the twin's
-  switches with `lab_env:` (tools/experiment/config.py LAB_ENV; run_experiment applies it per run, laptop and lab).
-- Claim tables (R, U, C, S) fly the UNDELAYED twin; the delayed twin (~50 ms extra command delay, calibrated on
-  R2397-R2404) is a named rig-timing arm once its landing stops faulting (it faults with the delay on).
-- Rig filter: Wed 28 opens with the pair A/B (ema / slope interleaved x2 + P4); the claims type the winner.
-- Position limit: any quad's x or y beyond +-1.75 m makes the fleet LAND (envelope LAND, not disarm); nothing is
-  commanded or landed outside it (freed/dropped quads' landing points clamped). Replaces the locked "no geofence".
-- Figure-8: the RIG flies size 0.9 at 1 m (outboard quad at +-1.625 m); twin tables may keep size 1.0 (R2329-R2364
-  stand). Bands for the rig at 0.9: twin runs b{2,3,4}_fig8s09_h5_v200_L100_{ema,slope} (running 15:45).
-- Bands: path flights score CLOCK-FREE (distance to the path + height), path-only window (first move to the planner's
-  descent); lag reported, not banded (tools/n2_bands.py --set b22). Hover: 2 s after the top to LAND.
-- Every path flies a 5 s hover hold first (configs/rig/traj_hold.yaml; twin drop_and_land_hold5.yaml).
-- line_spin = one full turn at a constant yaw rate (load_trajectory.py, uncommitted; RIG-1022-ls3c).
-- 1 m: drone_mass 0.583 (rig + prebuilt solvers); the ring's CoM as rig default (attach_z 0.0175, payload_rest_z 0.0275;
-  attach/M2 forced rest 0.0275); QUAD4 attach_cable_len = rod from its pivot (configs that disagree are refused; old
-  ones exempt); DEPARTED_CLEAR_R stays 1.2 m (scaled only for S's ring); path-clear/take-back scale with reach.
-- The cable's real hinge is ~5.75 cm above the ring's CoM (4 cm above the magnet face, ~8.5 cm above the floor at rest;
-  Wesley 22 Oct); the rig types 1.75 cm; tip-hinge twin world approved, rig typing later as its own A/B.
-- S: 8 quads with the return (8 -> 4 (-> 2) -> 8): build rejoin_departed (code design B, card + critic); ring R 0.5 m,
-  0.9 kg; S's bars as designed; two 12-core lab slots allowed. C: both network forms; clock-free + reach headline;
-  network-mode defaults approved (may be tuned). U as designed. R as designed. C2 after R if room.
-- Agents may implement in up to 3 parallel git worktrees (apply today's uncommitted diff first; I integrate into the
-  main tree between runs, never during a laptop run; no commits).
+## (before the pause) RUNNING: the final-tree claim batch, started Thu 5 Nov 18:25 (Wesley ~18:00: "Start running any additional simulation results I need")
+- `~/mdc_overnight/claim1107.sh` (pid in ~/mdc_overnight/claim1107.pid = 26001, the script itself; 25999 is its bash -c wrapper; log ~/mdc_overnight/claim1107.log): one sync + build
+  of the tree as it was at 18:25 (9f20f8b + 509 dirty; gate --quick PASSED 18:24, 2200; 135 configs --check ok), then
+  extra1105_nros (sq_nr_orbit_L100_1104_rigargs_pause: the square on the orbit, rig prep for Thu 12 Nov), then chunks 1-9
+  (docs/claim_batch_2026-11-07.md; ~22 h, 2 slots x 12 cpus). **THE TREE IS FROZEN: edit nothing under src/, tools/, configs/
+  (configs/rig/ too: the one-tree hash reads it) or simulation_assets/ until the last chunk has started.** Docs, results/,
+  cad/ and the scratchpad are fine. Stop: kill the script's pid, then the running lab_batch (it removes its containers).
+- After each chunk: registry rows, the one-tree hash check (manifest section 5), the void re-flies, score (section 10), feed, ticks.
+- Done since 18:25: R3771 (the square on the orbit) PASS, Thursday's nros cleared; the X4 chunk running (R3772-R3776; R3772/R3773 PASS at exit, 171-172 min each, so the chunk ends ~00:15; lab PC load
+  ~85 on 24 cores is our two 8-quad slots, nobody else on it, 21:49). The
+  k1ob_2 jerk EXPLAINED (the bigger object's impact pulled two magnets off; RIG-1105-k1ob_2c, feed F051); the planner's late
+  carrier poses recur (nr9m_4, sq8_2: 2 of 19 flights; decisions FINDING; QoS look after the freeze); no frozen bars (Wesley, rules
+  + memory + sheets); Te-Jen's notes updated (send: Wesley); handin_plan ticked.
+- **X3b's laptop timing runs R3777/R3778 (R8b/R9b) VOID** (registered): the laptop cannot run 8-9 quads in Gazebo (s8: sim_t 38.9 s
+  after 600 s wall, real-time factor ~0.065; s9 never published a pose), as on 31 Oct (R3451: RTF 0.088, R8b falsified; R3452
+  void). The ground computer's evidence stays R3451 + the idle bench; the lab PC cannot stand in (the card is about tuf). **Queued on the laptop**
+  (`~/mdc_overnight/x3b_bench_night.sh`, pid file = the script itself, log .log): the R8a/R9a idle bench (`tools/solve_scaling.py`
+  n 2-10, ~20 min, out results/analysis/x3b_bench_res0_2026-11-05.json), from 00:30 once the load is < 0.5 (the desktop alone
+  holds ~1.5 in the evening). Nothing heavy on the laptop from 00:30 until it logs "bench EXIT"; then register it (R8a/R9a-1105).
+- Te-Jen's 5 Nov log zips: deleted by Wesley 6 Nov ~14:22.
+  Too big for email (25 MB) or a chat attachment (30 MB): Wesley sends them from the laptop's Gmail (Drive links).
+- Desk check of both rig sheets re-run on bf52a8a at 20:01: 18 OK, 0 refused (rig_lslow.sh gone with the slow descent);
+  Wednesday's sheet says so.
+- **Done 20:35: the table of every real-world descent of 4-5 Nov** (an agent; results/analysis/rig_joins_2026-11-04_05/,
+  registry RIG-1105-joins + corrections RIG-1105-nr9o_2c, -fm9y_2c; feed F052, the thesis chat told). Triangle re-attach in
+  hover: 31 of 37 at plate height, miss 6.2 cm median, 0 caught; the square 1 of 1. The notes for Te-Jen corrected (sq8_2's
+  body 2-4 cm OUT, swing 4-6 cm IN, checked from the raw poses; the numbers of question 1). **If Wesley already sent the notes,
+  he forwards the correction.** - Videos: Wesley's Mac videos are sorted by a chat on the Mac (brief + every rig flight's time window + a sorter script sent
+  to him 5 Nov ~19:58; the scratchpad's videos/ folder has the builders).
+- Wesley ~18:50: funnel v2 smaller and shallower (built: cad/funnel/funnel.py --variant v2; 174 x 144 mm, 56 mm, 27 g; v1 kept; both in
+  ~/Downloads/funnel/; the 17-descent count of ~19:00 (v1 10, v2 8) was read at the wrong instant; recounted 20:37 from every descent where the
+  disc crosses the mouth (results/analysis/rig_joins_2026-11-04_05/funnel_catch.md): triangle plate 9, into the mouth / disc
+  fully inside: v1 22/24 / 16/24, v2 22/26 / 10/26 -> recommend v1 (geometry only)); NO ring-mass change for the funnel;
+  match_dwell: DECIDED ~21:48, no 1.0 try (stays 0.5); Thursday's nrt line and script removed, desk check 17 OK (21:50).
+- **X4 on the frozen tree (R3772/R3773 registered):** 26/26 swaps, no fault, but R7 misses (packs 695-707 s vs B 600): the rejoin
+  takes 35 s vs 18 (the twin's magnet mass at the cable end since 4 Nov 23:15 settles slower). Wesley ~21:55: report as flown
+  (decisions.md). Feed entry once R3774-R3776 (m115, fixed_B) are in (~00:15); expect slower rejoins in X2/X3/X11 too.
+- **Reviews (Wesley ~22:24: "use a few agents to review ... thesis direction, changes over the whole thesis, recent changes")**,
+  read-only, reports in the scratchpad's review/ folder, 2 agents at a time: wave 1 (from ~22:25) A the code that flies on
+  Wed 11 / Thu 12, B the thesis direction and its evidence; wave 2 next: C the locked decisions and rules against the actual
+  defaults over the whole thesis, D the rig sheets' readiness. Then a ranked summary for Wesley; fixes only on his word.
+  Done: A (22:45; report scratchpad review/A_rig_code.md): ONE serious finding, checked by the lab chat: QUAD4's tracker has
+  the LAND knobs only, no drop rule (graph_attach.py:877), so on the 55 deg drop lines a fast ring upset can fault QUAD4's
+  tracker at 60 deg before the planner drops (34-185 ms on the rig) -> fleet EMERGENCY STOP in the air
+  (fleet_manager_node.py:399-404). Fix: tracker_drop_options for QUAD4 (a gate change: Wesley's word, critic or waiver);
+  build it after the claim batch's last chunk has started (the chunks' manifests record the laptop's diff), before Wed 11.
+  Else no blocking findings (LAND defaults, mux checks, takeoff gate, console, every script argument; 94+6 tests pass).
+  B (22:35; review/B_thesis_direction.md), checked: the draft's X4 is stale (1670 s, 2.8 B, 'no quad over its budget'),
+  the abstract overstates the real re-attach (one catch), X1's B1/B2 falsified (the headline's own claim), X8 rim 'tilt
+  peak' is the late tilt, best-of-N real fixed-team rows; recommendations in the report.
+  C (22:51) and D (23:02) done; all four reports copied to docs/reports/reviews_2026-11-05/. Acted on (routine, docs only):
+  Wed's leftover rig_nrt.sh deleted, Thu's k1z table, --slot-gate back on both sheets (16 Oct decision), desk check 16 OK
+  (22:56); 9 memory notes, 4 CLAUDE.md lines, handin_plan / sim_runs_todo bookkeeping, one CLOSED line for 11 old OPENs,
+  feed F053 (the ring of the 1 m flights); body 24 identity and first-LAND checks on Wed's sheet, no body 6 on Wed. The
+  decisions for Wesley: decisions.md OPEN 2026-11-06 (the QUAD4 drop rule card docs/experiments/2026-11-06_quad4_tracker_drop_rule.md).
+- **Overnight (Wesley in bed ~23:05; "are you able to work overnight"):** X4 chunk done 00:09 (R3772-R3776 registered, scored,
+  feed F054, R3772c); the X3 chunk runs from 00:09 (R3779-, 24 runs; watcher on its EXIT); the X3b bench from 00:30 (watcher
+  on pid 51018). Morning report: docs/reports/morning_2026-11-06.md. No push notifications at night.
+- **05:27: X3 chunk done** (R3779-R3802, 24 runs; 23 PASS at exit; **R3793 VOID**: its flight ended (4 re-welds, LAND at
+  t=232.8) but the runner's after-run parameter read-back hung and the 60 min cap stopped it before run.csv: re-fly
+  x3_s8_chain4b2b_it5_tip x1 after the last chunk). Not registered or scored yet: the plan scores X3 with X3b's chunk (its
+  bases); X3b chunk (18) runs from 05:27 (watcher on its EXIT). **One-tree check from chunk 2:** the hash reads
+  e3b0c44298fc (an empty code diff) because bf52a8a (committed ~19:05) is now the laptop's HEAD; checked 05:28: all 217 code
+  files of R3772's recorded diff are identical in bf52a8a and the commit has no other code change, so it is the same tree
+  as ac9caea99661 (chunk 1).
+- **08:15: X3b chunk done (R3803-R3820, 18/18 at exit); X3 + X3b scored and registered (42 rows), feed F055.** J misses in
+  every X3 case with returns (the slower rejoin, as X4); C8 confirmed in hover and fig-8, its chain falsified by one P
+  item; N9 hover confirmed, its chain falsified by J (fold-ins to 7 deg). X1 chunk (44 runs) from 08:15 (watcher on EXIT).
+- The X3b bench did not start overnight: the laptop's load stayed 1.3-1.4 (desktop ~18 % + the batch's polling), never
+  under the card's 0.5. Re-armed as ~/mdc_overnight/x3b_bench_night2.sh (pid file = the script): 00:30-06:30 only, each
+  night, out results/analysis/x3b_bench_res0_2026-11-06.json.
+- Waiting for Wesley: which funnel to print (v1/v2; recommended v1), Fri 6.
 
-**Findings today (registry has the rows):**
-- Rig pair swings at ~1.4 Hz on the old filter (6 pair lifts 21-22 Oct); slope halved and damped it (h2slope, f2slope:
-  first full 2-quad figure-8); reviewer [weak] on the rig evidence. The twin reproduces it only with ~50-60 ms extra
-  command delay: stage 1b (R2381-R2388) ema 6.7-7.1 deg vs slope 0.10-0.15 (bars hold; reviewer [weak]: 60 ms picked
-  from the sweep). Under 60 ms, 3/4 quads on paths also swing with ema (tilt 16-28 deg) and stay calm with slope
-  (R2389-R2396). The Smith predictor (TRACKER_DELAY_COMP_S) and the ring on slope do NOT fix it; cmd_next_tick from t=0
-  flipped a creep (void). The rig's yaw lag (0.49 s) and spin path error (36 mm) match no delay: another cause, open.
-- Twin 1 m baselines (R2329-R2364): the filter changes little in the undelayed twin; 3/4-quad 'not worse' passes.
-- Spin yaw lag (17:24, read-only, scratchpad/yawlag/): rig ls3c 12 deg / 0.49 s against the twin 4.4 deg / 0.15-0.19 s at
-  every command delay (R2401-R2404). The error builds in the 4 s spin-up (rig -9.2, twin -3.9 deg) and then holds
-  through the 10 s at constant rate on both: the planner barely pulls a yaw error back. The ring follows the quads
-  within 0.5 deg and the quads lead their references, so the lag is in the planner's plans (refs trail the desired
-  0.61 s rig, 0.25 s twin). Ruled out: a yaw-rate measurement bias (both within 1-3 % over the constant phase),
-  the trajectory clock, solve failures or late plans, parameter differences (attach_z, the 60 ms budget, landing
-  switches only). Next (after wave 1): log the plan's yaw and cable azimuths per tick; suspects are the plan's
-  slow correction through the pinned cable chain and the rig's real inertia/hinge against the model.
-- The rig T hangs 2.6 deg (t3p_2): chain step 2a dropped. Part C failed on operations (OFF never reached; then the
-  wrong quad): RViz RELEASE RIDER built (planner /fleet/carrier_map; two clicks; shown with the magnet rows).
+## Thu 5 Nov evening (from 16:47, after Wesley's restart)
+- **Verify of the 4.3 join cells (tracking check 0.20 m):** R3766 PASS; R3765 joined (the landing's abort = the known twin
+  artefact: QUAD4's own 60 deg envelope in the post-touchdown unwind, scored apart; R3765c); R3767 (pickup, low route) stalled
+  0.7 m short of the drop point (R3767c) -> Wesley ~17:40: this cell flies OVER the carriers (an exception in CLAUDE.md);
+  claim1107_8b now lists ..._noxy_over.
+- **Rig LAND defaults (real.yaml):** land_descend_to_stall + land_rearm_touchdown + carriers_down_alone (15 cm), built ~17:35 with
+  launch tests and the re-arm's logging should-fixes; gate PASSED (2200); CLAUDE.md and Wednesday's sheet (section 4b) say so.
+- **Running 17:44:** lab PC batch (task beqc36fpd, configs/batches/verify1105b.txt): the pickup cell over the carriers, and
+  cda_{b,d}_k1s_rearm (the stronger carrier with the re-arm on: no false touchdown expected).
+- **Done 17:53:** R3768 (pickup over the carriers) PASS: dropped, re-attached, object in the net 3 mm off centre; R3769/R3770 (the
+  stronger carrier with the re-arm on) touch down at +0.00, no flip; with carriers_down_alone each disarmed alone 0.6 s after: H1-H5
+  hold. Registered; feed F050. **The weekend batch is ready** (docs/claim_batch_2026-11-07.md); Wesley's code freeze is the trigger.
 
-**Work queue (in order; update the status as it moves):**
-1. DONE 16:20: size-0.9 figure-8 bands (R2405-R2416, all clean): results/analysis/bands_fig8s09_2026-10-22.json, in the
-   Wed sheet (lines at traj_radius:=0.9). n2_bands.py --set b22 still lacks the fig8s09 cells: add them after wave 1.
-2. 1m-defaults package (design in push_1022_plan.md): fig8_size knob (rig default 0.9), cable_len 1.0, drone_mass
-   0.583, the CoM defaults, the +-1.75 m LAND envelope (new), tip_replay's cable length (else gate 3 passes vacuously at
-   1 m), the 1 m attach worlds + M1 layout, attach_cable_len check, reach-scaled constants, one 1 m twin take-back test,
-   prebuild --drone-mass 0.583. Then V1-V5 twin smoke runs. Then the Wed sheet.
-3. Thu 29 band: 3 twin runs of QUAD4 leaving the M1 layout at 1 m, as soon as the M1 1 m world exists.
-4. Pair-swing package: loop_timing / pair_mode tools, per-channel rig-timing twin, the tip-hinge world (5.75 cm),
-   rounds A-D under card 2026-10-23_pair_mode_timing (bars before runs). Betaflight DONE 17:11: QUAD3 read-only
-   (docs/rig/betaflight_2026-10-22.md; Wesley: the others are the same; live radio check dropped, the module cannot
-   plug into the laptop). Rate mode, linear 100 deg/s, feedforward on, ELRS 333 Hz (QUAD4 500 Hz): radio + FC
-   ~10-15 ms. The rig is slower on the throttle (motor spin-up, no FC loop) and faster on the attitude than the
-   twin, so round B delays the throttle only; the body-rate EMA is ours, not Betaflight. No FC change needed.
-5. U (catch offset), R (re-fly at 1 m), C (network vs ours, critic for its law changes), S (+ rejoin_departed; the
-   speed-ups) -- C, S and R's tools in worktrees; cards with frozen bars before each claim; reviewer per table.
+## Thu 5 Nov afternoon: the main chat distributes the work to agents (Wesley ~12:45); the lab PC for simulation
+Updated 16:17. **Order of work (handin_plan):** code freeze Fri 6 Nov -> every simulation claim re-flies on that tree Sat 7 -
+Sun 8 (docs/claim_batch_2026-11-07.md: 255 runs, ~22 h, scorers tools/*_metrics.py proven on the old runs) -> simulation freeze
+Mon 9 -> rig S3 Wed 11 / S4 Thu 12 (sheets docs/rig/wed_2026-11-11.md, thu_2026-11-12.md; freeze Thu 12 11:00).
+- **Decided today (decisions.md 5 Nov):** QUAD4's tracker ring checks follow its mux (on); his TAKEOFF held until our release + no
+  DISARM on an in-air refusal (rig); no loss-check timestamp skip (removed; the stamp-gap log stays); land_descend_to_stall = the RIG
+  default (the slow descent deleted); the landing combination carriers_down_alone + 15 cm band (built, off; its 10 twin runs
+  R3755+ flying; if clean -> rig default); the fold-in cap 'level' kept OFF, 'weld' deleted; the weekend batch: T joins int_k_xy 0,
+  the gap table re-flies, no more 1.15 kg cells; Te-Jen's tracking check 0.20 m (margin 0.05; critic waived) + the plain floor-join
+  on the low route (the three 4.3 join cells stalled at 0.05: R3738/R3749/R3750); rig sheets: M2A ring, Nr claim on the square,
+  K at 1.2 m with drop_height 0.28 (k1z), Nr on the orbit typed; the small object for pickups.
+- **Lab PC:** carriers_down_alone R3755-R3764 running (task b0qnqcefp); then verify of the three join cells (rebuild; task
+  b1kel1r17, configs/batches/verify1105_x11_joins.txt); if they weld -> the weekend batch is ready.
+- **Funnel (Wesley's attach aid):** cad/funnel/funnel.py (CadQuery in ~/venvs/cad_pkgs, PYTHONPATH), v1 40 g, bolts M4 through the
+  inner-anticlockwise + both outer holes, nut pockets, the zip-tie hole clear; files in ~/Downloads/funnel/ (funnel_in_ring_frame.step
+  lands on the 60 deg plate of his ring Part Studio). Waiting for his look in Onshape.
+- **Still Wesley's:** the funnel v1/v2 (Fri 6). match_dwell settled (stays 0.5). Settled since: no frozen bars (rig too),
+  no ring-mass change for the funnel, the code freeze committed (bf52a8a).
+- Findings: sq8_2's carrier poses ~0.6 s late (cause not found); the triangle's misses radial; the square's T lean on today's tree
+  differs from 01:30 only with the integral on (R3740 = R3709 with it off).
 
-**Running now:** wave 1 implementation workflow wf_d62e7db2-b9f (task w3zylhcnd): 1m-defaults in the MAIN tree (do not
-  edit src/ or tools/ there until it ends; no lab batch either, it would ship a half-edited tree), sim-C, sim-S and
-  rejoin-departed in worktrees (patches to scratchpad/wave1/<pkg>.patch), each followed by a verifier. Lab PC idle.
+## Thu 5 Nov, the lab day (registry RIG-1105-*, decisions FINDING/OPEN 5 Nov, feed F048, notes docs/rig/notes_for_tejen_2026-11-05.md)
+- **Worked:** k1d (pickup + drop into the flying ring, first try); **sq8_2: the first real detach and re-attach** (square 11/2/5 + QUAD4 on 8; contact_dz -0.03; proven, folded in 14.4 s after the release; the T leaned 21-28 deg; then a false loss in LAND dropped the ring); the orbit pause on the rig (nr9o_2); the bigger object dropped into the MOVING ring (k1ob_2, in the net 4 cm off centre) then the ring jerked to 54+ deg (drop) and **QUAD4's idle tracker disarmed QUAD4 (fell ~2.5 m): BUG, OPEN (a)**.
+- **Cause of the morning's lift bounces: a Motive recording** (delay 45-65 -> 75-135 ms); rule in CLAUDE.md and the sheet.
+- Typed today (params files in configs/rig/, scripts in ~/rig_*.sh and results/rig/2026-11-05/scripts/): drop 55 deg (attach_m1_1m_m2a_drop55*.yaml), the loss check 15 cm (`_det15`), his contact_dz -0.03, the orbit with no pause for the drop (`_orbitdrop`), the square on 11/2/5 + 8 with reattach_plate 8.
+- Failed / open: re-attach accuracy on the triangle (nr9o_2, nr9m: 3.5-10 cm off); his TAKEOFF before the release (nr1r); pickups after body 6 was re-enabled off-centre (k1o_2); the false loss check in LAND (sq8_2).
+- Simulation today: R3710 VOID (config), R3711 PASS (the drop into the moving ring in the twin, in the net 4 mm off centre).
+- Disk: 596 MB -> 22 GB free (gz_record replays, OneDrive archives, the 4 Nov zips deleted; Wesley's OK).
 
-**Agent rules:** at most 2 agents running at once (Wesley 22 Oct, token control); registry append-only with LF via scratchpad/append_rows.py (backups registry.bakNN); never edit src
-during a laptop batch (symlink install); laptop idle the first 3 min of a run; never pgrep "gz sim"; stop batches by
-the script's own PID; run `date` before writing any time.
+## 4 Nov, the lab day, in one paragraph (registry rows have the detail)
+1.15 kg ring: sq6b dropped at 33 deg in QUAD4's descent; switched to the **0.86 kg M2A ring** (body 8; W 0.0365 X 0.0039 Y 0.2271 measured 08:44, L 1.0525 typed). sq6m: **the first real join**. Then 13 flights: the **release worked on all six** that reached it (tilt 2.9-5.2 deg; the take-back worked every time); **no re-attach finished** (nr1_2 on plate 1: caught within 4 mm, plate rose 18-19 mm, rejected on the 3 mm taut margin; nr9m_4/_5 on plate 9: contacts 24-59 mm off, declared by the 60 mm radius, lost); **no pickup drop** (k1m_2-4: the object on its 1 m cable swung 0.23-0.26 m from the centre, his arrival check 0.18 m held 0.5 s never passed; k1m_3: his reference sank to 2.01 m, LAND's take-back lifted the object with the ring: 30.4 deg, automatic drop). nr9, nr1_2, nr1_3 flew the 1.15 kg config on the M2A ring by mistake; nr1, nr1_3, nr9m_3 VOID. Every flight's command line is in `results/rig/2026-11-04/launches.csv`.
 
-## Where things are (21 Oct)
-- **Main tree** `~/multi_drone_control` on **day-1021** (cf556ff; from day-1016 at 410f0f1). day-1016 is NOT merged
-  into week5 (4b3560e) yet: Wesley merges. Commits by explicit path, authored by Wesley, no trailers, never push.
-- **Current plan:** `docs/plan_thesis_results_2026-10-21.md` (approved 21 Oct ~18:50; status table at the top).
-  Decisions: `docs/decisions.md` DECIDED 2026-10-21.
-- **Worktrees:**
-  - `~/mdc_wt/tejen_sync2` (tejen-sync2 6483d90): Tejen's fd495db0 merged into our fork, avoidance on the transit and
-    floor_join, `m1_irl_pickup.launch.py`. Not merged into day-1021; merge before the basket runs (plan s5).
-  - `~/mdc_wt/tipdetect` (tip-detect b4356aa): the magnet-marker release check **rev 3** (critic round 2's guards:
-    ring-glitch hold-off, the distance-from-centre test, 0.1 s on stamps, lone-marker would-fire, frozen markers,
-    learning without the ring speed, slack-cable band, forget on attach/detach), the twin ring tilt fault
-    (`MOCAP_TILT -1`), `tools/tip_replay.py`, `tools/mocap_glitch_scan.py`, the tracker's raw-pull columns, the rod-pose
-    publishers in the existing worlds (Wesley ~23:30). Unit tests 16/16, planner suite 234. **Critic round 3 running**
-    (background agent, its verdict goes into the card). Bars frozen 23:45 (card, rev 3 section).
-  - `~/mdc_wt/thesis` (thesis-rig): the thesis.
-- **Lab PC:** full all evening (Ryan's 11-12 Gazebo sims, load ~107-129 on 24 cores). Everything ran on the laptop.
+## The command blocks of 4 Nov (M2A ring), for Thursday
+env `MDC_RIG_ACADOS_ROOT=$HOME/mdc_rig_generated_m2a_0p86`; `AM` = attach launch with `params_file:=$C/attach_m1_1m_m2a.yaml` (`_around` for the route); `geometry:=rig_m2a` in partner_args; K 0.06 (**too loose: see the OPEN line**); G, T3, K1 as in `docs/rig/archive/wed_2026-11-04.md` + the loosened G (decisions.md 4 Nov ~10:00). Lines: sq6m (floor attach), nr9m (`partner_attached:=true detach_unload_s:=3.0`), nr1r (+ `reattach_plate:=1`, `plate:=1`, `_around` params), k1m (`mission_mode:=pickup_delivery`).
 
-## Now (Thu 22 Oct, 06:13): rig 08:00-11:00; overnight done (morning report `docs/reports/morning_report_2026-10-22.md`)
-- **Rig tree:** `day-1021`, flight code as of 367c98f:
-  - the magnet-marker check rev 3, a switch (`tip_detect_m`, default off; Part C's `chain_pair_tip.yaml`);
-  - the 8 N pull cap;
-  - the tracker's raw-pull columns.
-  Gate passed at badb4a5. Note `git log --oneline -1` at the rig.
-- **Sheet** `docs/rig/thu_2026-10-22.md`:
-  - bench item 0 (the ring's centre of mass) first;
-  - A then B (markers bagged);
-  - Part C last. Status line: your call, R3on recommended if the A/B replay after Part B is clean (gate 3: run
-    `tools/tip_replay.py` on each A/B bag). R3off will most likely end in "no detection: LAND" (the twin's stretch
-    check missed 4 of 4 zero-share releases).
-- **Overnight results** (registry R2259-R2322; plan status table updated):
-  - the 1 m baselines;
-  - the comparison (one frozen bar missed: the pair's rocking against an arm that never resized);
-  - A/B with the check on, all clean;
-  - the neighbours;
-  - the basket: the mission works in hover at 0.55 m and 1 m, the landing hits TB14; the 1 m circle rejoin stalls;
-  - the 1 m detaches: hard drops, soft does not;
-  - the solve sweep re-timed: 4 / 5 / 6 quads at 5 / 2 / 1 iterations within 60 ms.
-- **Videos:** `scratchpad/render22.sh` running until ~07:05. Reel `results/videos/reel_2026-10-22_overnight.mp4`.
-- **The loop** (cron 73b7592d) stops after the report's push.
-- **Rig so far (09:12):** bench 0 (pivot to 2.76 cm), markers, A1 h3n, A2 h3, A3 f3 (rows RIG-1022-*).
-  - A3's corners (Wesley not happy): the cut is in the plan, and the rig lags ~0.13 s more than the twin. Today's
-    size-0.5 figure-8 has corners of 10.4 cm radius (0.38 m/s^2 at 0.2); 7 Oct's r2008e60 flew traj_radius 1.0. Two
-    things changed since 21 Oct f200 (corners +31 -> +44 mm): attach_z, and the integral, which never ran without the
-    hold. Correction row RIG-1022-f3c.
-  - f3big (7 Oct's size 1.0): cuts about as much as 7 Oct at matched bend demand, but the lap sat (-4.7, -1.3) cm
-    off: every flight lifts 2-5 cm toward -x and no hold means no integral. QUAD2 ARM refused twice (FC !ERR*).
-  - 09:20 Wesley: the 5 s hold back on every path flight, the figure-8 at size 1.0 (decisions.md); sheet updated
-    (A3' f3h, A4 and B with the hold, configs/rig/two_quad_hold5.yaml new). After the rig: the figure-8-only size
-    default, the twin B configs and the size-1.0 bands; find the -x push's source.
-  - f3h (A3': size 1.0, 5 s hold): corners as good as 7 Oct (mean +13 mm, 7 Oct +9; f3big +35), lap centre
-    (-0.8, -1.1) cm, tilt peak 5.0 deg, 3-D RMSE 4.0 cm; the hold learned fx -0.23 fy -0.15 N. QUAD2 ARM refused a
-    3rd time today (FC !ERR*). Next: A4 ls3 with the hold.
-  - ls3 (A4): clean; yaw 0.43 s behind the desired (max 11.5 deg), turned 225/229; figure ls3_yaw.png. Wesley: the
-    spinny line becomes a constant-rate full turn, replacing the old law (decisions.md).
-  - ~09:40 built at his request (load_trajectory.py + its test, uncommitted: he says when; diff in
-    scratchpad/spin_constant_rate.patch); offline planner check clean; gate --quick running; then A4' ls3c on the rig
-    (twin run waived for now, goes in tonight's batch).
-  - ls3c flown (09:40): full turn 359/360, steady -12 deg (delay 0.49 s), no turnaround dip; the ~1.5 Hz yaw wobble
-    grew (sd 1.1 vs 0.7 deg). The delay is the error; a yaw lead is a card + critic after the rig. Next: Part B.
-  - Part B: h2 (QUAD3 magnet let go at the top), h2t9p (cap 0.9 + plates 11/5: grew, LAND), h2m (planned pull: slides
-    along the line, LAND): all a 1.3-1.5 Hz swing, as 21 Oct's pairs (only c2q calm: drained packs 22.2 V). Mode: the ring
-    drives the quads; their commanded positions trail their motion ~90-100 ms (45-55 deg), so they chase it late; the
-    twin's pair is calm (R2244/R2255). 10:13 Wesley wants it fixed now: sheet "Part B, delay tests" P1 ref_time_shift
-    (configs/rig/two_quad_rts.yaml), P2 slope velocity filter (T1 env), P3 both, P4 drained packs.
-  - 10:50: P1 h2rts no help; P2 h2slope CALM (velocity lag 40 -> 20 ms, see-saw 8 -> 2 deg p-p). Repeat + pair figure-8
-    lines on the sheet. Twin + reviewer before the slope filter becomes a default (it is a T1 env switch, off).
-  - 10:55 f2slope: the FIRST full two-quad figure-8 on the rig (slope filter): 3-D RMSE 3.7 cm, tilt peak 14.3 deg
-    (mean 7.3), no 1.4 Hz swing, path lag 0.10 s. OPEN line in decisions.md for the default.
-  - 11:00-11:20 Part C (plates 11/2/5, R3on, slope on all three): t3p_2 the OFF never reached (T4 env); t3p_3 the OFF
-    went to /drone_0 (on plate 11; the rider was /drone_1): 270 deg gap -> drop and land as designed. Rig day over.
-    Rig day over.
-- **Afternoon (11:30-):** rig-day review `docs/reports/rig_review_2026-10-22.md` (reviewer on the pair fix: [weak],
-  corrections in RIG-1022-h2slopec/-h2t9pc); Wesley's answers in decisions.md (DECIDED 22 Oct review answers: Wed on
-  slope if twin + reviewer agree, twin = rig filter, ring slope twin-first, 4 quads approved, RViz release button,
-  Part C Wed after the pair A/B, overfull Wed sheet, step 2a dropped, bands for both filters). The plan is the table at
-  the end of the review doc. 12:10 twin stage 1 running (scratchpad/vf_stage1.sh: b2_hover_vf_{ema,slope,none} x2,
-  0.55 m; task b9831jf33). No src edits until it ends (symlink install).
-  - 12:26 stage 1 done (R2323-R2328): the twin does NOT swing with the rig's filter (ema 0.03-0.05 deg, rig 2.6-3.7):
-    the twin cannot test the filter; the rig decides (Wed A/B). tools/pair_swing.py reproduces the reviewer exactly.
-  - Code (gate --quick 1514 pass; mpc_planner 180 pass; drone_visualisation built): run_experiment applies a config's
-    lab_env (tools/experiment/config.py LAB_ENV); the twin's default filter = ema (payload_mocap_emulator); ring
-    filter option (SIM_MOCAP_VEL_RING / MDC_MOCAP_VEL_RING, default ema); SIM_CMD_DELAY_FROM_S; the planner's
-    latched /fleet/carrier_map; the RViz RELEASE RIDER button (two clicks, OFF at 10 Hz for 1 s, one per flight).
-  - 12:37 batch running (task betkmx4t3, scratchpad/b_l100_vf.sh): the nine 1 m baselines x {ema, slope} x 2
-    (configs b{2,3,4}_{hover,fig8big_h5_v200,linespinc_h5_v200}_L100_{ema,slope}; params configs/rig/drop_and_land_hold5.yaml).
-    No src edits until it ends. Next: the Wed 28 sheet (docs), the band tool for these cells, step 2b card.
-  - 13:01 split (Wesley: "go, use the lab PC"; idle, load 0.2/24, no containers): the laptop did R2329-R2335 (b2
-    hover x4, fig8big x3); its script was stopped and b2_rest.sh (task bcmr3qspc) flies the last 5 b2 runs (R2360+);
-    the lab PC (task b4dexzoci, lab_batch --slots 4, log scratchpad/lab_b34.log) flies the 24 b3/b4 runs R2336-R2359.
-  - Done since: the Wed 28 sheet draft (docs/rig/wed_2026-10-28.md), tools/n2_bands.py --set b22 (hover window: top +2 s
-    to LAND), configs/rig/drop_and_land_hold5.yaml.
-  - 13:48 all 36 done (lab 45 min; R2344/R2350/R2359 'FAIL' = the runner's pose check ~2.1 s after /fleet/landed, at
-    teardown: counted). Registry R2329-R2364. Twin: the filter changes nothing that matters (swing/tilt jitter at noise,
-    0.02-0.05 deg; corners 3-4 mm less with slope; fig-8 lag +0.005 s (3q) / +0.01-0.02 s (4q) with slope; spin yaw lag
-    0.14-0.22 s either way). Card's "not worse" (3 and 4 quads): passes every cell. Bands frozen:
-    results/analysis/bands_b22_2026-10-22.json, in the Wed sheet. Reviewer on the twin table running (background).
-    New tools: tools/yaw_track.py (reproduces the rig ls3/ls3c numbers), pair_swing.py, n2_bands --set b22.
-  - 14:05 reviewer on the twin table: [weak] (pair_swing windows cut short; lag pass marginal; slope raises the spin's yaw
-    wobble 24-47 %; the 3 lab FAILs = a runner stall after LANDED). pair_swing fixed, re-scored (verdict holds),
-    correction rows R2329-R2364c, R2344c.
-  - 14:15 Wesley: band path error clock-free, path-only window (decisions.md); n2_bands --set b22 uses it; bands
-    results/analysis/bands_b22_clockfree_2026-10-22.json in the Wed sheet (+ expectations: the pair's tilt will MISS).
-    RViz RELEASE RIDER shows with the magnet rows (rebuilt). Delayed-twin study on the lab PC (task bo7btjorw, R2365-).
-  - 14:20 ULTRACODE PUSH (Wesley): scope + code authority in decisions.md (Wed readiness, 1 m + fig-8 defaults, pair
-    swing cause, sims U/S/C/R; lab PC whenever free; report and delete what fails, report improvements; no commits).
-    Design workflow wf_5bad4277-125 (task wptqrjn89): 6 designers + critic, read-only. Next: implement per the critique.
-  - Delayed twin (SIM_CMD_DELAY_S after the climb; valid to LAND, landings fault with the delay on): R2365-R2372 (40/80 ms)
-    and round 2 R2373-R2380. 60 ms reproduces the rig: ema swings to ~25 deg p-p (R2373), slope calm (R2374). The tracker's
-    Smith predictor (TRACKER_DELAY_COMP_S) and the ring on slope do NOT fix it; cmd_next_tick from t=0 flipped a creep
-    (void). Card stage 1b added (bars written 14:27, before its runs); R2381-R2388: testbed and confirm bars hold
-    (ema 6.7-7.1 deg, slope 0.10-0.15); reviewer [weak] (60 ms in sample at 1 m; throttle-capped; the rig's mode and
-    direction, not its flight; the delay came on 1.6-3.8 s before the top) -> correction row R2365-R2388c.
-  - 3/4 quads under 60 ms (R2389-R2396, one each): ema swings on paths (3q fig-8 tilt 16 deg, 4q fig-8 28 deg, M1 5-12)
-    while slope stays calm (tilt ~2 deg, M1 ~0.15); 60 ms looks harsher than the rig for 3/4 quads. Calibration of the
-    delay against rig f3h / ls3c (3q, 0.55 m, ema, 0/30/45/60 ms) running on the lab PC (task b2w0iysqu).
-- **Open for after the rig:**
-  - the rig lag at tight bends (A3 corners +44 mm against the twin's +18);
-  - chain step 2a (draft card) and 2b (the reaction to a loaded release);
-  - the scalability quality card;
-  - Tejen's 1 m moving-ring rejoin;
-  - merge day-1021;
-  - the 1 m bands and defaults;
-  - the re-fly R.
+## Wrong advice given 4 Nov (do not repeat)
+- `ros2 topic pub /tejen/magnet/command OFF` or `/drone_3/magnet OFF` does NOT release QUAD4's magnet during his pickup: our magnet_gate holds his OFF in TRANSIT_TO_DROP_POINT and ignores ours before our span (k1m_3, k1m_4 logs). There is no working operator drop yet (OPEN proposal 3).
+- Read `launches.csv` and every log before advising; the state file must list every flight.
 
-## Earlier today (21 Oct)
-- **Rig day 08:23-11:05** (`docs/reports/rig_2026-10-21.md`, RIG-1021-*):
-  - QUAD2's magnet let go 6 times, and its link reads ~2 cm short (bench check on the sheet);
-  - the no-hold offset of 5.5-6.6 cm was mostly the ring's mocap centre, 1.7 cm off. Wesley moved the ring pivot in
-    xy (RIG-1021-ringpivot); expected next no-hold hover 0.5-2 cm (sheet A1);
-  - ring body tilt 1.3 deg; the floor or Motive's ground plane 0.9 deg (spirit level on the sheet).
-- **Te-Jen:** QUAD1 pickup on a 1 m cable with the new 0.15 kg object (RIG-1021-q1pick: picked up first try; the lift
-  lagged with his kT feedback; LAND drops the object). Draft message to his Codex written in chat.
-- RIG-1015-a1c: on 15 Oct the tether struck QUAD2.
+## Code changed 3-4 Nov (committed in bf52a8a)
+- `dissipative_node.py`: `release_route()` + `partner_release_around` / `_r` (default off); test `test_release_route.py`. R3633, R3634.
+- His planner (our fork): the takeoff from the air (unswitched; decisions 4 Nov); test `src/tejen_mission/test/test_takeoff_from_air.py` (3). `contact_descent_hold` (3 Nov).
+- Typed knobs: the co-motion set (graph_attach COMOTION_KNOBS); his launch `descent_abort_speed`, `descent_hold`, `descent_gross_xy`, `pickup_proof_drift/_speed/_loss` (test `test_pickup_proof_only_when_typed`). CHANGES_FROM_TEJEN.md has 4 Nov with notes for Tejen.
+- Gate `--quick` PASSED ~11:20 (2096 tests; on the tree before the operator OFF, whose tests pass on their own).
+- **Operator OFF (built 11:25, default off):** `magnet_operator_topic:=/drone_3/magnet_operator` on the attach line; then `ros2 topic pub -t 3 /drone_3/magnet_operator std_msgs/msg/String "{data: 'OFF'}"` drops whatever QUAD4 holds, in any phase, and holds every ON until an operator 'ON'. magnet_gate.py `operator()`; tests in test_magnet_gate.py (2) and test_real_mode_launches.py (1). Not desk-checked on the rig launch yet.
 
-## Earlier (16-18 Oct)
-- Morning reports `docs/reports/morning_report_2026-10-1{6,7,8}.md`; decisions 16-17 Oct in decisions.md.
-- The 0.55 m and 1 m bands are frozen (card 2026-10-16_bands_1m). Touchdown A is on in the twin; the rig waits on a
-  critic look. Corner cutting is closed (lag reported).
+- **Drop on arrival (built 11:30, default off):** `drop_on_arrival:=true [drop_on_arrival_xy:=0.12]` in partner_args; our fork of his planner releases at the transit height once the magnet is within the radius of the drop point for 0.1 s. Tests test_drop_on_arrival.py (4), test_partner_mission_rig.py (1); his suite still 24 old failures, 1159 pass. Simulation **R3675 PASS** (registry): dropped at 2.37 m, in the net 3.5 cm from the centre, ring 5 cm / 3 deg; QUAD4 bounced to 2.61 m after the release (over the 2.6 m ceiling: Wesley's call, on the sheet); not starved (wall as R2899/R2900).
+- **Thursday's sheet rewritten 11:33** for the M2A ring (`docs/rig/archive/thu_2026-11-05.md`): calls (K 0.025 and drop on arrival marked Wesley's word), re-attach, pickup k1d, release x2, triangle and square baselines; new `configs/rig/traj_hold_m2a.yaml`. **Desk check PASSED 11:48-11:55** (scratchpad desk1104/sweep.sh, domain 79): all 10 lines up, no refusal, read-backs as typed; solvers for the layouts built into ~/mdc_rig_generated_m2a_0p86. Re-check only if the tree changes.
+- Not built, needs Wesley: the square detach/re-attach in simulation needs a new world (carriers 0/3/6, QUAD4 welded on 9, M2A ring): a world SDF is his word. The take-back dropping a held object (sheet rule instead: operator OFF before LAND). Battery compensation in his controller (the twin has a pack model: testable).
 
-## 14 Oct rig day in short (detail: registry RIG-1014-*, `git log -p` of this file)
-- 46 launches: 8 passed, 11 failed in flight, 11 arm refusals (QUAD1/QUAD2 FC attitude drift), the rest void.
-- t5_2 crashed (three-carrier lift bobbing with starved loops; drop_on_loss now on in attach). lt_13 F1 PASS after the
-  load cuts and the lean rclpy switch.
-- His pickup failed on contact time (t5_4, t5_5, t6); floor_join flown t6f..t6h5_3. t6h_4: the magnet caught plate 9
-  and our old proof's taut check rejected it (fixed by WP3).
-- Two operator DISARMs with QUAD4 ~0.3 m up on its own landing (fixed by WP8: it now disarms alone a few cm up).
-- Notes for Tejen: docs/tejen/notes_2026-10-14.md; his logs zipped at ~/tejen_attach_logs_2026-10-14.zip.
+- **Te-Jen's review (~14:00) and what followed:** his OCP caps throttle at 0.60; with the object QUAD4 sat at the cap (17 s in k1m_3) and sank under his reference, which held 2.43 m (my "reference sank" was wrong: corrected in registry RIG-1104-k1m_3c, feed F041, decisions CORRECTION). `tools/rig_to_run.py` now adds d3_partner_ref_*, dN_partner_thr, dN_radio_thr, dN_mux from the bag (tests pass; old run.csv files are not rebuilt unless rig_summary re-runs). Built, off unless typed: `mpc_throttle_max:=<0.60-0.95>` (tejen_mpc/throttle_bound.py, run time, no rebuild), `lift_full:=true` (up, then over). Tests: test_throttle_bound.py, test_lift_full.py, test_partner_mission_rig.py; his suites: 24 old failures + his controller's 2 old style failures. Simulation **R3676 PASS** (k1_5_lift_full, all three switches): left the pickup at 2.43 m (R3675 1.31 m), level after, nearest cable 0.25 m (0.21), in the net 2.4 cm from the centre, QUAD4 bounce 2.63 m. Thursday's K1 now types `lift_full:=true mpc_throttle_max:=0.8`; desk re-check of nr9m/nr1r/k1d passed 15:29 (after `ros2 daemon stop`: the daemon breaks param reads, `!rclpy.ok()`). Reply drafted: `docs/rig/archive/notes_for_tejen_2026-11-04_reply.md`. Next for Te-Jen: the forecast churn (ring twist input), drop on arrival on a predicted landing point, the release height over the net (measure the net).
+- **The square (Wesley: build and run):** the worlds already existed (27 Oct). **R3677 PASS** on today's tree: square -> T -> square, re-attach first try 25 s after the release; ring 21.6 deg peak 0.7 s after the release, the T ~7 deg, then 1 deg. Thursday's sheet section 6 (sq9), desk-checked 15:45, marked Wesley's call with a suggested stop rule for its first swing.
+- **Battery compensation built** (default off, typed `mpc_battery_comp:=0.022`): his radio throttle + 0.022 per volt below 23.5 V (cap +0.10), after his partial-step copy-back so his OCP/UKF keep the model throttle; twin controller now remaps telemetry. Unit tests pass; Simulation A/B running on the laptop from 15:50: nr_p9_pack218 (21.8 V, no term) then nr_p9_pack218_bc (with it), task bs0f8u5pk; keep the laptop quiet at each start (~15:50, ~16:01). I edited his controller and ran tests during R3677's first minutes (rule broken; R3677 checked: no import error, not starved).
+- Zips for Te-Jen made: ~/wesley-rig-2026-11-04.zip (22 MB), ~/wesley-rig-2026-11-04-bags.zip (272 MB).
 
-## Rig sheets and twin evidence
-- Tomorrow: `docs/rig/thu_2026-10-22.md`. Earlier sheets: `docs/rig/wed_2026-10-21.md`, `docs/rig/wed_2026-10-14.md`.
-  Every terminal: the setup line on the sheet (main tree, ROS_LOCALHOST_ONLY=1, ROS_DOMAIN_ID=23).
+## Wed 4 Nov evening, 22:20-23:30 (decisions.md has every line; feed F045, F046)
+- **Rod in the plan: flipped on 22:20, back OFF 22:50; Wesley ~23:00: the plan stays MASSLESS everywhere.** My 22:50 physics was wrong (CORRECTION line): the magnet's weight hangs on the cable while the plan books it on the drone, on the rig too, so the T leans on both (a limitation). **The twin's links now match the hardware** (rod 0.002 + magnet 0.038 at the plate, airframe 0.510; 80 world files regenerated, all generators --check ok; snapshot scratchpad simulation_assets_pre_link_2026-11-04.tgz). Every twin run before 23:15 flew the old link. Rod-in-plan configs with the old 0.075 rod now fail --check (retired).
+- Weld filter 0.1 s the sim default (stays). X2's later-runs bar 5 deg. OPEN 761 closed.
+- **Built (default off/as before):** `cable_pull_up_max` (tracker bound, 0); `ring_low_land_m/_s` (planner; proposed 0.30 m / 3 s from the replay of every rig flight: fires only on h3tp since 7 Oct, on R3444 at 815.8 s). The clamp's runs 3-6 (rod-in-plan T's) CANCELLED; its question on the massless T is open (the analysis: no claim cell's rider is on it).
+- **Reviewer, X2-full and X8: supported with corrections** (cards; F045).
+- **Orbit: R3696 PASS** (the rig's partner args): the circle runs on after the release, his TAKEOFF stops it, re-weld first try 12.8 s after the release, tilt peak 2.1 deg. On Thursday's sheet as section 5 (nr9o, Wesley's call: `contact_rig_orbit:=true`), params `configs/rig/attach_m1_1m_m2a_orbit.yaml`; desk-checked 23:09. R3685 VOID (his C++ transit stalled; not the rig's args).
+- Desk check of every Thursday line on the final tree passed 22:40-22:46 (the rig launch does not read the twin worlds).
 
-## Open for Wesley
-- Merge day-1016/day-1021 into week5; merge tejen-sync2 before the basket runs.
-- Tonight's report decisions: the chain's step-2 card (after the rig); the CoM fix (done on the rig before Part C).
-- Older: A on the rig after its critic; the no-floor F3 bar; the orbit-join drops (morning report 18 Oct).
+## 4 Nov's Running / To do / Waiting lists: superseded (5 Nov night, after review C)
+Every item was done or decided by 5 Nov (decisions.md 4 Nov 22:20-23:30 and 5 Nov); what runs now is in the RUNNING block
+at the top. The old text is in git (bf52a8a's docs/SESSION_STATE.md).
 
-## Working constraints (beyond CLAUDE.md)
-- **Helpers:** one general-purpose helper agent at a time (Wesley).
-- **Lab:** at most 4 slots, evenings only (Wesley 21 Oct: use it at the same time as the laptop when free), one tree at a time. Check idle first (`who`, load, containers). Each batch
-  runs from a script in a fresh `env -i` shell sourcing ONE install; start it detached; kill exact PIDs only.
-- **Scorers:** `tools/m1_score.py claim|full|takeback|tilt|tb14 RUN --rev N [--check]` (week5). It prints one LF row:
-  back up the registry, append the row yourself, then diff the old lines. Wrapper: `$CLAUDE_JOB_DIR/tmp/sc.sh`.
-- **Permissions:** deletions (branches, worktrees), git push and switching the main tree are refused for the
-  assistant. Write a script for Wesley.
-- **Untracked local files:** `.claude/*` and `docs/claude-setup-proposal/`. Edit them in place; never `git add` them.
-- **Timestamps:** read `date` before writing any clock time.
-- **Branch rule:** delete a branch once its work is on week5 or the attempt failed. Archive-tag any unmerged SHA the
-  registry cites.
+## How to work (Wesley)
+- In the lab: work fast, give full, checked command blocks; read the log before every answer. Agents: at most 1 overnight, 2 otherwise. Critic waived for all (3 Nov). No bars frozen for simulation. Commits on his word only, never push.
+- Lab batches: `tools/remote/lab_batch.py`, `setsid nohup`, scripts in `~/mdc_overnight/`; `--cpus` at most 12; chain on a PID; edit `src/` with an atomic copy-and-rename when a launch or sync may start (symlink install).
+- Rig: Motive streams 6,8,11,12,13,14,24 (attach); 8,11,12,13,14,21,24 (release, square). The first launch after a layout change rebuilds the solver for 20-40 s.

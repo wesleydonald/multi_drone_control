@@ -1,0 +1,8 @@
+# configs/twin/x4_relay_nowalk.yaml with the sideways integral on (5.26): one arm for the reviewer of 2 Nov (card 2026-10-31_rod_in_plan section 10).
+detach_detect_m: 0.06
+detach_step_out_m: 0.5
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 45.0
+attach_datum_shift: false

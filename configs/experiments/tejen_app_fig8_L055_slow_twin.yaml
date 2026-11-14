@@ -1,0 +1,137 @@
+name: tejen_app_fig8_L055_slow_twin
+description: 'Te-Jen''s application demo on 0.55 m cables (overnight 11-12 Nov, Wesley: experiment with the best available option): October''s m1c_orbit setup (QUAD1-3 on 3/11/7 lift the ring to 1.0 m on 0.55 m cables, QUAD4 from the floor picks up his ball at (1.0, 1.6), drops it into the net, attaches on plate 9 with his own descent defaults, lead 0; LAND 10 s after the weld; no pause). On 1 m cables the moving attach never made contact (R4255-R4274). Case 3 variant: figure-eight 1.0 m at 0.08 m/s (R4305 at 0.125 m/s aborted every descent on the tip''s speed relative to the plate) with his give-up at 120 s and the rig''s looser descent limits (match 0.08 / 0.5 s / 0.20 m/s, abort 0.10 m and 0.35 m/s held 1 s, descent hold): R4290/R4293 (his 0.05 m / 0.15 m/s, no debounce, 30 s) aborted every descent on the figure-eight''s turns.'
+world: three_rigid_ground_rig_attach_pickup.sdf
+ball_start: [1.0, 1.6, 0.08]       # tools/make_attach_worlds.py BALL_XY (the runner checks the ball's start pose)
+geometry_exempt:
+  attach_cable_len: 'as flown: QUAD4''s body-to-tip (rod 0.55 + pivot 0.04) typed as its rod, before 22 Oct'
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 0.55
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    load_traj: fig_8
+    contact_sim_fig8: true
+    fig8_size: 1.0
+    traj_speed: 0.08
+    traj_laps: 12
+    params_file: /home/wesley/multi_drone_control/configs/rig/traj_hold.yaml
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.0
+    throttle_max: 0.8
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 90,330,210
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.032
+    partner_contact: true
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    attach_cable_len: 0.59
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 600.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0]
+    pickup_lift_height:=2.3 minimum_search_z_m:=2.7 drop_approach_clearance:=1.35
+    contact_attach:=true confirm_pickup_release:=true contact_give_up_s:=120 match_xy:=0.08 match_dwell:=0.5 match_speed:=0.20 descent_abort_xy:=0.10 descent_abort_speed:=0.35 descent_debounce:=1.0 descent_hold:=true
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: WAIT_WELD
+  arg: 280
+- t: 30.0
+  do: LAND
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    wide:
+      pos:
+      - 3.6
+      - -3.0
+      - 3.2
+      look_at:
+      - 0.45
+      - 0.85
+      - 1.0
+      hfov_deg: 70.0
+      size:
+      - 1920
+      - 1080
+    top:
+      pos:
+      - 0.3
+      - 0.55
+      - 4.8
+      look_at:
+      - 0.3
+      - 0.56
+      - 0.0
+      hfov_deg: 60.0
+      size:
+      - 1080
+      - 1080

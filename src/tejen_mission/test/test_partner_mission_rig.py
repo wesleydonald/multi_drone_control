@@ -211,6 +211,136 @@ def test_match_dwell_and_speed_only_when_typed():
     assert p['dwell_time_s'] == 0.5 and p['contact_match_xy_velocity_threshold'] == 0.2
 
 
+def test_descent_abort_speed_only_when_typed():
+    """His contact descent's speed abort stays 0.25 m/s unless typed (Tejen's review 3 Nov asks a 0.35 trial)."""
+    g, _ = _nodes()
+    assert g['online_join_planner']['params']['contact_abort_xy_velocity_threshold'] == 0.25
+    g, _ = _nodes(descent_abort_speed='0.35')
+    assert g['online_join_planner']['params']['contact_abort_xy_velocity_threshold'] == 0.35
+
+
+def test_descent_hold_only_when_typed():
+    """contact_descent_hold (Tejen's review 3 Nov, priority 1) stays his restart unless typed; the gross band with it."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert 'contact_descent_hold' not in p and 'contact_descent_gross_xy_m' not in p
+    g, _ = _nodes(descent_hold='true', descent_gross_xy='0.25')
+    p = g['online_join_planner']['params']
+    assert p['contact_descent_hold'] is True and p['contact_descent_gross_xy_m'] == 0.25
+
+
+def test_the_objects_contact_point_takes_typed_sideways_offsets():
+    """pickup_point_x / _y (11 Nov, the object with a funnel on it: its Motive pivot 1.6 cm from where the magnet seats)
+    reach his planner and his attachment manager with the contact height; untyped they are zero."""
+    g, _ = _nodes(pickup_contact_height='0.011')
+    assert g['online_join_planner']['params']['payload_pickup_point_x'] == 0.0
+    g, _ = _nodes(pickup_contact_height='0.011', pickup_point_x='-0.0131', pickup_point_y='-0.0089')
+    p, m = g['online_join_planner']['params'], g['magnet_attachment_manager_irl']['params']
+    assert (p['payload_pickup_point_x'], p['payload_pickup_point_y']) == (-0.0131, -0.0089)
+    assert (m['pickup_point_offset_x'], m['pickup_point_offset_y']) == (-0.0131, -0.0089)
+    assert abs(p['payload_pickup_point_z'] - m['pickup_point_offset_z']) < 1e-12
+
+
+def test_pickup_low_hold_only_when_typed():
+    """The hold on the last 8 cm of his pickup descent (Wesley 11 Nov, RIG-1111-fm9c*) reaches his planner only typed."""
+    g, _ = _nodes()
+    assert 'pickup_alignment_low_hold_xy_m' not in g['online_join_planner']['params']
+    g, _ = _nodes(pickup_low_hold_xy='0.04')
+    p = g['online_join_planner']['params']
+    assert p['pickup_alignment_low_hold_xy_m'] == 0.04 and p['pickup_alignment_low_xy_m'] == 0.10
+
+
+def test_pickup_box_only_when_typed():
+    """The pickup box (11 Nov, RIG-1111-fm9c_6: his retry followed the fallen object out to y 2.3 m) only typed."""
+    g, _ = _nodes()
+    assert 'pickup_box_m' not in g['online_join_planner']['params']
+    g, _ = _nodes(pickup_box='1.5')
+    assert g['online_join_planner']['params']['pickup_box_m'] == 1.5
+
+
+def test_pickup_proof_only_when_typed():
+    """His pickup proof keeps his file's limits unless typed (RIG-1104-k1m: the lift never proved at 0.015 m / 0.03 m/s)."""
+    keys = ('pickup_proof_maximum_contact_drift_m', 'pickup_proof_relative_speed_mps', 'pickup_proof_loss_contact_drift_m')
+    g, _ = _nodes()
+    assert not any(k in g['online_join_planner']['params'] for k in keys)
+    g, _ = _nodes(pickup_proof_drift='0.05', pickup_proof_speed='0.08', pickup_proof_loss='0.08')
+    p = g['online_join_planner']['params']
+    assert [p[k] for k in keys] == [0.05, 0.08, 0.08]
+
+
+def test_drop_on_arrival_only_when_typed():
+    """drop_on_arrival (Wesley 4 Nov, k1m_2-4) stays his settle-and-descend drop unless typed; its radius with it."""
+    g, _ = _nodes()
+    p = g['online_join_planner']['params']
+    assert 'drop_on_arrival' not in p and 'drop_on_arrival_xy_m' not in p
+    g, _ = _nodes(drop_on_arrival='true')
+    p = g['online_join_planner']['params']
+    assert p['drop_on_arrival'] is True and 'drop_on_arrival_xy_m' not in p
+    g, _ = _nodes(drop_on_arrival='true', drop_on_arrival_xy='0.10')
+    assert g['online_join_planner']['params']['drop_on_arrival_xy_m'] == 0.10
+
+
+def test_mpc_throttle_max_only_when_typed():
+    """His controller keeps his 0.60 throttle bound unless mpc_throttle_max is typed (RIG-1104-k1m_3)."""
+    g, _ = _nodes()
+    assert 'throttle_state_max' not in g['tejen_mpc']['params']
+    g, _ = _nodes(mpc_throttle_max='0.8')
+    assert g['tejen_mpc']['params']['throttle_state_max'] == 0.8
+
+
+def test_lift_full_only_when_typed():
+    """lift_full (Wesley's supervisor, 4 Nov: up, then over) keeps his early lift exit unless typed."""
+    g, _ = _nodes()
+    assert 'lift_full_before_transit' not in g['online_join_planner']['params']
+    g, _ = _nodes(lift_full='true')
+    assert g['online_join_planner']['params']['lift_full_before_transit'] is True
+
+
+def test_mpc_battery_comp_only_when_typed():
+    """His radio throttle gets no voltage term unless mpc_battery_comp is typed (RIG-1104-nr9m_2)."""
+    g, _ = _nodes()
+    assert 'battery_comp_slope' not in g['tejen_mpc']['params']
+    g, _ = _nodes(mpc_battery_comp='0.022')
+    assert g['tejen_mpc']['params']['battery_comp_slope'] == 0.022
+
+
+def test_drop_height_and_ceiling_only_when_typed():
+    """drop_height (Wesley 4 Nov: drop 0.5-0.6 m above the net) raises only the loaded legs; with drop_on_arrival the
+    after-drop leg counts the release at the transit height; max_body_z lifts the 2.6 m ceiling, never past 3.0."""
+    g, _ = _nodes()
+    base = g['online_join_planner']['params']
+    g, _ = _nodes(drop_height='0.5')
+    p = g['online_join_planner']['params']
+    assert p['drop_approach_clearance'] > base['drop_approach_clearance'] + 0.1
+    assert p['pickup_lift_height'] - base['pickup_lift_height'] == pytest.approx(
+        p['drop_approach_clearance'] - base['drop_approach_clearance'])
+    with pytest.raises(RuntimeError, match='max_body_z'):
+        _nodes(max_body_z='3.1')
+    mod = _module()
+    legs = {'over the drop point': 2.7}
+    with pytest.raises(RuntimeError, match='above 2.6 m'):
+        mod.check_transit_ceiling(legs, refuse=True, log=lambda m: None)
+    mod.check_transit_ceiling(legs, refuse=True, log=lambda m: None, ceiling=2.8)
+
+
+def test_line_up_gap_types_the_carrier_gaps_only_for_gap():
+    """12 Nov: line_up:=gap = line_up plus the gaps' offsets from the rig's plate and carriers; true keeps the plate."""
+    g, _ = _nodes(line_up='gap')
+    p = g['online_join_planner']['params']
+    assert p['line_up'] is True and p['line_up_gap_offsets_deg'] == [0.0, 120.0, 240.0]
+    g, _ = _nodes(line_up='true')
+    assert 'line_up_gap_offsets_deg' not in g['online_join_planner']['params']
+
+
+def test_line_up_only_when_typed():
+    """line_up (Wesley 4 Nov) stays off unless typed; its radius and band with it."""
+    g, _ = _nodes()
+    assert 'line_up' not in g['online_join_planner']['params']
+    g, _ = _nodes(line_up='true', line_up_lateral='0.3')
+    p = g['online_join_planner']['params']
+    assert p['line_up'] is True and p['line_up_lateral_m'] == 0.3 and 'line_up_radius_m' not in p
+
+
 def test_attach_z_lowpass_only_when_typed():
     """The bridge's plate height stays raw (no parameter) unless attach_z_lowpass is typed (a1, 15 Oct)."""
     g, _ = _nodes()
@@ -324,3 +454,137 @@ def test_the_measured_contact_point_on_the_real_object_only_when_typed():
     assert m['pickup_point_offset_z'] == pytest.approx(0.018 - 0.0225)
     assert (p['payload_collision_size_x'], p['payload_collision_size_y'], p['payload_collision_size_z']) == (
         0.10, 0.10, 0.025)
+
+
+def test_takeoff_gate_only_when_typed():
+    """takeoff_gate_topic (5 Nov, RIG-1105-nr1r): his TAKEOFF waits for our release only when typed (our combined rig
+    launch types it for a start-welded QUAD4)."""
+    g, _ = _nodes()
+    assert 'takeoff_gate_topic' not in g['online_join_planner']['params']
+    g, _ = _nodes(takeoff_gate_topic='/partner/release')
+    assert g['online_join_planner']['params']['takeoff_gate_topic'] == '/partner/release'
+
+
+def _twin_planner(**typed):
+    mod = _module()
+    ctx = LaunchContext()
+    ctx.launch_configurations.update({'geometry': 'rig_twin', 'contact_attach': 'true', **typed})
+    mod._record_typed(ctx)
+    for a in mod._arguments():
+        if isinstance(a, DeclareLaunchArgument) and a.name not in ctx.launch_configurations:
+            ctx.launch_configurations[a.name] = a.default_value[0].text if a.default_value else ''
+    for e in mod._nodes(ctx):
+        if isinstance(e, Node) and e._Node__node_name == 'online_join_planner':
+            params = {}
+            for p in evaluate_parameters(ctx, e._Node__parameters or []):
+                params.update(p if isinstance(p, dict) else {})
+            return params
+
+
+@pytest.mark.parametrize('cpp', ['', 'true'])
+def test_the_twin_keeps_the_typed_release_and_pickup_box_on_both_routes(cpp):
+    """Te-Jen's review 11 Nov: the C++ re-attach branch replaced the extra parameters and lost both."""
+    p = _twin_planner(mission_mode='pickup_delivery', drop_release='0.03', pickup_box='1.9',
+                      **({'pickup_cpp_reattach': cpp, 'transit': 'over'} if cpp else {}))
+    assert p['drop_release_clearance'] == 0.03 and p['pickup_box_m'] == 1.9
+
+
+def test_sideways_pickup_offsets_need_the_contact_height():
+    """Te-Jen's review 11 Nov: pickup_point_x / _y act only with pickup_contact_height; alone they are refused, not
+    silently ignored."""
+    with pytest.raises(RuntimeError, match='pickup_contact_height'):
+        _nodes(pickup_point_x='-0.009')
+
+
+def test_the_twin_takes_a_typed_give_up_time():
+    """R4255 (11 Nov): contact_give_up_s:=120 reached the rig's planner only; the twin gave up at his 30 s."""
+    assert 'contact_give_up_s' not in _twin_planner()
+    assert _twin_planner(contact_give_up_s='120')['contact_give_up_s'] == 120.0
+
+
+def test_the_pickup_attach_radius_only_when_typed():
+    """RIG-1112-fm9c_3: his inferred attach radius (0.12 in his file) reaches his IRL manager only when typed."""
+    g, _ = _nodes()
+    assert g['magnet_attachment_manager_irl']['params']['attach_radius_m'] == 0.12
+    g, _ = _nodes(pickup_attach_radius='0.04')
+    assert g['magnet_attachment_manager_irl']['params']['attach_radius_m'] == 0.04
+
+
+def test_the_pickup_press_only_when_typed():
+    """Wesley 12 Nov: the early pickup contact's hold a little lower, typed only."""
+    g, _ = _nodes()
+    assert 'pickup_candidate_press_m' not in g['online_join_planner']['params']
+    g, _ = _nodes(pickup_press='0.02')
+    assert g['online_join_planner']['params']['pickup_candidate_press_m'] == 0.02
+
+
+def test_the_pickup_press_is_a_bounded_ramp():
+    """Te-Jen's review 12 Nov: no step; at most the press, at the rate, never below the descent's own floor."""
+    import numpy as np
+    from tejen_mission.online_join_planner import pressed_candidate_hold as hold
+    b = np.array([0.3, 1.6, 1.10])
+    assert np.allclose(hold(b, 0.02, 0.02, 0.0, 0.0), b)                   # nothing at the contact itself
+    assert np.allclose(hold(b, 0.02, 0.02, 0.5, 0.0), [0.3, 1.6, 1.09])    # 1 cm after 0.5 s
+    assert np.allclose(hold(b, 0.02, 0.02, 9.0, 0.0), [0.3, 1.6, 1.08])    # capped at the press
+    assert np.allclose(hold(b, 0.02, 0.02, 9.0, 1.095), [0.3, 1.6, 1.095])  # the descent's floor bounds it
+    assert np.allclose(hold(b, 0.02, 0.02, 9.0, 1.12), b)                  # never above where it was
+    assert np.allclose(hold(b, 0.0, 0.02, 9.0, 0.0), b)                    # press 0: his hold
+    assert np.allclose(b, [0.3, 1.6, 1.10])                                # the input is not changed
+
+
+def test_the_press_steps_only_in_the_contact_wait_with_a_latched_target():
+    import numpy as np
+    from types import SimpleNamespace
+    from tejen_mission.online_join_planner import OnlineJoinPlanner
+    clock = [10.0]
+    stub = SimpleNamespace(pickup_candidate_press_m=0.02, pickup_candidate_press_rate_mps=0.02,
+                           m1_candidate_press_base=np.array([0., 0., 1.10]), m1_candidate_press_t0=10.0,
+                           m1_candidate_hold_reference=np.array([0., 0., 1.10]),
+                           latched_geometry_pickup_contact_target=np.array([0., 0., 0.05]),
+                           quad_reference_offset_from_tip=lambda: np.array([0., 0., 1.03]),
+                           _physical_now_s=lambda: clock[0])
+    stub.m1_candidate_press_s = 0.0
+    for k in range(1, 26):                                           # 25 updates at 50 Hz: 0.5 s
+        clock[0] = 10.0 + 0.02 * k
+        OnlineJoinPlanner.step_candidate_press(stub)
+    assert np.isclose(stub.m1_candidate_hold_reference[2], 1.09)
+    clock[0] = 20.0                                                  # 9.5 s with no update: no catch-up step
+    OnlineJoinPlanner.step_candidate_press(stub)
+    assert np.isclose(stub.m1_candidate_hold_reference[2], 1.089)    # one step of at most 0.05 s
+    for k in range(1, 200):
+        clock[0] = 20.0 + 0.02 * k
+        OnlineJoinPlanner.step_candidate_press(stub)
+    assert np.isclose(stub.m1_candidate_hold_reference[2], 1.08)     # floor 0.05 + 1.03 = 1.08: both bounds agree
+    stub.latched_geometry_pickup_contact_target = None              # no target to bound it: nothing moves
+    stub.m1_candidate_hold_reference = np.array([0., 0., 1.10])
+    OnlineJoinPlanner.step_candidate_press(stub)
+    assert np.isclose(stub.m1_candidate_hold_reference[2], 1.10)
+
+
+def test_his_backend_gets_the_typed_object_box_and_typed_margins():
+    """12 Nov: with the object's sizes typed (every rig pickup script), his backend's object box is that object (the rig
+    file's 0.043 m half was an 86 mm object); the typed spline time and workspace reach it too."""
+    import yaml as _yaml
+    from launch import LaunchContext  # noqa: F401
+    _, ctx, ents = _rig(pickup_contact_height='0.011', pickup_object_size='0.105', pickup_object_thickness='0.050',
+                        spline_time_factor='4', workspace_xy='1.8', workspace_z_max='2.9')
+    inc = [e for e in ents if isinstance(e, IncludeLaunchDescription)][0]
+    files = dict(inc.launch_arguments)['extra_params_file']
+    files = ''.join(x.perform(ctx) if hasattr(x, 'perform') else str(x) for x in (files if isinstance(files, (list, tuple)) else [files]))
+    p = _yaml.safe_load(open(files.split(',')[-1]))['dynamic_planner_transfer_backend']['ros__parameters']
+    assert p['payload_half_x_m'] == p['payload_half_y_m'] == 0.0525 and p['payload_half_z_m'] == 0.025
+    assert p['spline_time_factor'] == 4.0 and p['workspace_max'] == [1.8, 1.8, 2.9]
+
+
+def test_lift_cap_only_when_typed():
+    """12 Nov (the object raised on a stand): lift_cap:=true caps his lift's tip at the planned loaded tip
+    (object_rest_z + pickup_lift_height), rig and twin; untyped nothing is passed."""
+    mod = _module()
+    g, _ = _nodes()
+    assert 'pickup_lift_max_tip_z' not in g['online_join_planner']['params']
+    g, _ = _nodes(lift_cap='true', drop_height='0.48', ring_z='1.2')
+    p = g['online_join_planner']['params']
+    assert p['pickup_lift_max_tip_z'] == pytest.approx(mod.GEOMETRY['rig']['object_rest_z'] + p['pickup_lift_height'])
+    assert 'pickup_lift_max_tip_z' not in _twin_planner(mission_mode='pickup_delivery')
+    p = _twin_planner(mission_mode='pickup_delivery', lift_cap='true')
+    assert p['pickup_lift_max_tip_z'] == pytest.approx(mod.GEOMETRY['rig_twin']['object_rest_z'] + p['pickup_lift_height'])

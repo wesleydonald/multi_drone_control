@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation as R
 import time
 from collections import deque
 # from .acados import generate_ocp_controller, set_initial_guess, warm_start_from_previous_solution, set_trajectory_reference_aligned, update_ocp_parameters
+from .throttle_bound import (set_throttle_state_max, THROTTLE_STATE_MAX, battery_throttle_offset,
+                             battery_compensated_channel)
 from .acados import (
     generate_payload_ocp_controller,
     set_initial_guess,
@@ -480,6 +482,22 @@ class Controller(Node):
             acados_cache_dir=self.acados_cache_dir or None,
             mpc_profile=self.mpc_profile,
         )
+        # multi_drone_control 4 Nov: his thrust ratio has no voltage term (RIG-1104-nr9m_2: a tired pack held QUAD4 25 cm
+        # low). battery_comp_slope adds the rig's identified term (throttle +0.022 per volt below 23.5 V, 30 Sep) to the
+        # throttle SENT to the radio only; his OCP, its command history and the UKF keep the model throttle. 0 = off
+        self.battery_comp_slope = float(self.declare_parameter('battery_comp_slope', 0.0).value)
+        self.battery_comp_v_ref = float(self.declare_parameter('battery_comp_v_ref', 23.5).value)
+        self.battery_voltage = None
+        if self.battery_comp_slope > 0.0:
+            self.create_subscription(Telemetry, 'telemetry', self._battery_telemetry_cb, 5)
+            self.get_logger().warning(f'battery_comp: +{self.battery_comp_slope:.3f} throttle per volt below '
+                                      f'{self.battery_comp_v_ref:.1f} V on the radio command (none until a voltage)')
+        # multi_drone_control 4 Nov: his 0.60 throttle bound, raised at run time only when typed (RIG-1104-k1m_3)
+        self.throttle_state_max = float(self.declare_parameter('throttle_state_max', THROTTLE_STATE_MAX).value)
+        if self.throttle_state_max != THROTTLE_STATE_MAX:
+            stages = set_throttle_state_max(self.ocp, self.throttle_state_max)
+            self.get_logger().warning(
+                f'throttle_state_max {self.throttle_state_max:.2f} (his {THROTTLE_STATE_MAX:.2f}) on {stages} stages')
         self.mpc_command_stage_duration_s = (
             float(self.ocp.acados_ocp.solver_options.time_steps[0])
             if self.mpc_partial_step_execution else None
@@ -1557,6 +1575,15 @@ class Controller(Node):
         return tracking_error
 
 
+    def _battery_telemetry_cb(self, msg):
+        v = float(msg.battery_voltage)
+        if 18.0 < v < 27.0:
+            self.battery_voltage = v
+
+    def battery_throttle_offset(self):
+        """The radio throttle added for the pack's sag (0 when off or before a voltage arrives)."""
+        return battery_throttle_offset(self.battery_comp_slope, self.battery_comp_v_ref, self.battery_voltage)
+
     @staticmethod
     def _empty_thrust_ratio_ukf_result(status):
         return {
@@ -2517,6 +2544,8 @@ class Controller(Node):
                         msg.channel_0, msg.channel_1,
                         (msg.channel_2 + 1.0) / 2.0, msg.channel_3,
                     ], dtype=float)
+                # after the model command is kept: the battery term reaches the radio only
+                msg.channel_2 = battery_compensated_channel(msg.channel_2, self.battery_throttle_offset())
             else:
                 # Stay armed but don't send thrust commands until takeoff
                 msg = ELRSCommand(armed=True, channel_0=0.0, channel_1=0.0, channel_2=-1.0, channel_3=0.0, channel_5=1.0, channel_6=1.0, channel_7=1.0, channel_8=1.0, channel_9=1.0, channel_10=1.0)

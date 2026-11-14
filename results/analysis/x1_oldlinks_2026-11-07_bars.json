@@ -1,0 +1,378 @@
+{
+ "void": {},
+ "cells": {
+  "f4": {
+   "cell": "f4",
+   "runs": {
+    "ours": [
+     "R4170",
+     "R4171"
+    ],
+    "nors": [
+     "R4172",
+     "R4173"
+    ],
+    "d05": [
+     "R4174",
+     "R4175"
+    ],
+    "d10": [
+     "R4176",
+     "R4177"
+    ],
+    "d20": [
+     "R4178",
+     "R4179"
+    ]
+   },
+   "B1": {
+    "confirmed": false,
+    "falsified": true,
+    "ref_max": {
+     "tilt_rise": 7.317636802108752,
+     "dip_mm": 31.34624552419374
+    },
+    "mean_diff": {
+     "tilt_rise": -0.21278874086917376,
+     "dip_mm": -0.29282470094249646
+    },
+    "each_worse": [
+     false,
+     false
+    ],
+    "verdict": "FALSIFIED"
+   },
+   "B2": {
+    "means": {
+     "ours": 7.1354913652599405,
+     "d05": 7.032742317841889,
+     "d10": 6.916851946041258,
+     "d20": 6.87520159152236,
+     "nors": 6.922702624390767
+    },
+    "largest_inversion": 0.11589037180063055,
+    "allowed": 0.5,
+    "d20_vs_ours": {
+     "confirmed": false,
+     "falsified": true,
+     "mean_diff": {
+      "tilt_rise": -0.2602897737375809
+     }
+    },
+    "verdict": "FALSIFIED"
+   },
+   "B4": {
+    "runs": [
+     {
+      "run": "R4170",
+      "miss": [],
+      "miss_frozen_t_level": []
+     },
+     {
+      "run": "R4171",
+      "miss": [],
+      "miss_frozen_t_level": []
+     }
+    ],
+    "verdict": "HOLDS",
+    "verdict_frozen_t_level": "HOLDS"
+   }
+  },
+  "h4": {
+   "cell": "h4",
+   "runs": {
+    "ours": [
+     "R4160",
+     "R4161"
+    ],
+    "nors": [
+     "R4162",
+     "R4163"
+    ],
+    "d05": [
+     "R4164",
+     "R4165"
+    ],
+    "d10": [
+     "R4166",
+     "R4167"
+    ],
+    "d20": [
+     "R4168",
+     "R4169"
+    ]
+   },
+   "B1": {
+    "confirmed": false,
+    "falsified": true,
+    "ref_max": {
+     "tilt_rise": 7.0554710694409755,
+     "dip_mm": 33.7715909449815
+    },
+    "mean_diff": {
+     "tilt_rise": -0.11149181828670329,
+     "dip_mm": -0.5092654468883353
+    },
+    "each_worse": [
+     false,
+     false
+    ],
+    "verdict": "FALSIFIED"
+   },
+   "B2": {
+    "means": {
+     "ours": 7.0477934849656005,
+     "d05": 6.530677246710116,
+     "d10": 6.739632038444386,
+     "d20": 7.0583250936359345,
+     "nors": 6.936301666678897
+    },
+    "largest_inversion": 0.5171162382554844,
+    "allowed": 0.5,
+    "d20_vs_ours": {
+     "confirmed": false,
+     "falsified": true,
+     "mean_diff": {
+      "tilt_rise": 0.01053160867033398
+     }
+    },
+    "verdict": "FALSIFIED"
+   },
+   "B4": {
+    "runs": [
+     {
+      "run": "R4160",
+      "miss": [],
+      "miss_frozen_t_level": []
+     },
+     {
+      "run": "R4161",
+      "miss": [],
+      "miss_frozen_t_level": []
+     }
+    ],
+    "verdict": "HOLDS",
+    "verdict_frozen_t_level": "HOLDS"
+   }
+  },
+  "h4p115": {
+   "cell": "h4p115",
+   "runs": {
+    "ours": [
+     "R4190",
+     "R4191"
+    ],
+    "nors": [
+     "R4192",
+     "R4193"
+    ]
+   },
+   "B1": {
+    "confirmed": false,
+    "falsified": true,
+    "ref_max": {
+     "tilt_rise": 9.761837037569773,
+     "dip_mm": 45.83219617489787
+    },
+    "mean_diff": {
+     "tilt_rise": -0.11109209231221406,
+     "dip_mm": 1.2955817560179526
+    },
+    "each_worse": [
+     false,
+     false
+    ],
+    "verdict": "FALSIFIED"
+   },
+   "B4": {
+    "runs": [
+     {
+      "run": "R4190",
+      "miss": [
+       "T6 > 5.0 s"
+      ],
+      "miss_frozen_t_level": []
+     },
+     {
+      "run": "R4191",
+      "miss": [
+       "T6 > 5.0 s"
+      ],
+      "miss_frozen_t_level": []
+     }
+    ],
+    "verdict": "MISS",
+    "verdict_frozen_t_level": "HOLDS"
+   }
+  },
+  "h8": {
+   "cell": "h8",
+   "runs": {
+    "ours": [
+     "R4150",
+     "R4151"
+    ],
+    "nors": [
+     "R4152",
+     "R4153"
+    ],
+    "d05": [
+     "R4154",
+     "R4155"
+    ],
+    "d10": [
+     "R4156",
+     "R4157"
+    ],
+    "d20": [
+     "R4158",
+     "R4159"
+    ]
+   },
+   "B1": {
+    "confirmed": false,
+    "falsified": true,
+    "ref_max": {
+     "tilt_rise": 1.611301067468181,
+     "dip_mm": 15.188779303638377
+    },
+    "mean_diff": {
+     "tilt_rise": 0.011546837233191498,
+     "dip_mm": 0.3220019471552611
+    },
+    "each_worse": [
+     false,
+     false
+    ],
+    "verdict": "FALSIFIED"
+   },
+   "B2": {
+    "means": {
+     "ours": 1.60937302215688,
+     "d05": 1.6153726032913807,
+     "d10": 1.5879844119054578,
+     "d20": 1.5236504604131271,
+     "nors": 1.6209198593900715
+    },
+    "largest_inversion": 0.06433395149233068,
+    "allowed": 0.5,
+    "d20_vs_ours": {
+     "confirmed": false,
+     "falsified": true,
+     "mean_diff": {
+      "tilt_rise": -0.08572256174375292
+     }
+    },
+    "verdict": "FALSIFIED"
+   },
+   "B4": {
+    "runs": [
+     {
+      "run": "R4150",
+      "miss": [],
+      "miss_frozen_t_level": []
+     },
+     {
+      "run": "R4151",
+      "miss": [],
+      "miss_frozen_t_level": []
+     }
+    ],
+    "verdict": "HOLDS",
+    "verdict_frozen_t_level": "HOLDS"
+   }
+  },
+  "sqTnoxy": {
+   "cell": "sqTnoxy",
+   "runs": {
+    "ours": [
+     "R4180",
+     "R4181"
+    ],
+    "nors": [
+     "R4182",
+     "R4183"
+    ],
+    "d05": [
+     "R4184",
+     "R4185"
+    ],
+    "d10": [
+     "R4186",
+     "R4187"
+    ],
+    "d20": [
+     "R4188",
+     "R4189"
+    ]
+   },
+   "U1": {
+    "confirmed": true,
+    "falsified": false,
+    "ref_max": {
+     "tilt_rise": 58.12249794692287,
+     "dip_mm": 99.30246138029675,
+     "settled_tilt": 0.6258773031386079
+    },
+    "mean_diff": {
+     "tilt_rise": -0.05531425580728211,
+     "dip_mm": 9.168371297001315,
+     "settled_tilt": 1.5941923091027064
+    },
+    "each_worse": [
+     true,
+     true
+    ],
+    "verdict": "CONFIRMED"
+   },
+   "U2": {
+    "means": {
+     "ours": 57.52194569612172,
+     "d05": 55.78992559532025,
+     "d10": 57.019547702981605,
+     "d20": 56.63457176171186,
+     "nors": 57.46663144031444
+    },
+    "largest_inversion": 1.7320201008014706,
+    "allowed": 2.876097284806086,
+    "d20_vs_ours": {
+     "confirmed": true,
+     "falsified": false,
+     "ref_max": {
+      "tilt_rise": 58.12249794692287,
+      "dip_mm": 99.30246138029675,
+      "settled_tilt": 0.6258773031386079
+     },
+     "mean_diff": {
+      "tilt_rise": -0.8873739344098581,
+      "dip_mm": 8.49683695432735,
+      "settled_tilt": -0.035320804156030894
+     },
+     "each_worse": [
+      true,
+      true
+     ]
+    },
+    "verdict": "CONFIRMED"
+   },
+   "U5": {
+    "runs": [
+     {
+      "run": "R4180",
+      "miss": [],
+      "miss_frozen_t_level": null
+     },
+     {
+      "run": "R4181",
+      "miss": [
+       "T6 > 5.0 s"
+      ],
+      "miss_frozen_t_level": null
+     }
+    ],
+    "verdict": "MISS"
+   }
+  }
+ },
+ "B1_claim": "FALSIFIED"
+}

@@ -83,7 +83,7 @@ def launch_setup(context, *args, **kwargs):
     # sim-interface loop below stays at `n`. But its VISUALISATION (fleet_viz TF, RobotModel,
     # displays) belongs here -- driven purely off /drone_{n}/motion_capture_state -- so the
     # viz count is n+1.
-    n_viz = n + (1 if attach else 0)
+    n_viz = n + (int(LaunchConfiguration('attach_partners').perform(context)) if attach else 0)
 
     nodes = [SetParameter(name='use_sim_time', value=True)]
 
@@ -161,6 +161,9 @@ def launch_setup(context, *args, **kwargs):
     if rig_pack:
         tel.update({'pack_model': True, 'rate_hz': 10.0,
                     'pack_v0': float(LaunchConfiguration('sim_pack_v0').perform(context))})
+        drain = LaunchConfiguration('sim_pack_drain').perform(context).strip()
+        if drain:                       # X4's packs recharge at the pad: a budget, not a battery model
+            tel['pack_drain'] = float(drain)
     nodes.append(Node(
         package='simulation_communication', executable='sim_telemetry',
         name='sim_telemetry', parameters=[tel],
@@ -234,6 +237,9 @@ def generate_launch_description():
         # Show the ATTACH button in the ArmPanel (arms the approach drone's magnet for the
         # attach flow). Off by default; pass attach:=true with old_worlds/three_attach.sdf.
         DeclareLaunchArgument('attach', default_value='false'),
+        # with attach: how many free partners fly after the carriers (the 4 -> 2 -> 4 twin: 2; the control launch's
+        # partners_file lists them), each drawn and given a pack like the one newcomer
+        DeclareLaunchArgument('attach_partners', default_value='1'),
         # Start the RViz GUI. Default true = the interactive behaviour everyone
         # already relies on. rviz:=false keeps the clock/pose bridges and the mocap
         # emulators -- which this launch OWNS and no controller can run without --
@@ -255,5 +261,6 @@ def generate_launch_description():
         # the rig twin's plant; a world in old_worlds/ takes sim_thrust_map:=linear
         DeclareLaunchArgument('sim_thrust_map', default_value='rig'),
         DeclareLaunchArgument('sim_pack_v0', default_value='23.8'),
+        DeclareLaunchArgument('sim_pack_drain', default_value=''),
         OpaqueFunction(function=launch_setup),
     ])

@@ -45,22 +45,31 @@ KEPT_COMMON = (
     'attach_blend_balanced', 'attach_datum_shift', 'attach_moving', 'newcomer_lifecycle', 'newcomer_fault_land',
     'diss_balanced_tensions',
     'weld_radius', 'weld_velocity_clock', 'enable_obstacle_avoidance', 'partner',
-    'partner_attached', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still', 'proof_rules',
+    'partner_attached', 'reattach_plate', 'partner_m2', 'partner_m2_part', 'partner_contact', 'contact_fold_seed', 'contact_still', 'proof_rules',
     'dry_hold',
+    'magnet_operator_topic',
     # the co-motion proof's typed thresholds and the frozen-marker filter (docs/analysis/attach_gates_2026-10-30.md)
-    'comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'tip_skip_repeats',
+    'comotion_d_ok', 'comotion_speed_window_s', 'comotion_lost', 'comotion_sep_xy', 'comotion_taut_margin', 'comotion_normal_min', 'comotion_speed', 'comotion_speed_ok', 'comotion_proof_dwell_s', 'comotion_inconclusive_s', 'comotion_normal_max', 'comotion_normal_ok', 'comotion_sep_normal', 'tip_skip_repeats',
     'partner_tilt_cut', 'tilt_slow_deg', 'partner_stuck_guard', 'warm_fault_not_live',
-    'fc_disarm_land', 'welded_on_load')
+    'fc_disarm_land', 'welded_on_load',
+    # 4 -> 2 -> 4 (the contract of 13 Nov): the partners' records file ('' = today, QUAD4 alone as drone 3)
+    'partners_file')
 KEPT_SIM = ('legacy', 'sil', 'sim_interface', 'ff_cap_force', 'sim_thrust_map', 'sim_thrust_offset',
-            'sim_pack_v0', 'sim_catch')
+            'sim_pack_v0', 'sim_catch', 'plan_rod_level', 'contact_sim_fig8')
 KEPT_REAL = ('real_io', 'rviz', 'magnet_channel', 'magnet_initial', 'attach_magnet_initial',
              'require_fc_armed', 'detach_magnet', 'hover_z', 'proof_taut_len', 'weld_point_z',
              # Motive body ids, forwarded to real_io_launch.py by the graphs that include it
              'mocap_drone_body_ids', 'mocap_payload_body_id', 'mocap_magnet_tip_body_id',
              # combined M1 contact attach on the rig (partner_contact): more Motive bodies, his nodes
-             'mocap_extra_bodies', 'partner_nodes', 'partner_args', 'contact_rig_orbit')
+             'mocap_extra_bodies', 'partner_nodes', 'partner_args', 'contact_rig_orbit',
+             'contact_rig_fig8',
+             # 4 -> 2 -> 4: his launch arguments for partner 2's instance (partner_args stays drone 3's);
+             # partner_args_d<d> for any other partner (PARTNER_ARGS)
+             'partner_args_d2')
 # typed per drone by the rig modes (bringup.real_mode.rig_io, rig_magnet_latches)
 PER_DRONE = re.compile(r'drone\d+_(serial|magnet_initial)$')
+# the rig's his launch arguments per partner instance (graph_attach, with partners_file)
+PARTNER_ARGS = re.compile(r'partner_args_d\d+$')
 # decided by the side or the mode, never typed
 INTERNAL = ('real', 'reference')
 
@@ -101,6 +110,38 @@ def as_launch_string(v):
     if isinstance(v, float):
         return repr(v)
     return str(v)
+
+
+def rod_model(vals):
+    """(plan_rod_level, rod_mass, rod_com) a planner flies, from its merged knobs (launch strings or typed values). The
+    switch reads the twin's rod from rod_level_mass and rod_level_com_frac x cable_len unless rod_mass or rod_com is
+    typed. It stays off under sil:=true (the SIL plant's rods have no mass) and reconfig_mode network (the port's arms).
+    One resolver for the launch, tools/check_geometry.py and tools/prebuild_planner.py, so they cannot disagree."""
+    def num(k):
+        try:
+            return float(vals.get(k))
+        except (TypeError, ValueError):
+            return None
+
+    def on(k):
+        return str(vals.get(k, '')).strip().lower() in ('1', 'true', 'yes')
+
+    level = (on('plan_rod_level') and not on('sil')
+             and str(vals.get('reconfig_mode', '')).strip().lower() != 'network')
+    mass, com = num('rod_mass'), num('rod_com')
+    if level:
+        mass = num('rod_level_mass') if mass is None else mass
+        if com is None and num('rod_level_com_frac') is not None and num('cable_len') is not None:
+            com = num('rod_level_com_frac') * num('cable_len')
+    return level, mass or 0.0, com or 0.0
+
+
+def chosen_knobs(lc):
+    """The knobs this launch chose itself: typed, or in its params_file (not the profiles' defaults)."""
+    from bringup.real_mode import _TYPED_KEY
+    out = {k for k in str(lc.get(_TYPED_KEY, '')).split(',') if k}
+    pf = str(lc.get('params_file', '')).strip()
+    return out | (set(flatten(_load(pf))) if pf else set())
 
 
 def side_file(side, legacy=False):
@@ -173,7 +214,8 @@ def declarations(side):
 def split(side, args):
     """(launch arguments, params_file knobs) of a {knob: value} dict for <side>_control_launch.py."""
     keep = set(kept(side)) | {'mode', 'params_file'}
-    largs = {k: v for k, v in args.items() if k in keep or PER_DRONE.match(k)}
+    largs = {k: v for k, v in args.items()
+             if k in keep or PER_DRONE.match(k) or (side == 'real' and PARTNER_ARGS.match(k))}
     return largs, {k: v for k, v in args.items() if k not in largs}
 
 
@@ -209,7 +251,8 @@ def apply(context, side):
         raise RuntimeError('profiles.apply: record_typed_args must run before the declarations')
     typed = {k for k in lc[_TYPED_KEY].split(',') if k}
     allowed = set(kept(side)) | {'mode', 'params_file'}
-    bad = sorted(k for k in typed if k not in allowed and not PER_DRONE.match(k))
+    bad = sorted(k for k in typed if k not in allowed and not PER_DRONE.match(k)
+                 and not (side == 'real' and PARTNER_ARGS.match(k)))
     if bad:
         raise RuntimeError(f'{side}_control_launch.py: {", ".join(bad)} not a launch argument here; '
                            f'set it in params_file:=<yaml> (knobs: bringup/config/{side}.yaml)')

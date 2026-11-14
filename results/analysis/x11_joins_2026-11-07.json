@@ -1,0 +1,1074 @@
+{
+ "R4094": {
+  "config": "sq_pickup_hover_L100_p115_cppreattach_bd_noxy_over",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.411,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.067,
+  "late_tracker_max_pct": 0.017,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 96.7,
+  "match_to_descend_s": 1.03,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 0.9 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.197,
+   "pair": "object-cable",
+   "carrier": 2,
+   "t": 98.21,
+   "phase": "DESCEND_TO_DROP_HEIGHT",
+   "by_pair_m": {
+    "body-body": 0.761,
+    "body-cable": 0.741,
+    "cable-body": 0.651,
+    "cable-cable": 0.283,
+    "object-body": 0.594,
+    "object-cable": 0.197
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 12.23,
+  "time_split_s": {
+   "climb": 0.3,
+   "install wait": 0.1,
+   "object": 86.2,
+   "transit": 2.3,
+   "approach": 1.0,
+   "MATCH": 1.0,
+   "descent": 3.8,
+   "bottom": 1.9
+  },
+  "tip_above_plate_at_match_m": 1.1,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 123.008,
+   "FOLD_IN": 123.113,
+   "LAND": 133.006,
+   "LANDED": 145.059
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.61,
+   "peak_abs_deg": 2.46,
+   "peak_at_s_after_weld": 5.25,
+   "mean_abs_deg": 1.66,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 133.006,
+   "ring_on_floor_s": 137.96,
+   "end": "LANDED",
+   "end_s": 145.06,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 12.1,
+   "quad4_tilt_peak_at_s_after_floor": 0.19,
+   "quad4_z_at_peak_m": 0.97,
+   "quad4_radial_offset_m": [
+    0.68,
+    0.69
+   ],
+   "carriers_tilt_peak_deg": 15.8,
+   "tip_z_at_peak_m": 0.056
+  },
+  "quad4_body_max_before_land_m": 3.31,
+  "quad4_body_max_at_s": 69.1
+ },
+ "R4095": {
+  "config": "sq_pickup_hover_L100_p115_cppreattach_bd_noxy_over",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.412,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.066,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 99.1,
+  "match_to_descend_s": 3.23,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.2 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.2,
+   "pair": "object-cable",
+   "carrier": 2,
+   "t": 98.0,
+   "phase": "DROP_OBJECT",
+   "by_pair_m": {
+    "body-body": 0.76,
+    "body-cable": 0.738,
+    "cable-body": 0.649,
+    "cable-cable": 0.285,
+    "object-body": 0.592,
+    "object-cable": 0.2
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 13.03,
+  "time_split_s": {
+   "climb": 0.3,
+   "install wait": 0.1,
+   "object": 86.9,
+   "transit": 2.1,
+   "approach": 1.1,
+   "MATCH": 3.2,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 1.086,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 125.39,
+   "FOLD_IN": 125.507,
+   "LAND": 135.388,
+   "LANDED": 147.317
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.74,
+   "peak_abs_deg": 2.35,
+   "peak_at_s_after_weld": 4.63,
+   "mean_abs_deg": 1.69,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 135.388,
+   "ring_on_floor_s": 140.34,
+   "end": "LANDED",
+   "end_s": 147.32,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 12.3,
+   "quad4_tilt_peak_at_s_after_floor": 0.17,
+   "quad4_z_at_peak_m": 0.96,
+   "quad4_radial_offset_m": [
+    0.69,
+    0.7
+   ],
+   "carriers_tilt_peak_deg": 15.8,
+   "tip_z_at_peak_m": 0.052
+  },
+  "quad4_body_max_before_land_m": 3.3,
+  "quad4_body_max_at_s": 69.1
+ },
+ "R4096": {
+  "config": "sq_floorjoin_hover_L100_p115_noxy_low",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.374,
+  "passed": false,
+  "failures": [
+   "/fleet/abort fired: drone 4 disarmed unexpectedly at t=75.37"
+  ],
+  "late_planner_pct": 0.133,
+  "late_tracker_max_pct": 0.041,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 31.8,
+  "match_to_descend_s": 1.03,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.2 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.286,
+   "pair": "cable-cable",
+   "carrier": 1,
+   "t": 58.05,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.76,
+    "body-cable": 0.739,
+    "cable-body": 0.746,
+    "cable-cable": 0.286
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 2.11,
+  "time_split_s": {
+   "climb": 15.3,
+   "install wait": 1.1,
+   "transit": 8.0,
+   "approach": 1.0,
+   "MATCH": 1.0,
+   "descent": 3.8,
+   "bottom": 1.6
+  },
+  "tip_above_plate_at_match_m": 0.283,
+  "card_safety_bar_scorer": true,
+  "events": {
+   "WELD": 58.076,
+   "FOLD_IN": 58.234,
+   "LAND": 68.077,
+   "FLEET_ABORT": 75.371
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.5,
+   "peak_abs_deg": 2.2,
+   "peak_at_s_after_weld": 6.06,
+   "mean_abs_deg": 1.41,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 68.077,
+   "ring_on_floor_s": 73.09,
+   "end": "FLEET_ABORT",
+   "end_s": 75.37,
+   "abort_after_land_s": 7.29,
+   "quad4_tilt_peak_deg": 91.6,
+   "quad4_tilt_peak_at_s_after_floor": 2.27,
+   "quad4_z_at_peak_m": 0.63,
+   "quad4_radial_offset_m": [
+    0.69,
+    1.02
+   ],
+   "carriers_tilt_peak_deg": 14.8,
+   "tip_z_at_peak_m": 0.048,
+   "carriers_z_at_abort_m": [
+    0.74,
+    0.72,
+    0.71
+   ],
+   "quad4_tilt_over_30_at_s_after_floor": 2.14
+  },
+  "quad4_body_max_before_land_m": 2.36,
+  "quad4_body_max_at_s": 46.4
+ },
+ "R4097": {
+  "config": "sq_floorjoin_hover_L100_p115_noxy_low",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.376,
+  "passed": false,
+  "failures": [
+   "/fleet/abort fired: drone 4 disarmed unexpectedly at t=75.17"
+  ],
+  "late_planner_pct": 0.133,
+  "late_tracker_max_pct": 0.055,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 31.9,
+  "match_to_descend_s": 1.04,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.4 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.285,
+   "pair": "cable-cable",
+   "carrier": 3,
+   "t": 57.0,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.759,
+    "body-cable": 0.736,
+    "cable-body": 0.746,
+    "cable-cable": 0.285
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 2.43,
+  "time_split_s": {
+   "climb": 15.2,
+   "install wait": 1.2,
+   "transit": 8.0,
+   "approach": 1.0,
+   "MATCH": 1.0,
+   "descent": 3.8,
+   "bottom": 1.6
+  },
+  "tip_above_plate_at_match_m": 0.287,
+  "card_safety_bar_scorer": true,
+  "events": {
+   "WELD": 58.049,
+   "FOLD_IN": 58.165,
+   "LAND": 68.048,
+   "FLEET_ABORT": 75.167
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.57,
+   "peak_abs_deg": 2.21,
+   "peak_at_s_after_weld": 5.98,
+   "mean_abs_deg": 1.39,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 68.048,
+   "ring_on_floor_s": 73.01,
+   "end": "FLEET_ABORT",
+   "end_s": 75.17,
+   "abort_after_land_s": 7.12,
+   "quad4_tilt_peak_deg": 86.8,
+   "quad4_tilt_peak_at_s_after_floor": 2.15,
+   "quad4_z_at_peak_m": 0.63,
+   "quad4_radial_offset_m": [
+    0.69,
+    1.02
+   ],
+   "carriers_tilt_peak_deg": 14.8,
+   "tip_z_at_peak_m": 0.043,
+   "carriers_z_at_abort_m": [
+    0.75,
+    0.73,
+    0.73
+   ],
+   "quad4_tilt_over_30_at_s_after_floor": 2.02
+  },
+  "quad4_body_max_before_land_m": 2.36,
+  "quad4_body_max_at_s": 52.7
+ },
+ "R4098": {
+  "config": "sq_floorjoin_hover_L100_p115_v1a30s_zt_xy08_bd_noxy",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.386,
+  "passed": false,
+  "failures": [
+   "/fleet/abort fired: drone 4 disarmed unexpectedly at t=76.16"
+  ],
+  "late_planner_pct": 0.132,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 31.9,
+  "match_to_descend_s": 1.07,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.5 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.287,
+   "pair": "cable-cable",
+   "carrier": 1,
+   "t": 57.34,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.76,
+    "body-cable": 0.736,
+    "cable-body": 0.746,
+    "cable-cable": 0.287
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 1.93,
+  "time_split_s": {
+   "climb": 15.2,
+   "install wait": 1.1,
+   "transit": 8.0,
+   "approach": 1.0,
+   "MATCH": 1.1,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.285,
+  "card_safety_bar_scorer": true,
+  "events": {
+   "WELD": 58.211,
+   "FOLD_IN": 58.354,
+   "LAND": 68.212,
+   "FLEET_ABORT": 76.161
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.53,
+   "peak_abs_deg": 2.19,
+   "peak_at_s_after_weld": 5.99,
+   "mean_abs_deg": 1.45,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 68.212,
+   "ring_on_floor_s": 73.22,
+   "end": "FLEET_ABORT",
+   "end_s": 76.16,
+   "abort_after_land_s": 7.95,
+   "quad4_tilt_peak_deg": 74.1,
+   "quad4_tilt_peak_at_s_after_floor": 2.93,
+   "quad4_z_at_peak_m": 0.57,
+   "quad4_radial_offset_m": [
+    0.69,
+    1.06
+   ],
+   "carriers_tilt_peak_deg": 14.8,
+   "tip_z_at_peak_m": 0.041,
+   "carriers_z_at_abort_m": [
+    0.63,
+    0.61,
+    0.61
+   ],
+   "quad4_tilt_over_30_at_s_after_floor": 2.83
+  },
+  "quad4_body_max_before_land_m": 2.36,
+  "quad4_body_max_at_s": 52.8
+ },
+ "R4099": {
+  "config": "sq_floorjoin_hover_L100_p115_v1a30s_zt_xy08_bd_noxy",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.373,
+  "passed": false,
+  "failures": [
+   "/fleet/abort fired: drone 4 disarmed unexpectedly at t=75.05"
+  ],
+  "late_planner_pct": 0.133,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 31.7,
+  "match_to_descend_s": 1.03,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.3 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.286,
+   "pair": "cable-cable",
+   "carrier": 3,
+   "t": 57.61,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.76,
+    "body-cable": 0.736,
+    "cable-body": 0.747,
+    "cable-cable": 0.286
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 1.84,
+  "time_split_s": {
+   "climb": 15.3,
+   "install wait": 0.9,
+   "transit": 8.0,
+   "approach": 1.0,
+   "MATCH": 1.0,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.286,
+  "card_safety_bar_scorer": true,
+  "events": {
+   "WELD": 58.021,
+   "FOLD_IN": 58.174,
+   "LAND": 68.02,
+   "FLEET_ABORT": 75.047
+  },
+  "fold_in": {
+   "pre_mean_deg": 1.49,
+   "peak_abs_deg": 2.23,
+   "peak_at_s_after_weld": 6.03,
+   "mean_abs_deg": 1.46,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 68.02,
+   "ring_on_floor_s": 73.03,
+   "end": "FLEET_ABORT",
+   "end_s": 75.05,
+   "abort_after_land_s": 7.03,
+   "quad4_tilt_peak_deg": 77.6,
+   "quad4_tilt_peak_at_s_after_floor": 2.0,
+   "quad4_z_at_peak_m": 0.64,
+   "quad4_radial_offset_m": [
+    0.7,
+    1.01
+   ],
+   "carriers_tilt_peak_deg": 14.8,
+   "tip_z_at_peak_m": 0.039,
+   "carriers_z_at_abort_m": [
+    0.77,
+    0.76,
+    0.76
+   ],
+   "quad4_tilt_over_30_at_s_after_floor": 1.87
+  },
+  "quad4_body_max_before_land_m": 2.36,
+  "quad4_body_max_at_s": 48.8
+ },
+ "R4100": {
+  "config": "fri30_sq6b_g_frz",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.389,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.0,
+  "late_tracker_max_pct": 0.025,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 33.7,
+  "match_to_descend_s": 0.57,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 2.2 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.196,
+   "pair": "cable-cable",
+   "carrier": 3,
+   "t": 46.14,
+   "phase": "ATTACH_READY",
+   "by_pair_m": {
+    "body-body": 0.648,
+    "body-cable": 0.636,
+    "cable-body": 0.617,
+    "cable-cable": 0.196
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.48,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.6,
+   "descent": 3.8,
+   "bottom": 15.4
+  },
+  "tip_above_plate_at_match_m": 0.302,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 60.043,
+   "FOLD_IN": 60.162,
+   "LAND": 70.045,
+   "LANDED": 81.923
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.13,
+   "peak_abs_deg": 1.8,
+   "peak_at_s_after_weld": 2.75,
+   "mean_abs_deg": 1.01,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 70.045,
+   "ring_on_floor_s": 75.05,
+   "end": "LANDED",
+   "end_s": 81.92,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.4,
+   "quad4_tilt_peak_at_s_after_floor": 0.17,
+   "quad4_z_at_peak_m": 0.96,
+   "quad4_radial_offset_m": [
+    0.68,
+    0.69
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.044
+  },
+  "quad4_body_max_before_land_m": 2.45,
+  "quad4_body_max_at_s": 37.5
+ },
+ "R4101": {
+  "config": "fri30_sq6b_g_frz",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.358,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.0,
+  "late_tracker_max_pct": 0.039,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 29.1,
+  "match_to_descend_s": 0.57,
+  "match_entries": 1,
+  "tries": 3,
+  "proof": "proven (try 3): the tip stayed with the plate (drift 1.5 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.197,
+   "pair": "cable-cable",
+   "carrier": 2,
+   "t": 54.65,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.648,
+    "body-cable": 0.639,
+    "cable-body": 0.617,
+    "cable-cable": 0.197
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.29,
+  "time_split_s": {
+   "climb": 7.9,
+   "install wait": 0.3,
+   "approach": 5.7,
+   "MATCH": 0.6,
+   "descent": 4.0,
+   "bottom": 10.7
+  },
+  "tip_above_plate_at_match_m": 0.301,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 55.424,
+   "FOLD_IN": 55.569,
+   "LAND": 65.424,
+   "LANDED": 77.323
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.11,
+   "peak_abs_deg": 1.79,
+   "peak_at_s_after_weld": 3.27,
+   "mean_abs_deg": 1.0,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 65.424,
+   "ring_on_floor_s": 70.47,
+   "end": "LANDED",
+   "end_s": 77.32,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.6,
+   "quad4_tilt_peak_at_s_after_floor": 0.17,
+   "quad4_z_at_peak_m": 0.96,
+   "quad4_radial_offset_m": [
+    0.68,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.041
+  },
+  "quad4_body_max_before_land_m": 2.44,
+  "quad4_body_max_at_s": 37.6
+ },
+ "R4102": {
+  "config": "fri30_sq6b_frz",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.343,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.0,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 20.0,
+  "match_to_descend_s": 0.53,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 2.2 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.198,
+   "pair": "cable-cable",
+   "carrier": 3,
+   "t": 45.56,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.65,
+    "body-cable": 0.641,
+    "cable-body": 0.617,
+    "cable-cable": 0.198
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.26,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.5,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.299,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 46.26,
+   "FOLD_IN": 46.4,
+   "LAND": 56.259,
+   "LANDED": 68.259
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.07,
+   "peak_abs_deg": 1.76,
+   "peak_at_s_after_weld": 2.7,
+   "mean_abs_deg": 0.98,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 56.259,
+   "ring_on_floor_s": 61.29,
+   "end": "LANDED",
+   "end_s": 68.26,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.4,
+   "quad4_tilt_peak_at_s_after_floor": 0.2,
+   "quad4_z_at_peak_m": 0.96,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.07
+  },
+  "quad4_body_max_before_land_m": 2.45,
+  "quad4_body_max_at_s": 37.4
+ },
+ "R4103": {
+  "config": "fri30_sq6b_frz",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.355,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.0,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 21.4,
+  "match_to_descend_s": 0.57,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 4.8 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.195,
+   "pair": "cable-cable",
+   "carrier": 2,
+   "t": 46.88,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.652,
+    "body-cable": 0.644,
+    "cable-body": 0.618,
+    "cable-cable": 0.195
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.26,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.6,
+   "descent": 3.8,
+   "bottom": 3.1
+  },
+  "tip_above_plate_at_match_m": 0.297,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 47.747,
+   "FOLD_IN": 47.875,
+   "LAND": 57.747,
+   "LANDED": 69.731
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.06,
+   "peak_abs_deg": 1.7,
+   "peak_at_s_after_weld": 2.65,
+   "mean_abs_deg": 1.0,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 57.747,
+   "ring_on_floor_s": 62.76,
+   "end": "LANDED",
+   "end_s": 69.73,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.4,
+   "quad4_tilt_peak_at_s_after_floor": 0.19,
+   "quad4_z_at_peak_m": 0.97,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.67
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.049
+  },
+  "quad4_body_max_before_land_m": 2.44,
+  "quad4_body_max_at_s": 38.0
+ },
+ "R4104": {
+  "config": "fri30_sq6b_g",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.369,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.137,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 20.0,
+  "match_to_descend_s": 0.57,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 0.9 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.2,
+   "pair": "cable-cable",
+   "carrier": 2,
+   "t": 44.64,
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "by_pair_m": {
+    "body-body": 0.651,
+    "body-cable": 0.643,
+    "cable-body": 0.616,
+    "cable-cable": 0.2
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.27,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.6,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.294,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 46.334,
+   "FOLD_IN": 46.45,
+   "LAND": 56.334,
+   "LANDED": 68.083
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.06,
+   "peak_abs_deg": 1.75,
+   "peak_at_s_after_weld": 2.64,
+   "mean_abs_deg": 0.99,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 56.334,
+   "ring_on_floor_s": 61.31,
+   "end": "LANDED",
+   "end_s": 68.08,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.4,
+   "quad4_tilt_peak_at_s_after_floor": 0.19,
+   "quad4_z_at_peak_m": 0.97,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.045
+  },
+  "quad4_body_max_before_land_m": 2.45,
+  "quad4_body_max_at_s": 37.6
+ },
+ "R4105": {
+  "config": "fri30_sq6b_g",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.34,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.0,
+  "late_tracker_max_pct": 0.048,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 20.0,
+  "match_to_descend_s": 0.53,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 0.8 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.201,
+   "pair": "cable-cable",
+   "carrier": 2,
+   "t": 44.36,
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "by_pair_m": {
+    "body-body": 0.651,
+    "body-cable": 0.643,
+    "cable-body": 0.617,
+    "cable-cable": 0.201
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.23,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.5,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.293,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 46.303,
+   "FOLD_IN": 46.395,
+   "LAND": 56.302,
+   "LANDED": 68.055
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.06,
+   "peak_abs_deg": 1.76,
+   "peak_at_s_after_weld": 2.63,
+   "mean_abs_deg": 0.99,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 56.302,
+   "ring_on_floor_s": 61.29,
+   "end": "LANDED",
+   "end_s": 68.06,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.3,
+   "quad4_tilt_peak_at_s_after_floor": 0.17,
+   "quad4_z_at_peak_m": 0.97,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.048
+  },
+  "quad4_body_max_before_land_m": 2.44,
+  "quad4_body_max_at_s": 37.6
+ },
+ "R4106": {
+  "config": "fri30_sq6b",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.341,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.137,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 19.9,
+  "match_to_descend_s": 0.53,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 0.8 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.201,
+   "pair": "cable-cable",
+   "carrier": 2,
+   "t": 44.35,
+   "phase": "DESCEND_TO_ATTACHMENT",
+   "by_pair_m": {
+    "body-body": 0.652,
+    "body-cable": 0.644,
+    "cable-body": 0.618,
+    "cable-cable": 0.201
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.22,
+  "time_split_s": {
+   "climb": 7.9,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.5,
+   "descent": 3.8,
+   "bottom": 1.5
+  },
+  "tip_above_plate_at_match_m": 0.296,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 46.11,
+   "FOLD_IN": 46.217,
+   "LAND": 56.111,
+   "LANDED": 68.054
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.05,
+   "peak_abs_deg": 1.76,
+   "peak_at_s_after_weld": 2.79,
+   "mean_abs_deg": 0.98,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 56.111,
+   "ring_on_floor_s": 61.08,
+   "end": "LANDED",
+   "end_s": 68.05,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.3,
+   "quad4_tilt_peak_at_s_after_floor": 0.17,
+   "quad4_z_at_peak_m": 0.97,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.05
+  },
+  "quad4_body_max_before_land_m": 2.44,
+  "quad4_body_max_at_s": 37.5
+ },
+ "R4107": {
+  "config": "fri30_sq6b",
+  "git": "bf52a8a",
+  "diff_sha256": "4d10fad5b123",
+  "code_hash": "5e7b1d3bd133",
+  "rtf": 0.357,
+  "passed": true,
+  "failures": [],
+  "late_planner_pct": 0.137,
+  "late_tracker_max_pct": 0.0,
+  "failed_solves": 0,
+  "his_takeoff_to_weld_s": 20.1,
+  "match_to_descend_s": 0.6,
+  "match_entries": 1,
+  "tries": 1,
+  "proof": "proven (try 1): the tip stayed with the plate (drift 1.2 mm,",
+  "clearance_min_m": null,
+  "clearance_detail": {
+   "min_m": 0.201,
+   "pair": "cable-cable",
+   "carrier": 3,
+   "t": 45.9,
+   "phase": "LIFT_PROOF",
+   "by_pair_m": {
+    "body-body": 0.65,
+    "body-cable": 0.641,
+    "cable-body": 0.617,
+    "cable-cable": 0.201
+   }
+  },
+  "ring_tilt_peak_takeoff_to_weld_deg": 0.25,
+  "time_split_s": {
+   "climb": 8.0,
+   "install wait": 0.3,
+   "approach": 5.8,
+   "MATCH": 0.6,
+   "descent": 3.8,
+   "bottom": 1.7
+  },
+  "tip_above_plate_at_match_m": 0.298,
+  "card_safety_bar_scorer": false,
+  "events": {
+   "WELD": 46.373,
+   "FOLD_IN": 46.52,
+   "LAND": 56.373,
+   "LANDED": 68.364
+  },
+  "fold_in": {
+   "pre_mean_deg": 0.07,
+   "peak_abs_deg": 1.77,
+   "peak_at_s_after_weld": 2.67,
+   "mean_abs_deg": 0.98,
+   "window": "WELD to min(LAND, WELD + 15 s), absolute tilt"
+  },
+  "landing_reading": {
+   "LAND": 56.373,
+   "ring_on_floor_s": 61.42,
+   "end": "LANDED",
+   "end_s": 68.36,
+   "abort_after_land_s": null,
+   "quad4_tilt_peak_deg": 10.4,
+   "quad4_tilt_peak_at_s_after_floor": 0.19,
+   "quad4_z_at_peak_m": 0.96,
+   "quad4_radial_offset_m": [
+    0.67,
+    0.68
+   ],
+   "carriers_tilt_peak_deg": 16.3,
+   "tip_z_at_peak_m": 0.042
+  },
+  "quad4_body_max_before_land_m": 2.45,
+  "quad4_body_max_at_s": 37.5
+ },
+ "_notes": {
+  "scorer": "tools/attach_clearance.py (chunk 8b, docs/claim_batch_2026-11-07.md section 10) per run; validity from tools/s_metrics.score; fold_in, landing_reading and quad4_body_max computed in the lab chat's scratchpad score_joins.py from run.csv (not the scorer).",
+  "fold_in_window": "absolute ring tilt from WELD to min(LAND, WELD + 15 s); pre_mean = the 5 s before WELD",
+  "landing_reading": "from LAND to the end (LANDED or FLEET_ABORT): the ring on the floor = first payload_z < 0.05 m after LAND; QUAD4 = d3; radial offset = QUAD4 body to the ring centre, at LAND and at its tilt peak",
+  "comparators_like_for_like": "R3765 / R3766 / R3768 (5 Nov, final masses, same configs, tree of 5 Nov 16:27 / 17:44) and R3751 (5 Nov, final masses, fri30_sq6b); R3674 (4 Nov) flew the earlier masses: not like for like; R2843/R2844/R2862/R2864/R2865 (28-29 Oct): earlier tree and masses, integral on"
+ }
+}

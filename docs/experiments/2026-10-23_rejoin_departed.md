@@ -459,3 +459,32 @@ second run ("a 2nd if clean").
 weld-height cap dipped the rejoiner's reference 1.1 cm (2.044 -> 2.033 m) while the pair leaned +2.95 deg toward the
 plate: the critic's M1 (the cap clamps the reference outside the OCP, and its dip is its own disturbance). Every other
 E5 bar passes in all four runs; the mirror's lean before LAND stays the closest margin (1.88 / 1.93 against 2).
+
+## The claim re-fly on the earlier quadrotor masses (7 Nov, R3992-R3999; feed F071)
+The frozen tree (bf52a8a + the old-mass worlds and tools: one-tree code hash 5e7b1d3bd133, diff_sha256 e4817e2048c0),
+the pre-4 Nov quadrotor masses (*_oldlinks worlds; Wesley 6 Nov), each case x2 (lab PC chunk 8c). No void: late ticks
+at most 0.08 %, no failed solve, RTF 0.70-0.91, one REJOIN WELD line and one REJOIN_WELD row per run. Bars as frozen
+above (E1 23 Oct 00:42, E2 05:13, E5 07:57), scored with `tools/rejoin_metrics.py`
+(results/analysis/rejoin_oldlinks_2026-11-07.json).
+
+| Case | Runs | (a) on plate (s) | (b) joint (s) | (c) fold-in tilt peak (deg) | End (cm) | Tension vs share | Lean before LAND (deg) | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| E1 square | R3992 / R3993 | 21.86 / 23.77 | 0.026 / 0.036 | 1.56 / 1.48 | 1.4 / 1.5 | +3.0 / +2.8 % | 0.08 / 0.10 | PASS |
+| E2 T | R3994 / R3995 | 17.46 / 17.53 | 0.015 / 0.015 | 1.60 / 1.49 | 1.3 / 1.4 | -3 / -2 % | 0.73 / 0.73 | PASS |
+| E5 toward (+0.0066 N m) | R3996 / R3997 | 16.47 / 16.57 | 0.022 / 0.021 | 3.51 / 3.02 | 1.5 / 1.2 | -1 / -1 % | 0.48 / 0.49 | PASS |
+| E5 away (-0.0110 N m) | R3998 / R3999 | 17.67 / 18.55 | 0.012 / 0.024 | 3.10 / 3.33 | 1.5 / 1.5 | -2 / -1 % | 1.92 / 1.92 | PASS |
+
+- The pair's lean in the 0.5 s before the weld: +3.25 / +3.21 deg toward plate 3, -2.61 / -3.05 deg away (over the 2 deg
+  under which E5 does not test the lean); level T +0.71 / +0.72 deg. The fold-in tilt is the absolute tilt, so in E5 it
+  includes that lean. No run was over 5 deg at any time in its window.
+- The mirror's lean before LAND (1.92 deg against 2) is the closest margin again, with its torque on until LAND.
+- The weld-height cap bound 101 ticks on the T (59-61 in the square), the plan 2.0-2.7 cm above it at the last.
+- Against 23 Oct (the same masses, an earlier tree): E5's R2712 (5.28 deg) stays recorded as missed; both E5 repeats now
+  hold. On the final masses the table never flew; the exploratory R3907 (6 Nov, the T) took 37.0 s to reach its plate
+  against the 30 s bar (F058), and that stays on record.
+
+**Reviewer of the 7 Nov re-fly (feed F072):** numbers and verdicts stand. Bar provenance: E1, E2, E5 were set by the
+lab chat overnight on 23 Oct, each before its case first flew; Wesley approved flying the leaning pair, not the bar
+values (the header's "Wesley freezes them" never happened). The mirror's 1.92 deg is a 10 s mean, the ring swinging to
+3.1-3.5 deg inside it; the T's 3 % is the planned share (the 0.1 N floor); the leaning cases swing through level when
+the blend ends (+11.2-11.5 s).

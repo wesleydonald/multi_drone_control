@@ -23,7 +23,8 @@ METHODS = ('_take_back', '_land_take_back_tick', '_contact_span_tick', '_contact
            '_weld_refused', '_set_on_load', '_departed_down', '_drop_departed', '_start_approach',
            '_abort_newcomer', '_attach_ocp', '_capture_weld_rho', '_start_weld_joins_creep', '_do_attach',
            '_take_back_plan', '_take_back_tick', '_take_back_next', '_ring_moves', '_ring_plan', '_guard_setup',
-           '_guard_read', '_guard_check', '_guard_follow', '_guard_ring_fresh', '_weld_rho_of', '_guard_why')
+           '_guard_read', '_guard_check', '_guard_follow', '_guard_ring_fresh', '_weld_rho_of', '_guard_why',
+           '_take_back_avoid_pickup')
 
 
 class _Log:
@@ -1603,3 +1604,67 @@ def test_the_span_goes_off_while_he_climbs_back_after_a_descent():
     f._his_phase_cb(String(data='DESCEND_TO_ATTACHMENT'))
     _tick(f)
     assert f._magnet_cmd_pub.msgs[-1] == 'ON'
+
+
+# ── take_back_avoid_pickup_m (Wesley 13 Nov: the object on a narrow stand) ───────────────────────────────────
+
+def _over_the_stand(avoid):
+    f = _node(quad=(0.0, 1.4, 0.1))
+    f._take_back_avoid_pickup_m, f._pos_limit_m, f._pickup_point = avoid, 1.8, None
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._joint_state_cb(String(data='detached'))
+    f.attach_pos[0] = np.array([-1.0, 0.9, 2.5])              # over the object at his descent's start
+    f._his_phase_cb(String(data='DESCEND_TO_PICKUP'))
+    f.attach_pos[0] = np.array([-1.0, 0.9, 2.2])              # the magnet down on the object on the stand
+    f._his_phase_cb(String(data='MAGNET_ATTACH_WAIT'))
+    f._take_back(0, 'LAND')
+    return f
+
+
+def test_off_by_default_a_take_back_over_the_stand_comes_straight_down():
+    f = _over_the_stand(0.0)
+    assert 3 not in f._departed_step and 3 not in f._departed_next
+
+
+def test_over_the_stand_it_rises_moves_clear_of_the_pickup_point_then_comes_down():
+    f = _over_the_stand(0.6)
+    assert np.allclose(f._departed_step[3], [-1.0, 0.9, 2.5])                  # up to his descent's start height
+    side = f._departed_next[3]
+    assert side[2] == pytest.approx(2.5)
+    assert np.hypot(side[0] + 1.0, side[1] - 0.9) >= 0.6 - 1e-6               # clear of the stand
+    assert max(abs(side[0]), abs(side[1])) <= 1.8 - 0.1                       # inside the position limit's margin
+    assert np.hypot(side[0], side[1]) >= DEPARTED_CLEAR_R                      # not toward the ring
+    for _ in range(int(round(NEWCOMER_RELEASE_S * HZ)) + 120):
+        _tick(f)
+    p = f.published[-1][1][0][0]
+    assert np.hypot(p[0] + 1.0, p[1] - 0.9) >= 0.6 - 0.05                      # it came down beside the stand
+
+
+def test_near_the_wall_it_still_finds_a_point_clear_of_the_stand():
+    f = _node(quad=(0.0, 1.4, 0.1))
+    f._take_back_avoid_pickup_m, f._pos_limit_m = 0.6, 1.8
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._joint_state_cb(String(data='detached'))
+    f.attach_pos[0] = np.array([-1.4, 1.4, 2.5])
+    f._his_phase_cb(String(data='DESCEND_TO_PICKUP'))
+    f._take_back(0, 'LAND')
+    side = f._departed_next.get(3, f._departed_step.get(3))
+    assert np.hypot(side[0] + 1.4, side[1] - 1.4) >= 0.6 - 1e-6
+    assert max(abs(side[0]), abs(side[1])) <= 1.8 - 0.1
+
+
+def test_with_the_object_on_the_magnet_it_still_steps_clear_of_the_stand():
+    """Twin R4410: LAND in LIFT_OBJECT (his ball on) found no point, as the ring clearance had grown by the rod."""
+    f = _node(quad=(0.0, 1.4, 0.1))
+    f._take_back_avoid_pickup_m, f._pos_limit_m, f._pickup_point = 0.6, 1.75, None
+    f._his_phase_cb(String(data='TAKEOFF'))
+    f._joint_state_cb(String(data='detached'))
+    f.attach_pos[0] = np.array([1.6, 2.0, 2.5])
+    f._his_phase_cb(String(data='DESCEND_TO_PICKUP'))
+    f._ball_cb(Bool(data=True))
+    f._his_phase_cb(String(data='LIFT_OBJECT'))
+    f.attach_pos[0] = np.array([1.62, 2.0, 2.37])
+    f._take_back(0, 'LAND')
+    side = f._departed_next.get(3, f._departed_step.get(3))
+    assert side is not None and np.hypot(side[0] - 1.6, side[1] - 2.0) >= 0.6 - 1e-6
+    assert max(abs(side[0]), abs(side[1])) <= 1.75 - 0.1 + 1e-9
