@@ -1,0 +1,45 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    cooperative_attached_plate_topics:
+    - /fake_obstacles/drone_0/attached_plate
+    - /fake_obstacles/drone_1/attached_plate
+    - /fake_obstacles/drone_2/attached_plate
+    cooperative_attached_tether_enabled: true
+    cooperative_body_half_x_m: 0.105
+    cooperative_body_half_y_m: 0.105
+    cooperative_body_half_z_m: 0.06
+    cooperative_ring_angle_zero_rad: 0.0
+    cooperative_ring_plate_pitch_diameter_m: 0.45
+    cooperative_ring_pose_index: 0
+    cooperative_ring_pose_topic: /fake_payload/pose_array
+    cooperative_tether_anchor_z_m: -0.04
+    cooperative_tracking_half_x_m: 0.06
+    cooperative_tracking_half_y_m: 0.06
+    cooperative_tracking_half_z_m: 0.06
+    cooperative_tracking_safety_enabled: false
+    cooperative_world_refresh_period_s: 0.2
+    exit_max_search_z_m: 3.2
+    exit_max_swing_angle_rad: 0.08726646259971647
+    exit_protected_s: 1.5
+    exit_workspace_max:
+    - 1.8
+    - 1.8
+    - 3.26
+    exit_workspace_min:
+    - -1.8
+    - -1.8
+    - 0.0
+    fixed_splice_lookahead_s: 0.3
+    max_swing_angle_rad: 0.05236
+    maximum_search_z_m: 3.3
+    moving_prefix_topic: /dynamic_planner/transfer_prefix
+    payload_center_from_magnet_z_m: -0.0475
+    payload_half_x_m: 0.0525
+    payload_half_y_m: 0.0525
+    payload_half_z_m: 0.025
+    require_payload_attached_for_enable: true
+    spline_time_factor: 2.0
+    static_target_topic: /dynamic_planner/static_target
+    suspended_cable_length_m: 1.034
+    swing_envelope_shape: outer_octagon
+    target_time_fixed_point_iterations: 30

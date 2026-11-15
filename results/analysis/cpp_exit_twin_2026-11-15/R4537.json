@@ -1,0 +1,392 @@
+{
+ "run": "R4537_sim_gz_t15x_fig8_timeout_trial_s14",
+ "phases": [
+  [
+   1.042,
+   "WAIT_FOR_TAKEOFF"
+  ],
+  [
+   27.598,
+   "TAKEOFF"
+  ],
+  [
+   38.463,
+   "TRANSIT_TO_DROP_POINT"
+  ],
+  [
+   46.064,
+   "SETTLE_ABOVE_DROP_POINT"
+  ],
+  [
+   48.595,
+   "DESCEND_TO_DROP_HEIGHT"
+  ],
+  [
+   60.097,
+   "DROP_OBJECT"
+  ],
+  [
+   60.163,
+   "CLEAR_DROP_ZONE"
+  ],
+  [
+   83.201,
+   "RETURN_TO_START"
+  ],
+  [
+   90.764,
+   "AT_START"
+  ],
+  [
+   92.797,
+   "LANDING"
+  ],
+  [
+   103.169,
+   "LANDED_DISARMED"
+  ],
+  [
+   104.303,
+   "TAKEN_BACK"
+  ]
+ ],
+ "events": [
+  [
+   2.365,
+   "PICKUP",
+   "/tejen/object_attached"
+  ],
+  [
+   3.0,
+   "ARM",
+   ""
+  ],
+  [
+   6.0,
+   "TAKEOFF",
+   ""
+  ],
+  [
+   8.002,
+   "WAIT_LIFT",
+   "0.3 60"
+  ],
+  [
+   20.261,
+   "LIFTED",
+   "12.26"
+  ],
+  [
+   32.259,
+   "WAIT_LOG",
+   "500 HIS:C.. exit. clearance complete"
+  ],
+  [
+   32.296,
+   "PATH_START",
+   "fig_8"
+  ],
+  [
+   60.13,
+   "DROP",
+   "/tejen/object_attached"
+  ],
+  [
+   66.195,
+   "LOGGED",
+   "33.94"
+  ],
+  [
+   66.195,
+   "SIGNAL_SENT",
+   "STOP dynamic_planner_transfer_backend pids 2006"
+  ],
+  [
+   66.195,
+   "SIGNAL",
+   "STOP dynamic_planner_transfer_backend"
+  ],
+  [
+   67.195,
+   "WAIT_LOG",
+   "120 HIS:C.. exit hand-off FAILED"
+  ],
+  [
+   73.198,
+   "LOGGED",
+   "6.00"
+  ],
+  [
+   75.2,
+   "SIGNAL_SENT",
+   "CONT dynamic_planner_transfer_backend pids 2006"
+  ],
+  [
+   75.2,
+   "SIGNAL",
+   "CONT dynamic_planner_transfer_backend"
+  ],
+  [
+   83.198,
+   "HIS_LAND",
+   ""
+  ],
+  [
+   92.198,
+   "WAIT_LOG",
+   "200 PHASE:LANDED_DISARMED"
+  ],
+  [
+   103.169,
+   "LOGGED",
+   "10.97"
+  ],
+  [
+   104.169,
+   "LAND",
+   ""
+  ],
+  [
+   104.169,
+   "PLANNER_LAND",
+   ""
+  ],
+  [
+   104.297,
+   "TAKE_BACK",
+   "/drone_3/take_back"
+  ],
+  [
+   117.097,
+   "LANDED",
+   "/fleet/landed"
+  ]
+ ],
+ "ref_steps_from_clearance": [
+  {
+   "t": 103.2,
+   "phase": "LANDED_DISARMED",
+   "dp_m": 0.1701,
+   "dv_mps": 0.25
+  },
+  {
+   "t": 90.78,
+   "phase": "AT_START",
+   "dp_m": 0.0121,
+   "dv_mps": 0.032
+  },
+  {
+   "t": 92.81,
+   "phase": "LANDING",
+   "dp_m": 0.0084,
+   "dv_mps": 0.25
+  },
+  {
+   "t": 85.7,
+   "phase": "RETURN_TO_START",
+   "dp_m": 0.0073,
+   "dv_mps": 0.0
+  },
+  {
+   "t": 85.57,
+   "phase": "RETURN_TO_START",
+   "dp_m": 0.0072,
+   "dv_mps": 0.0
+  }
+ ],
+ "ref_dv_max_from_clearance": 0.25,
+ "body_z_max_m": 2.949,
+ "body_xy_absmax_m": [
+  0.752,
+  1.413
+ ],
+ "body_gap_min_m": 0.718,
+ "clear_to_at_start_s": 30.6,
+ "clear_to_landed_s": 43.01,
+ "his_lines": [
+  "$ ros2 launch tejen_mission partner_mission.launch.py geometry:=rig_twin_L100 plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0] contact_attach:=true carry_clearance:=0.25 mission_mode:=delivery_rejoin ring_z:=1.2 commit_backdate:=0.04 tracking_check:=off attach_cpp_transit:=false attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30 attach_twist:=zero match_xy:=0.05 match",
+  "[INFO] [launch.user]: C1F.8c: prepared motion is readiness evidence only; authority is acknowledged after a fresh post-request plan from the stationary hold.",
+  "dynamic_planner_transfer_backend INFO: BODY target=/dynamic_planner/transfer_target target_velocity=/dynamic_planner/transfer_target_velocity enable=/dynamic_planner/transfer_enable authority=/dynamic_planner/transfer_authority ack=/dynamic_planner/transfer_authority_ack planner=5.0 Hz reference=30 Hz spline_factor=2.00 far/close=1.00/2.50 close_m=0.20 smoother(jerk/goal)=1.00/10.00 octopus_active",
+  "ring_bridge INFO: Fake cooperative transport world publisher started.",
+  "ring_bridge INFO: Frame: map",
+  "ring_bridge INFO: Payload pose topic: /fake_payload/pose",
+  "ring_bridge INFO: Attachment point topic: /fake_attachment_point/pose",
+  "ring_bridge INFO: Obstacle scenario: three_attached",
+  "ring_bridge INFO: Obstacle offsets: [(-1.3318033940727468e-16, -0.7250000000000001, 0.8980254037844386), (0.6278684177437182, 0.3625, 0.8980254037844386), (-0.6278684177437182, 0.3625, 0.8980254037844386)]",
+  "ring_bridge INFO: Obstacle pose array topic: /fake_obstacles/poses",
+  "ring_bridge INFO: Obstacle 0 state topic: /fake_obstacles/drone_0/state",
+  "ring_bridge INFO: Obstacle 0 commitment topic: /fake_obstacles/drone_0/committed_trajectory",
+  "ring_bridge INFO: Obstacle 1 state topic: /fake_obstacles/drone_1/state",
+  "ring_bridge INFO: Obstacle 1 commitment topic: /fake_obstacles/drone_1/committed_trajectory",
+  "ring_bridge INFO: Obstacle 2 state topic: /fake_obstacles/drone_2/state",
+  "ring_bridge INFO: Obstacle 2 commitment topic: /fake_obstacles/drone_2/committed_trajectory",
+  "ring_bridge INFO: Payload/basket commitment topic: /fake_payload/committed_trajectory",
+  "ring_bridge INFO: Marker topic: /fake_world/markers",
+  "ring_bridge INFO: [ring_bridge] carriers' plates for his tether model (his numbering): [9, 1, 5]",
+  "ring_bridge INFO: [ring_bridge] carriers (cw) [90, 330, 210] deg, cable 1.00 m at 60 deg, target plate 9 (his 3)",
+  "ring_bridge INFO: [ring_bridge] attachment twist: zero; plate height low-pass: off",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 0 / 3 max_age_ms=0.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 0/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.100 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=19.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.000 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.040 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.183 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=16.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.233 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=17.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.254 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.271 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=20.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.263 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.259 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.292 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.084 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=17.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=-1.000 max_track_ratio=0.035 tracking_enforced=false",
+  "online_join_planner INFO: Planner phase: WAIT_FOR_TAKEOFF -> TAKEOFF. Reason: takeoff command received",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.003 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.003 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.007 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.007 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.007 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.008 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.010 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.018 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=16.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.541 max_track_ratio=0.029 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=0 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] latest_status: RECOVERY_WAITING_COMMON_STOPPED_REFERENCE",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.038 tracking_enforced=false",
+  "online_join_planner INFO: C1F.8c2 delivery_rejoin stationary handoff state settled: drift=0.136 m, speed=0.126 m/s. Re-latched measured hold position; enabling C++ preparation.",
+  "dynamic_planner_transfer_backend WARN: C1F.8c authority requested at ROS time 46.871000; prepared reuse unavailable or rejected, seeded stationary hold, and launching a fresh post-grant solve immediately with 300.0 ms handoff splice lead.",
+  "online_join_planner WARN: C1F.2b authority source switched stationary Python hold -> C++ at TRANSIT_TO_DROP_POINT entry.",
+  "online_join_planner INFO: Planner phase: TAKEOFF -> TRANSIT_TO_DROP_POINT. Reason: C1F.2b C++ transfer prepared from the stationary loaded climb hold",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=5 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.040 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=10 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.045 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=15 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.047 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=20 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.042 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=25 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.039 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=32 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.043 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=15.000 refreshes=38 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.049 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=43 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.049 tracking_enforced=false",
+  "online_join_planner INFO: Planner phase: TRANSIT_TO_DROP_POINT -> SETTLE_ABOVE_DROP_POINT. Reason: moving rendezvous entered dynamically-capturable bridge region",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.035 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.024 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=9.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.043 tracking_enforced=false",
+  "online_join_planner INFO: Planner phase: SETTLE_ABOVE_DROP_POINT -> DESCEND_TO_DROP_HEIGHT. Reason: drop-point-relative hover settled",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.039 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.056 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.041 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.039 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.037 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.035 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.539 max_track_ratio=0.036 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=15.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.541 max_track_ratio=0.041 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.540 max_track_ratio=0.045 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.540 max_track_ratio=0.047 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.541 max_track_ratio=0.051 tracking_enforced=false",
+  "online_join_planner INFO: Planner phase: DESCEND_TO_DROP_HEIGHT -> DROP_OBJECT. Reason: drop descent profile complete",
+  "online_join_planner INFO: Planner phase: DROP_OBJECT -> CLEAR_DROP_ZONE. Reason: object released or release dwell completed",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=18.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.540 max_track_ratio=0.096 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.560 max_track_ratio=0.041 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.562 max_track_ratio=0.026 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=22.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.578 max_track_ratio=0.038 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.579 max_track_ratio=0.042 tracking_enforced=false",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=21.000 refreshes=45 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.579 max_track_ratio=0.003 tracking_enforced=false",
+  "online_join_planner INFO: C++ exit: clearance complete; hand-over deadline +7.0 s (81700000000 ns), on the moving prefix",
+  "online_join_planner INFO: C++ exit: prefix 1 [74.700, 79.700] s, 1 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0003 m, peaks |v| 0.13 |a| 0.15 |j| 0.59",
+  "online_join_planner INFO: C++ exit: prefix 2 [75.700, 80.700] s, 2 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.09 |a| 0.01 |j| 0.04",
+  "online_join_planner INFO: C++ exit: prefix 3 [76.700, 81.700] s, 3 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.09 |a| 0.01 |j| 0.01",
+  "online_join_planner INFO: C++ exit: prefix 4 [77.700, 82.700] s, 3 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.10 |a| 0.01 |j| 0.01",
+  "online_join_planner INFO: C++ exit: prefix 5 [78.700, 83.700] s, 3 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.11 |a| 0.03 |j| 0.02",
+  "online_join_planner INFO: C++ exit: prefix 6 [79.700, 84.700] s, 3 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.12 |a| 0.08 |j| 0.06",
+  "online_join_planner INFO: C++ exit: prefix 7 [80.700, 85.700] s, 3 piece(s); blend 1.00 s after 1 fit(s), fit error 0.0000 m, peaks |v| 0.12 |a| 0.09 |j| 0.06",
+  "online_join_planner ERROR: C++ exit hand-off FAILED: no accepted grant within 7.0 s; cancelled, back on the live ring-following reference until LAND",
+  "online_join_planner INFO: C++ exit: cancel blend 1.00 s from |dp| 0.003 m |dv| 0.011 m/s |da| 0.008 m/s^2",
+  "[dynamic_planner_transfer_backend-8] cooperative scene/fresh/required: true / 3 / 3 max_age_ms=92.000 refreshes=47 stale_disables=0",
+  "[dynamic_planner_transfer_backend-8] cooperative prediction/shared fresh: shared_trajectory / 3/3 min_future_s=29.576 max_track_ratio=0.137 tracking_enforced=false",
+  "online_join_planner INFO: Planner phase: CLEAR_DROP_ZONE -> RETURN_TO_START. Reason: operator LAND in the C++ exit: the direct return to the start, then LANDING",
+  "online_join_planner WARN: C++ exit: operator LAND; C++ cancelled (epoch 6, prefix 7); the direct return, then LANDING at the start",
+  "online_join_planner INFO: C++ exit: RETURN_TO_START starts on the executed reference (|p - measured| 0.019 m)",
+  "online_join_planner INFO: C++ exit: escape blend 1.00 s from |dp| 0.000 m |dv| 0.000 m/s |da| 0.344 m/s^2",
+  "online_join_planner INFO: Planner phase: RETURN_TO_START -> AT_START. Reason: over the start hover: holding until LAND",
+  "online_join_planner INFO: Planner phase: AT_START -> LANDING. Reason: operator LAND: the escape reached the start hover",
+  "online_join_planner INFO: Planner phase: LANDING -> LANDED_DISARMED. Reason: published DISARM at z=0.18 m",
+  "online_join_planner INFO: Planner phase: LANDED_DISARMED -> TAKEN_BACK. Reason: take-back from the fleet planner",
+  "[ERROR] [ring_bridge-4]: process has died [pid 1998, exit code -2, cmd '/home/wesley/multi_drone_control/install/tejen_mission/lib/tejen_mission/ring_bridge --ros-args -r __node:=fake_cooperative_transport_world --params-file /tmp/launch_params_px7277wl']."
+ ]
+}

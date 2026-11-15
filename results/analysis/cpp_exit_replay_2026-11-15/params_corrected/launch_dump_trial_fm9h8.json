@@ -1,0 +1,3087 @@
+{
+ "args": {
+  "attach_azimuths_deg": "90,330,210",
+  "attach_cable_len": "0.994",
+  "attach_magnet_initial": "ON",
+  "attach_x_offset": "0.0",
+  "attach_y_offset": "0.2293",
+  "comotion_d_ok": "0.02",
+  "comotion_inconclusive_s": "6.0",
+  "comotion_lost": "0.06",
+  "comotion_normal_max": "0.01",
+  "comotion_normal_min": "-0.03",
+  "comotion_normal_ok": "0.04",
+  "comotion_proof_dwell_s": "0.5",
+  "comotion_sep_normal": "0.04",
+  "comotion_sep_xy": "0.06",
+  "comotion_speed": "0.06",
+  "comotion_speed_ok": "0.06",
+  "comotion_speed_window_s": "0.5",
+  "comotion_taut_margin": "0.05",
+  "contact_rig_fig8": "true",
+  "enable_approach_mpc": "false",
+  "fig8_size": "0.75",
+  "lift_ramp_vel": "0.15",
+  "load_traj": "fig_8",
+  "magnet_operator_topic": "/drone_3/magnet_operator",
+  "mocap_magnet_tip_body_id": "24",
+  "mode": "attach",
+  "params_file": "/home/wesley/multi_drone_control/configs/rig/attach_m1_1m_m2a_fig8_reattach_det15.yaml",
+  "partner": "true",
+  "partner_args": "mpc_thrust_ratio:=22 mpc_cable_length:=1.0 trim_speed_gate:=0.20 carry_clearance:=0.25 plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0] commit_backdate:=0.04 tracking_check:=off attach_cpp_transit:=false attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30 attach_twist:=zero match_xy:=0.05 match_dwell:=0.5 climb_speed:=0.3 match_speed:=0.20 descent_abort_speed:=0.35 descent_hold:=true pickup_xy:=0.06 pickup_speed:=0.20 pickup_contact_height:=0.011 pickup_object_thickness:=0.050 pickup_object_size:=0.105 pickup_point_x:=-0.0045 pickup_point_y:=-0.0107 pickup_box:=1.9 pickup_proof_drift:=0.05 pickup_proof_speed:=0.08 pickup_proof_loss:=0.08 drop_on_arrival_xy:=0.08 lift_full:=true mpc_throttle_max:=0.8 drop_height:=0.71 drop_release:=0.03 drop_release_xy:=0.06 drop_release_wait:=3 max_body_z:=3.2 return_after_drop:=cpp return_climb:=transit max_swing_angle_rad:=0.05236 spline_time_factor:=2 cooperative_tracking_half_m:=0.06 swing_envelope:=outer_octagon target_time_iterations:=30 prepare_settle_speed:=0.20 prepare_settle_accel:=0.8 cpp_max_z:=3.2 cpp_splice:=0.30 cpp_world_refresh:=0.2 mpc_battery_comp:=0.022 geometry:=rig_m2a mission_mode:=delivery_rejoin descent_debounce:=1.0 descent_abort_xy:=0.05 contact_give_up_s:=120 contact_dz:=-0.03 exit_handoff:=moving",
+  "partner_contact": "true",
+  "partner_nodes": "true",
+  "proof_taut_len": "1.031",
+  "target_z": "1.2",
+  "throttle_max": "0.95",
+  "tip_skip_repeats": "true",
+  "traj_speed": "0.125",
+  "weld_point_z": "0.0491",
+  "weld_radius": "0.025"
+ },
+ "entries": [
+  {
+   "arguments": [],
+   "executable": "dissipative_planner",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "dissipative_planner",
+   "namespace": null,
+   "package": "dissipative_planner",
+   "parameters": {
+    "approach_hold": [
+     "bool",
+     false
+    ],
+    "approach_tip_feedback": [
+     "bool",
+     false
+    ],
+    "approach_tip_log": [
+     "bool",
+     false
+    ],
+    "attach_approach": [
+     "bool",
+     false
+    ],
+    "attach_approach_direct": [
+     "bool",
+     true
+    ],
+    "attach_azimuths_deg": [
+     "string",
+     "270,30,150"
+    ],
+    "attach_blend_balanced": [
+     "bool",
+     true
+    ],
+    "attach_cable_len": [
+     "double",
+     0.994
+    ],
+    "attach_central": [
+     "bool",
+     false
+    ],
+    "attach_datum_shift": [
+     "bool",
+     true
+    ],
+    "attach_elev_deg": [
+     "double",
+     65.0
+    ],
+    "attach_ff_ramp_s": [
+     "double",
+     1.5
+    ],
+    "attach_handout": [
+     "bool",
+     true
+    ],
+    "attach_moving": [
+     "bool",
+     true
+    ],
+    "attach_pause": [
+     "bool",
+     true
+    ],
+    "attach_pause_at": [
+     "string",
+     "reattach"
+    ],
+    "attach_radius": [
+     "double",
+     0.225
+    ],
+    "attach_seek_m": [
+     "double",
+     0.0
+    ],
+    "attach_t_start_new": [
+     "double",
+     0.1
+    ],
+    "attach_tip_dz": [
+     "double",
+     0.0
+    ],
+    "attach_traj_hold_mode": [
+     "string",
+     "timed"
+    ],
+    "attach_traj_hold_s": [
+     "double",
+     10.0
+    ],
+    "attach_velocity_newcomer": [
+     "bool",
+     false
+    ],
+    "attach_x_offset": [
+     "double",
+     0.0
+    ],
+    "attach_y_offset": [
+     "double",
+     0.2293
+    ],
+    "attach_z": [
+     "double",
+     0.0175
+    ],
+    "auto_slot_assign": [
+     "bool",
+     true
+    ],
+    "cable_elev_deg": [
+     "double",
+     60.0
+    ],
+    "cable_len": [
+     "double",
+     1.0
+    ],
+    "carriers_down_alone": [
+     "bool",
+     true
+    ],
+    "contact_ball_mass": [
+     "double",
+     0.15
+    ],
+    "contact_fold_seed": [
+     "string",
+     "start"
+    ],
+    "contact_joint_state_topic": [
+     "string",
+     ""
+    ],
+    "contact_span_wait_ball": [
+     "bool",
+     true
+    ],
+    "creep_vel": [
+     "double",
+     0.2
+    ],
+    "departed_ground_idle": [
+     "bool",
+     true
+    ],
+    "departed_land": [
+     "bool",
+     false
+    ],
+    "detach_detect_m": [
+     "double",
+     0.15
+    ],
+    "detach_magnet": [
+     "bool",
+     true
+    ],
+    "detach_step_out_m": [
+     "double",
+     0.5
+    ],
+    "diss_a_i_load_max": [
+     "double",
+     2.0
+    ],
+    "diss_balanced_tensions": [
+     "bool",
+     true
+    ],
+    "diss_c": [
+     "double",
+     6.0
+    ],
+    "diss_elev_deg": [
+     "double",
+     45.0
+    ],
+    "diss_handout_tension_blend": [
+     "bool",
+     true
+    ],
+    "diss_k_anchor": [
+     "double",
+     40.0
+    ],
+    "diss_k_pay": [
+     "double",
+     40.0
+    ],
+    "diss_k_ring": [
+     "double",
+     20.0
+    ],
+    "diss_k_slot": [
+     "double",
+     18.0
+    ],
+    "diss_ki_load": [
+     "double",
+     1.0
+    ],
+    "diss_node_mass": [
+     "double",
+     0.5
+    ],
+    "diss_substeps": [
+     "int",
+     10
+    ],
+    "diss_t_handout": [
+     "double",
+     12.0
+    ],
+    "diss_trim_share_weighted": [
+     "bool",
+     false
+    ],
+    "diss_wrench_true_attitude": [
+     "bool",
+     false
+    ],
+    "drone_mass": [
+     "double",
+     0.583
+    ],
+    "drop_on_loss": [
+     "bool",
+     true
+    ],
+    "drop_takes_back": [
+     "bool",
+     true
+    ],
+    "ff_cap_release_s": [
+     "double",
+     2.0
+    ],
+    "fig8_size": [
+     "double",
+     0.75
+    ],
+    "handover_blend_s": [
+     "double",
+     3.0
+    ],
+    "handover_elev_deg": [
+     "double",
+     60.0
+    ],
+    "handover_settle_s": [
+     "double",
+     1.0
+    ],
+    "hold_max_s": [
+     "double",
+     30.0
+    ],
+    "hold_resume_tilt_deg": [
+     "double",
+     12.0
+    ],
+    "int_k_xy": [
+     "double",
+     5.26
+    ],
+    "int_k_z": [
+     "double",
+     7.13
+    ],
+    "int_mode": [
+     "string",
+     "model"
+    ],
+    "land_descend_to_stall": [
+     "bool",
+     true
+    ],
+    "land_ff_ramp": [
+     "bool",
+     true
+    ],
+    "land_rearm_touchdown": [
+     "bool",
+     true
+    ],
+    "land_unwind": [
+     "bool",
+     false
+    ],
+    "land_vel": [
+     "double",
+     0.2
+    ],
+    "lift_ramp_vel": [
+     "double",
+     0.15
+    ],
+    "load_ixx": [
+     "double",
+     0.02733
+    ],
+    "load_izz": [
+     "double",
+     0.05452
+    ],
+    "load_mass": [
+     "double",
+     0.86
+    ],
+    "load_traj": [
+     "string",
+     "fig_8"
+    ],
+    "measure_rod_len": [
+     "bool",
+     true
+    ],
+    "min_survivors": [
+     "int",
+     3
+    ],
+    "net_horizon_preview": [
+     "bool",
+     true
+    ],
+    "net_land_z": [
+     "double",
+     0.06
+    ],
+    "net_traj_lean": [
+     "bool",
+     false
+    ],
+    "newcomer_fault_land": [
+     "bool",
+     true
+    ],
+    "newcomer_lifecycle": [
+     "bool",
+     true
+    ],
+    "num_drones": [
+     "int",
+     3
+    ],
+    "partner_contact": [
+     "bool",
+     true
+    ],
+    "partner_handoff_topic": [
+     "string",
+     ""
+    ],
+    "partner_release": [
+     "bool",
+     false
+    ],
+    "pivot_offset": [
+     "array",
+     [
+      [
+       "double",
+       0.0
+      ],
+      [
+       "double",
+       0.0
+      ],
+      [
+       "double",
+       -0.04
+      ]
+     ]
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "pretension_s": [
+     "double",
+     3.0
+    ],
+    "reconfig_hold_s": [
+     "double",
+     1.5
+    ],
+    "reconfig_mode": [
+     "string",
+     "ocp"
+    ],
+    "reserved_attach": [
+     "int",
+     1
+    ],
+    "rod_spread_m": [
+     "double",
+     0.08
+    ],
+    "rod_tol_frac": [
+     "double",
+     0.25
+    ],
+    "solve_budget_s": [
+     "double",
+     0.06
+    ],
+    "start_attached": [
+     "bool",
+     false
+    ],
+    "start_taut": [
+     "bool",
+     false
+    ],
+    "take_back_release_guard": [
+     "bool",
+     true
+    ],
+    "target_z": [
+     "double",
+     1.2
+    ],
+    "traj_distance": [
+     "double",
+     0.75
+    ],
+    "traj_hold_s": [
+     "double",
+     5.0
+    ],
+    "traj_laps": [
+     "int",
+     0
+    ],
+    "traj_radius": [
+     "double",
+     0.5
+    ],
+    "traj_speed": [
+     "double",
+     0.125
+    ],
+    "weld_point_z": [
+     "double",
+     0.0491
+    ],
+    "z_i_gate": [
+     "double",
+     0.25
+    ],
+    "z_i_max": [
+     "double",
+     0.3
+    ],
+    "z_ki": [
+     "double",
+     0.4
+    ],
+    "z_ki_in_orbit": [
+     "bool",
+     true
+    ],
+    "z_taut_gate": [
+     "double",
+     0.9
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "robot_state_publisher",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "drone_model_0",
+   "namespace": null,
+   "package": "robot_state_publisher",
+   "parameters": {
+    "robot_description": [
+     "string",
+     "<?xml version=\"1.0\"?>\n<robot name=\"tbs_sourceone_v5\">\n  <link name=\"drone_0_mocap\">\n    <visual>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n      <material name=\"carbon\"><color rgba=\"0.12 0.47 0.71 0.9\"/></material>\n    </visual>\n    <collision>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n    </collision>\n  </link>\n</robot>"
+    ]
+   },
+   "remappings": [
+    [
+     "robot_description",
+     "/robot_description_0"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "robot_state_publisher",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "drone_model_1",
+   "namespace": null,
+   "package": "robot_state_publisher",
+   "parameters": {
+    "robot_description": [
+     "string",
+     "<?xml version=\"1.0\"?>\n<robot name=\"tbs_sourceone_v5\">\n  <link name=\"drone_1_mocap\">\n    <visual>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n      <material name=\"carbon\"><color rgba=\"1.00 0.50 0.05 0.9\"/></material>\n    </visual>\n    <collision>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n    </collision>\n  </link>\n</robot>"
+    ]
+   },
+   "remappings": [
+    [
+     "robot_description",
+     "/robot_description_1"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "robot_state_publisher",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "drone_model_2",
+   "namespace": null,
+   "package": "robot_state_publisher",
+   "parameters": {
+    "robot_description": [
+     "string",
+     "<?xml version=\"1.0\"?>\n<robot name=\"tbs_sourceone_v5\">\n  <link name=\"drone_2_mocap\">\n    <visual>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n      <material name=\"carbon\"><color rgba=\"0.17 0.63 0.17 0.9\"/></material>\n    </visual>\n    <collision>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n    </collision>\n  </link>\n</robot>"
+    ]
+   },
+   "remappings": [
+    [
+     "robot_description",
+     "/robot_description_2"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "robot_state_publisher",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "drone_model_3",
+   "namespace": null,
+   "package": "robot_state_publisher",
+   "parameters": {
+    "robot_description": [
+     "string",
+     "<?xml version=\"1.0\"?>\n<robot name=\"tbs_sourceone_v5\">\n  <link name=\"drone_3_mocap\">\n    <visual>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n      <material name=\"carbon\"><color rgba=\"0.84 0.15 0.16 0.9\"/></material>\n    </visual>\n    <collision>\n      <origin xyz=\"0 0 -0.02\" rpy=\"0 0 1.57\"/>\n      <geometry>\n        <mesh filename=\"package://drone_visualisation/meshes/tbs_sourceone_v5.stl\"\n              scale=\"0.001 0.001 0.001\"/>\n      </geometry>\n    </collision>\n  </link>\n</robot>"
+    ]
+   },
+   "remappings": [
+    [
+     "robot_description",
+     "/robot_description_3"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "dynamic_planner_transfer_backend",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "dynamic_planner_transfer_backend",
+   "namespace": null,
+   "package": "tejen_dynamic_planner",
+   "parameters": {
+    "__params_files__": [
+     "array",
+     [
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_dynamic_planner/share/tejen_dynamic_planner/config/c1f6_moving_rendezvous.yaml"
+      ],
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_mission/share/tejen_mission/config/partner_backend_overrides_rig.yaml"
+      ],
+      [
+       "string",
+       "/tmp/partner_backend_ued2jn6d.yaml"
+      ]
+     ]
+    ],
+    "cooperative_committed_trajectory_topics": [
+     "array",
+     [
+      [
+       "string",
+       "/fake_obstacles/drone_0/committed_trajectory"
+      ],
+      [
+       "string",
+       "/fake_obstacles/drone_1/committed_trajectory"
+      ],
+      [
+       "string",
+       "/fake_obstacles/drone_2/committed_trajectory"
+      ]
+     ]
+    ],
+    "cooperative_drone_state_topics": [
+     "array",
+     [
+      [
+       "string",
+       "/fake_obstacles/drone_0/state"
+      ],
+      [
+       "string",
+       "/fake_obstacles/drone_1/state"
+      ],
+      [
+       "string",
+       "/fake_obstacles/drone_2/state"
+      ]
+     ]
+    ],
+    "csv_path": [
+     "string",
+     "/home/wesley/multi_drone_control/logs/tejen_dynamic_planner/c1f6_rendezvous_20261115_194040/backend.csv"
+    ],
+    "minimum_search_z_m": [
+     "double",
+     2.2
+    ],
+    "object_attached_topic": [
+     "string",
+     "/tejen/object_attached"
+    ],
+    "planner_rate_hz": [
+     "double",
+     5.0
+    ],
+    "replan_csv_path": [
+     "string",
+     "/home/wesley/multi_drone_control/logs/tejen_dynamic_planner/c1f6_rendezvous_20261115_194040/replans.csv"
+    ],
+    "state_topic": [
+     "string",
+     "/drone_3/motion_capture_state"
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "elrs_mux",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "elrs_mux_3",
+   "namespace": null,
+   "package": "drone_magnet",
+   "parameters": {
+    "approach_stream": [
+     "bool",
+     true
+    ],
+    "drone_id": [
+     "int",
+     3
+    ],
+    "handoff_topic": [
+     "string",
+     ""
+    ],
+    "latch": [
+     "bool",
+     true
+    ],
+    "magnet_channel": [
+     "int",
+     6
+    ],
+    "magnet_command_topic": [
+     "string",
+     ""
+    ],
+    "partner_hold_until_planner": [
+     "bool",
+     true
+    ],
+    "release_topic": [
+     "string",
+     ""
+    ],
+    "take_back_topic": [
+     "string",
+     "/drone_3/take_back"
+    ],
+    "zero_partner_aux": [
+     "bool",
+     true
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "ring_bridge",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "fake_cooperative_transport_world",
+   "namespace": null,
+   "package": "tejen_mission",
+   "parameters": {
+    "attach_twist": [
+     "string",
+     "zero"
+    ],
+    "bridge_attach_radius_m": [
+     "double",
+     0.225
+    ],
+    "bridge_attach_xy_m": [
+     "array",
+     [
+      [
+       "double",
+       0.0
+      ],
+      [
+       "double",
+       0.2293
+      ]
+     ]
+    ],
+    "bridge_attach_z_m": [
+     "double",
+     0.0491
+    ],
+    "bridge_cable_elev_deg": [
+     "double",
+     60.0
+    ],
+    "bridge_cable_len_m": [
+     "double",
+     1.0
+    ],
+    "bridge_carrier_azimuths_deg": [
+     "array",
+     [
+      [
+       "double",
+       270.0
+      ],
+      [
+       "double",
+       30.0
+      ],
+      [
+       "double",
+       150.0
+      ]
+     ]
+    ],
+    "enable_fake_obstacles": [
+     "bool",
+     true
+    ],
+    "fake_drone_count": [
+     "int",
+     3
+    ],
+    "fake_drone_radius": [
+     "double",
+     0.12
+    ],
+    "fake_drone_safety_radius": [
+     "double",
+     0.35
+    ],
+    "full_pose_attachment": [
+     "bool",
+     true
+    ],
+    "payload_committed_trajectory_topic": [
+     "string",
+     "/fake_payload/committed_trajectory"
+    ],
+    "publish_attached_plates": [
+     "bool",
+     true
+    ],
+    "publish_shared_trajectories": [
+     "bool",
+     true
+    ],
+    "ring_attachment_plate_index": [
+     "int",
+     3
+    ],
+    "ring_collision_bottom_offset_m": [
+     "double",
+     -0.27
+    ],
+    "ring_collision_outer_diameter_m": [
+     "double",
+     0.51
+    ],
+    "ring_collision_top_offset_m": [
+     "double",
+     0.0
+    ],
+    "ring_plate_count": [
+     "int",
+     12
+    ],
+    "ring_plate_diameter_m": [
+     "double",
+     0.06
+    ],
+    "ring_plate_pitch_diameter_m": [
+     "double",
+     0.45
+    ],
+    "ring_structure_height_m": [
+     "double",
+     0.07
+    ],
+    "shared_trajectory_backdate_s": [
+     "double",
+     0.04
+    ],
+    "shared_trajectory_control_interval_s": [
+     "double",
+     0.5
+    ],
+    "shared_trajectory_duration_s": [
+     "double",
+     30.0
+    ],
+    "shared_trajectory_refresh_period_s": [
+     "double",
+     1.0
+    ],
+    "trail_seconds": [
+     "double",
+     0.0
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "fleet_manager",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "fleet_manager",
+   "namespace": null,
+   "package": "fleet_manager",
+   "parameters": {
+    "num_drones": [
+     "int",
+     4
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "require_fc_armed": [
+     "bool",
+     true
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "fleet_viz",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "fleet_viz",
+   "namespace": null,
+   "package": "simulation_communication",
+   "parameters": {
+    "attached_topic": [
+     "string",
+     "/magnet/object_attached"
+    ],
+    "coil_topic": [
+     "string",
+     "/drone_3/magnet_coil"
+    ],
+    "marker_hz": [
+     "double",
+     5.0
+    ],
+    "num_drones": [
+     "int",
+     4
+    ],
+    "path_dt": [
+     "double",
+     0.5
+    ],
+    "puck_topic": [
+     "string",
+     "/pickup/motion_capture_state"
+    ],
+    "summary_hz": [
+     "double",
+     5.0
+    ],
+    "tether_drone": [
+     "int",
+     3
+    ],
+    "tip_topic": [
+     "string",
+     "/magnet_tip_pose"
+    ],
+    "viz_hz": [
+     "double",
+     10.0
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "magnet_attachment_manager",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "magnet_attachment_manager",
+   "namespace": null,
+   "package": "drone_magnet",
+   "parameters": {
+    "attach_dwell_time_s": [
+     "double",
+     0.15
+    ],
+    "attach_radius": [
+     "double",
+     0.025
+    ],
+    "attach_speed_threshold": [
+     "double",
+     0.05
+    ],
+    "attached_at_start": [
+     "bool",
+     false
+    ],
+    "command_backend": [
+     "string",
+     "none"
+    ],
+    "comotion_contact_xy": [
+     "double",
+     0.025
+    ],
+    "comotion_d_ok": [
+     "double",
+     0.02
+    ],
+    "comotion_inconclusive_s": [
+     "double",
+     6.0
+    ],
+    "comotion_lift_fallback_s": [
+     "double",
+     0.0
+    ],
+    "comotion_lost": [
+     "double",
+     0.06
+    ],
+    "comotion_normal_max": [
+     "double",
+     0.01
+    ],
+    "comotion_normal_min": [
+     "double",
+     -0.03
+    ],
+    "comotion_normal_ok": [
+     "double",
+     0.04
+    ],
+    "comotion_proof_dwell_s": [
+     "double",
+     0.5
+    ],
+    "comotion_sep_normal": [
+     "double",
+     0.04
+    ],
+    "comotion_sep_xy": [
+     "double",
+     0.06
+    ],
+    "comotion_speed": [
+     "double",
+     0.06
+    ],
+    "comotion_speed_ok": [
+     "double",
+     0.06
+    ],
+    "comotion_speed_window_s": [
+     "double",
+     0.5
+    ],
+    "comotion_taut_fallback": [
+     "double",
+     1.0339999999999998
+    ],
+    "comotion_taut_margin": [
+     "double",
+     0.05
+    ],
+    "confirm_mode": [
+     "string",
+     "contact_lift"
+    ],
+    "contact_still": [
+     "bool",
+     true
+    ],
+    "detach_on_start": [
+     "bool",
+     false
+    ],
+    "dry_run": [
+     "bool",
+     false
+    ],
+    "enable_elrs_magnet_output": [
+     "bool",
+     false
+    ],
+    "magnet_latch_topic": [
+     "string",
+     "/drone_3/magnet_ours"
+    ],
+    "magnet_tip_pose_msg_type": [
+     "string",
+     "pose_stamped"
+    ],
+    "magnet_tip_pose_topic": [
+     "string",
+     "/magnet_tip_pose"
+    ],
+    "object_attached_topic": [
+     "string",
+     "/magnet/object_attached"
+    ],
+    "object_pose_msg_type": [
+     "string",
+     "mocap_state"
+    ],
+    "object_pose_topic": [
+     "string",
+     "/payload/motion_capture_state"
+    ],
+    "object_x_offset": [
+     "double",
+     0.0
+    ],
+    "object_y_offset": [
+     "double",
+     0.2293
+    ],
+    "object_z_offset": [
+     "double",
+     0.0491
+    ],
+    "proof_rules": [
+     "string",
+     "comotion"
+    ],
+    "proof_taut_len": [
+     "double",
+     1.031
+    ],
+    "rel_vel_filter_tau_s": [
+     "double",
+     0.0
+    ],
+    "sim_catch": [
+     "bool",
+     false
+    ],
+    "tip_skip_repeats": [
+     "bool",
+     true
+    ],
+    "use_fallback_object_pose": [
+     "bool",
+     false
+    ],
+    "velocity_clock": [
+     "string",
+     "sim"
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "magnet_gate",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "magnet_gate_3",
+   "namespace": null,
+   "package": "drone_magnet",
+   "parameters": {
+    "drone_id": [
+     "int",
+     3
+    ],
+    "dry": [
+     "bool",
+     false
+    ],
+    "operator_topic": [
+     "string",
+     "/drone_3/magnet_operator"
+    ],
+    "ours_topic": [
+     "string",
+     "/drone_3/magnet_ours"
+    ],
+    "out_topic": [
+     "string",
+     "/drone_3/magnet_coil"
+    ],
+    "partner_topic": [
+     "string",
+     "/tejen/magnet/command"
+    ],
+    "phase_topic": [
+     "string",
+     "/join_planner/phase"
+    ],
+    "puck_topic": [
+     "string",
+     "/tejen/object_attached"
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "motion_capture_publisher_node",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "motion_capture_publisher",
+   "namespace": null,
+   "package": "drone_communication",
+   "parameters": {
+    "extra_bodies": [
+     "string",
+     "6:/pickup/motion_capture_state"
+    ],
+    "magnet_tip_body_id": [
+     "int",
+     24
+    ],
+    "publish_drone_tf": [
+     "bool",
+     false
+    ],
+    "vel_filter_drones": [
+     "array",
+     [
+      [
+       "int",
+       0
+      ],
+      [
+       "int",
+       1
+      ],
+      [
+       "int",
+       2
+      ]
+     ]
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "online_join_planner",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "online_join_planner",
+   "namespace": null,
+   "package": "tejen_mission",
+   "parameters": {
+    "__params_files__": [
+     "array",
+     [
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_mission/share/tejen_mission/config/visual_astar_visual_only.yaml"
+      ],
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_mission/share/tejen_mission/config/c1f2b_cpp_authority.yaml"
+      ],
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_mission/share/tejen_mission/config/m1_measured_tip_pickup.yaml"
+      ],
+      [
+       "string",
+       "/home/wesley/multi_drone_control/install/tejen_mission/share/tejen_mission/config/m1_measured_tip_tracking.yaml"
+      ]
+     ]
+    ],
+    "approach_offset_x": [
+     "double",
+     0.0
+    ],
+    "approach_offset_y": [
+     "double",
+     0.0
+    ],
+    "approach_offset_z": [
+     "double",
+     0.3
+    ],
+    "assigned_attachment_id": [
+     "string",
+     "attachment_0"
+    ],
+    "at_start_land_after_s": [
+     "double",
+     2.0
+    ],
+    "attach_cpp_transit": [
+     "bool",
+     false
+    ],
+    "attach_ready_land_after_s": [
+     "double",
+     0.0
+    ],
+    "attach_ready_target_lead_time": [
+     "double",
+     0.0
+    ],
+    "attach_transit_clearance": [
+     "double",
+     0.3
+    ],
+    "attachment_pose_topic": [
+     "string",
+     "/fake_attachment_point/pose"
+    ],
+    "attachment_twist_topic": [
+     "string",
+     "/fake_attachment_point/twist"
+    ],
+    "auto_descend": [
+     "bool",
+     true
+    ],
+    "c1f2_exit_moving_handoff": [
+     "bool",
+     true
+    ],
+    "c1f2_nav_capture_xy_threshold_m": [
+     "double",
+     0.12
+    ],
+    "c1f2_nav_capture_z_threshold_m": [
+     "double",
+     0.15
+    ],
+    "c1f2_prepare_max_lift_drift_m": [
+     "double",
+     0.3
+    ],
+    "c1f2_prepare_settle_acceleration_mps2": [
+     "double",
+     0.8
+    ],
+    "c1f2_prepare_settle_dwell_s": [
+     "double",
+     0.3
+    ],
+    "c1f2_prepare_settle_speed_mps": [
+     "double",
+     0.2
+    ],
+    "commissioning_hold_after_lift": [
+     "bool",
+     false
+    ],
+    "commissioning_hold_before_drop": [
+     "bool",
+     false
+    ],
+    "contact_abort_xy_debounce_s": [
+     "double",
+     1.0
+    ],
+    "contact_abort_xy_threshold": [
+     "double",
+     0.05
+    ],
+    "contact_abort_xy_velocity_threshold": [
+     "double",
+     0.35
+    ],
+    "contact_attach": [
+     "bool",
+     true
+    ],
+    "contact_bottom_hold": [
+     "bool",
+     true
+    ],
+    "contact_descent_hold": [
+     "bool",
+     true
+    ],
+    "contact_give_up_s": [
+     "double",
+     120.0
+    ],
+    "contact_match_xy_threshold": [
+     "double",
+     0.05
+    ],
+    "contact_match_xy_velocity_threshold": [
+     "double",
+     0.2
+    ],
+    "contact_topic": [
+     "string",
+     "/magnet/contact"
+    ],
+    "drone_command_topic": [
+     "string",
+     "/tejen/drone_command"
+    ],
+    "drone_state_topic": [
+     "string",
+     "/drone_3/motion_capture_state"
+    ],
+    "drop_approach_clearance": [
+     "double",
+     0.6100000000000001
+    ],
+    "drop_check_puck": [
+     "bool",
+     true
+    ],
+    "drop_clear_height": [
+     "double",
+     0.516
+    ],
+    "drop_point_source": [
+     "string",
+     "payload"
+    ],
+    "drop_puck_wait_s": [
+     "double",
+     2.0
+    ],
+    "drop_release_clearance": [
+     "double",
+     0.03
+    ],
+    "drop_release_wait_s": [
+     "double",
+     3.0
+    ],
+    "drop_release_xy_m": [
+     "double",
+     0.06
+    ],
+    "dwell_time_s": [
+     "double",
+     0.5
+    ],
+    "exit_blend_s": [
+     "double",
+     1.0
+    ],
+    "exit_handoff_timeout_s": [
+     "double",
+     7.0
+    ],
+    "exit_hold_z_m": [
+     "double",
+     2.9
+    ],
+    "exit_prefix_horizon_s": [
+     "double",
+     5.0
+    ],
+    "exit_prefix_refresh_s": [
+     "double",
+     1.0
+    ],
+    "exit_prefix_topic": [
+     "string",
+     "/dynamic_planner/transfer_prefix"
+    ],
+    "exit_protected_s": [
+     "double",
+     1.5
+    ],
+    "exit_ring_commitment_topic": [
+     "string",
+     "/fake_payload/committed_trajectory"
+    ],
+    "external_landing_topic": [
+     "string",
+     "/join_planner/land_now"
+    ],
+    "final_attach_offset_z": [
+     "double",
+     -0.03
+    ],
+    "give_up_topic": [
+     "string",
+     "/join_planner/give_up"
+    ],
+    "lift_complete_object_clearance": [
+     "double",
+     0.08
+    ],
+    "lift_full_before_transit": [
+     "bool",
+     true
+    ],
+    "loaded_lift_z_tolerance": [
+     "double",
+     0.05
+    ],
+    "log_every_n_updates": [
+     "int",
+     6
+    ],
+    "magnet_command_topic": [
+     "string",
+     "/tejen/magnet/command"
+    ],
+    "magnet_drop_below_quad": [
+     "double",
+     1.034
+    ],
+    "magnet_marker_to_contact_face_x": [
+     "double",
+     0.0
+    ],
+    "magnet_marker_to_contact_face_y": [
+     "double",
+     0.0
+    ],
+    "magnet_marker_to_contact_face_z": [
+     "double",
+     -0.0225
+    ],
+    "magnet_tip_pose_topic": [
+     "string",
+     "/tejen/magnet_tip_pose"
+    ],
+    "match_xy_threshold": [
+     "double",
+     0.18
+    ],
+    "match_xy_velocity_threshold": [
+     "double",
+     0.2
+    ],
+    "max_reference_speed": [
+     "double",
+     2.0
+    ],
+    "min_reference_z": [
+     "double",
+     0.58
+    ],
+    "mission_mode": [
+     "string",
+     "delivery_rejoin"
+    ],
+    "mux_state_topic": [
+     "string",
+     "/drone_3/mux_state"
+    ],
+    "object_attached_topic": [
+     "string",
+     "/tejen/object_attached"
+    ],
+    "payload_assume_level": [
+     "bool",
+     true
+    ],
+    "payload_collision_enabled": [
+     "bool",
+     true
+    ],
+    "payload_collision_margin": [
+     "double",
+     0.05
+    ],
+    "payload_collision_size_x": [
+     "double",
+     0.105
+    ],
+    "payload_collision_size_y": [
+     "double",
+     0.105
+    ],
+    "payload_collision_size_z": [
+     "double",
+     0.05
+    ],
+    "payload_geometry_origin_from_pose_x": [
+     "double",
+     0.0
+    ],
+    "payload_geometry_origin_from_pose_y": [
+     "double",
+     0.0
+    ],
+    "payload_geometry_origin_from_pose_z": [
+     "double",
+     0.003
+    ],
+    "payload_name": [
+     "string",
+     "irl_60g_round_pickup_object"
+    ],
+    "payload_pickup_point_x": [
+     "double",
+     -0.0045
+    ],
+    "payload_pickup_point_y": [
+     "double",
+     -0.0107
+    ],
+    "payload_pickup_point_z": [
+     "double",
+     -0.0115
+    ],
+    "payload_pose_reference": [
+     "string",
+     "mocap_rigid_body_origin"
+    ],
+    "payload_pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "payload_pose_topic": [
+     "string",
+     "/fake_payload/pose"
+    ],
+    "payload_twist_topic": [
+     "string",
+     "/fake_payload/twist"
+    ],
+    "pickup_alignment_capture_xy_m": [
+     "double",
+     0.06
+    ],
+    "pickup_alignment_high_xy_m": [
+     "double",
+     0.12
+    ],
+    "pickup_alignment_low_dwell_s": [
+     "double",
+     1.0
+    ],
+    "pickup_alignment_low_xy_m": [
+     "double",
+     0.1
+    ],
+    "pickup_alignment_max_relative_speed_mps": [
+     "double",
+     0.2
+    ],
+    "pickup_alignment_mode": [
+     "string",
+     "measured_tip_tiered"
+    ],
+    "pickup_approach_clearance": [
+     "double",
+     0.35
+    ],
+    "pickup_attach_clearance": [
+     "double",
+     0.03
+    ],
+    "pickup_box_m": [
+     "double",
+     1.9
+    ],
+    "pickup_contact_gap": [
+     "double",
+     0.0
+    ],
+    "pickup_lift_height": [
+     "double",
+     1.93
+    ],
+    "pickup_lift_speed": [
+     "double",
+     0.12
+    ],
+    "pickup_lift_xy_dwell_s": [
+     "double",
+     1.5
+    ],
+    "pickup_lift_xy_tolerance": [
+     "double",
+     0.04
+    ],
+    "pickup_max_overtravel": [
+     "double",
+     0.036
+    ],
+    "pickup_object_index": [
+     "int",
+     0
+    ],
+    "pickup_object_pose_topic": [
+     "string",
+     "/tejen/pickup_object/pose"
+    ],
+    "pickup_overtravel": [
+     "double",
+     0.036
+    ],
+    "pickup_proof_loss_contact_drift_m": [
+     "double",
+     0.08
+    ],
+    "pickup_proof_maximum_contact_drift_m": [
+     "double",
+     0.05
+    ],
+    "pickup_proof_relative_speed_mps": [
+     "double",
+     0.08
+    ],
+    "pickup_support_surface_overtravel_allowance_m": [
+     "double",
+     0.024
+    ],
+    "pickup_tip_speed_tolerance": [
+     "double",
+     0.6
+    ],
+    "pickup_xy_tolerance": [
+     "double",
+     0.1
+    ],
+    "pickup_z_tolerance": [
+     "double",
+     0.2
+    ],
+    "proof_rise_max": [
+     "double",
+     0.03
+    ],
+    "reattach_transit_xy_threshold": [
+     "double",
+     0.4
+    ],
+    "reference_nominal_speed": [
+     "double",
+     0.25
+    ],
+    "return_after_drop": [
+     "string",
+     "cpp"
+    ],
+    "ring_attached_topic": [
+     "string",
+     "/magnet/object_attached"
+    ],
+    "ring_pose_topic": [
+     "string",
+     "/payload/motion_capture_state"
+    ],
+    "static_obstacle_count": [
+     "int",
+     0
+    ],
+    "support_surface_z": [
+     "double",
+     0.0
+    ],
+    "take_back_topic": [
+     "string",
+     "/drone_3/take_back"
+    ],
+    "takeoff_speed": [
+     "double",
+     0.3
+    ],
+    "target_alignment_max_relative_speed_mps": [
+     "double",
+     0.2
+    ],
+    "target_alignment_mode": [
+     "string",
+     "measured_tip_trim"
+    ],
+    "use_geometry_aware_pickup": [
+     "bool",
+     true
+    ],
+    "use_measured_magnet_tip": [
+     "bool",
+     true
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ],
+    "use_static_pickup_object": [
+     "bool",
+     false
+    ],
+    "vehicle_id": [
+     "string",
+     "drone_0"
+    ],
+    "visual_astar_enabled": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [
+    "-d",
+    "/tmp/quad_load_rviz/real_io_4drone.rviz"
+   ],
+   "executable": "rviz2",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "rviz2",
+   "namespace": null,
+   "package": "rviz2",
+   "parameters": {},
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "tracker",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "tracker_0",
+   "namespace": null,
+   "package": "tracker",
+   "parameters": {
+    "attitude_ff": [
+     "bool",
+     true
+    ],
+    "cable_accel_cap": [
+     "double",
+     14.5
+    ],
+    "cable_ff_scale": [
+     "double",
+     1.0
+    ],
+    "cable_lp_hz": [
+     "double",
+     0.0
+    ],
+    "cable_lp_order": [
+     "int",
+     1
+    ],
+    "cable_notch_hz": [
+     "double",
+     5.3
+    ],
+    "cable_notch_q": [
+     "double",
+     1.0
+    ],
+    "cable_pull_up_max": [
+     "double",
+     0.0
+    ],
+    "cable_source": [
+     "string",
+     "mocap"
+    ],
+    "carriers_down_alone": [
+     "bool",
+     true
+    ],
+    "control_mode": [
+     "string",
+     "velocity_after_handover"
+    ],
+    "drone_id": [
+     "int",
+     0
+    ],
+    "drop_on_loss": [
+     "bool",
+     true
+    ],
+    "drop_tilt_deg": [
+     "double",
+     55.0
+    ],
+    "ground_idle": [
+     "bool",
+     true
+    ],
+    "kt_batt_sag_frac": [
+     "double",
+     0.0
+    ],
+    "kt_batt_v_empty": [
+     "double",
+     21.0
+    ],
+    "kt_batt_v_full": [
+     "double",
+     25.2
+    ],
+    "kt_print_period_s": [
+     "double",
+     1.0
+    ],
+    "kt_trim": [
+     "bool",
+     false
+    ],
+    "kt_trim_max": [
+     "double",
+     0.25
+    ],
+    "kt_trim_tau": [
+     "double",
+     1.5
+    ],
+    "payload_rest_z": [
+     "double",
+     0.0275
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "ref_time_shift": [
+     "bool",
+     false
+    ],
+    "safety_ref_timeout_s": [
+     "double",
+     1.0
+    ],
+    "takeoff_spool_s": [
+     "double",
+     0.5
+    ],
+    "takeoff_thrust_ratio": [
+     "double",
+     0.0
+    ],
+    "terminal_vel_ref": [
+     "bool",
+     false
+    ],
+    "throttle_max": [
+     "double",
+     0.95
+    ],
+    "thrust_offset": [
+     "double",
+     0.185
+    ],
+    "thrust_offset_v_slope": [
+     "double",
+     0.022
+    ],
+    "thrust_ratio": [
+     "double",
+     35.2
+    ],
+    "thrust_v_ref": [
+     "double",
+     23.5
+    ],
+    "vel_k_att": [
+     "double",
+     8.0
+    ],
+    "vel_ki": [
+     "double",
+     0.0
+    ],
+    "vel_kp_pos": [
+     "double",
+     2.0
+    ],
+    "vel_kv": [
+     "double",
+     4.0
+    ],
+    "vel_swing_k": [
+     "double",
+     0.0
+    ],
+    "w_thr_ref": [
+     "double",
+     0.0
+    ],
+    "x0_relax_frac": [
+     "double",
+     0.0
+    ],
+    "x0_relax_symmetric": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "tracker",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "tracker_1",
+   "namespace": null,
+   "package": "tracker",
+   "parameters": {
+    "attitude_ff": [
+     "bool",
+     true
+    ],
+    "cable_accel_cap": [
+     "double",
+     14.5
+    ],
+    "cable_ff_scale": [
+     "double",
+     1.0
+    ],
+    "cable_lp_hz": [
+     "double",
+     0.0
+    ],
+    "cable_lp_order": [
+     "int",
+     1
+    ],
+    "cable_notch_hz": [
+     "double",
+     5.3
+    ],
+    "cable_notch_q": [
+     "double",
+     1.0
+    ],
+    "cable_pull_up_max": [
+     "double",
+     0.0
+    ],
+    "cable_source": [
+     "string",
+     "mocap"
+    ],
+    "carriers_down_alone": [
+     "bool",
+     true
+    ],
+    "control_mode": [
+     "string",
+     "velocity_after_handover"
+    ],
+    "drone_id": [
+     "int",
+     1
+    ],
+    "drop_on_loss": [
+     "bool",
+     true
+    ],
+    "drop_tilt_deg": [
+     "double",
+     55.0
+    ],
+    "ground_idle": [
+     "bool",
+     true
+    ],
+    "kt_batt_sag_frac": [
+     "double",
+     0.0
+    ],
+    "kt_batt_v_empty": [
+     "double",
+     21.0
+    ],
+    "kt_batt_v_full": [
+     "double",
+     25.2
+    ],
+    "kt_print_period_s": [
+     "double",
+     1.0
+    ],
+    "kt_trim": [
+     "bool",
+     false
+    ],
+    "kt_trim_max": [
+     "double",
+     0.25
+    ],
+    "kt_trim_tau": [
+     "double",
+     1.5
+    ],
+    "payload_rest_z": [
+     "double",
+     0.0275
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "ref_time_shift": [
+     "bool",
+     false
+    ],
+    "safety_ref_timeout_s": [
+     "double",
+     1.0
+    ],
+    "takeoff_spool_s": [
+     "double",
+     0.5
+    ],
+    "takeoff_thrust_ratio": [
+     "double",
+     0.0
+    ],
+    "terminal_vel_ref": [
+     "bool",
+     false
+    ],
+    "throttle_max": [
+     "double",
+     0.95
+    ],
+    "thrust_offset": [
+     "double",
+     0.185
+    ],
+    "thrust_offset_v_slope": [
+     "double",
+     0.022
+    ],
+    "thrust_ratio": [
+     "double",
+     35.2
+    ],
+    "thrust_v_ref": [
+     "double",
+     23.5
+    ],
+    "vel_k_att": [
+     "double",
+     8.0
+    ],
+    "vel_ki": [
+     "double",
+     0.0
+    ],
+    "vel_kp_pos": [
+     "double",
+     2.0
+    ],
+    "vel_kv": [
+     "double",
+     4.0
+    ],
+    "vel_swing_k": [
+     "double",
+     0.0
+    ],
+    "w_thr_ref": [
+     "double",
+     0.0
+    ],
+    "x0_relax_frac": [
+     "double",
+     0.0
+    ],
+    "x0_relax_symmetric": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "tracker",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "tracker_2",
+   "namespace": null,
+   "package": "tracker",
+   "parameters": {
+    "attitude_ff": [
+     "bool",
+     true
+    ],
+    "cable_accel_cap": [
+     "double",
+     14.5
+    ],
+    "cable_ff_scale": [
+     "double",
+     1.0
+    ],
+    "cable_lp_hz": [
+     "double",
+     0.0
+    ],
+    "cable_lp_order": [
+     "int",
+     1
+    ],
+    "cable_notch_hz": [
+     "double",
+     5.3
+    ],
+    "cable_notch_q": [
+     "double",
+     1.0
+    ],
+    "cable_pull_up_max": [
+     "double",
+     0.0
+    ],
+    "cable_source": [
+     "string",
+     "mocap"
+    ],
+    "carriers_down_alone": [
+     "bool",
+     true
+    ],
+    "control_mode": [
+     "string",
+     "velocity_after_handover"
+    ],
+    "drone_id": [
+     "int",
+     2
+    ],
+    "drop_on_loss": [
+     "bool",
+     true
+    ],
+    "drop_tilt_deg": [
+     "double",
+     55.0
+    ],
+    "ground_idle": [
+     "bool",
+     true
+    ],
+    "kt_batt_sag_frac": [
+     "double",
+     0.0
+    ],
+    "kt_batt_v_empty": [
+     "double",
+     21.0
+    ],
+    "kt_batt_v_full": [
+     "double",
+     25.2
+    ],
+    "kt_print_period_s": [
+     "double",
+     1.0
+    ],
+    "kt_trim": [
+     "bool",
+     false
+    ],
+    "kt_trim_max": [
+     "double",
+     0.25
+    ],
+    "kt_trim_tau": [
+     "double",
+     1.5
+    ],
+    "payload_rest_z": [
+     "double",
+     0.0275
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "ref_time_shift": [
+     "bool",
+     false
+    ],
+    "safety_ref_timeout_s": [
+     "double",
+     1.0
+    ],
+    "takeoff_spool_s": [
+     "double",
+     0.5
+    ],
+    "takeoff_thrust_ratio": [
+     "double",
+     0.0
+    ],
+    "terminal_vel_ref": [
+     "bool",
+     false
+    ],
+    "throttle_max": [
+     "double",
+     0.95
+    ],
+    "thrust_offset": [
+     "double",
+     0.185
+    ],
+    "thrust_offset_v_slope": [
+     "double",
+     0.022
+    ],
+    "thrust_ratio": [
+     "double",
+     35.2
+    ],
+    "thrust_v_ref": [
+     "double",
+     23.5
+    ],
+    "vel_k_att": [
+     "double",
+     8.0
+    ],
+    "vel_ki": [
+     "double",
+     0.0
+    ],
+    "vel_kp_pos": [
+     "double",
+     2.0
+    ],
+    "vel_kv": [
+     "double",
+     4.0
+    ],
+    "vel_swing_k": [
+     "double",
+     0.0
+    ],
+    "w_thr_ref": [
+     "double",
+     0.0
+    ],
+    "x0_relax_frac": [
+     "double",
+     0.0
+    ],
+    "x0_relax_symmetric": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "tracker",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "tracker_3",
+   "namespace": null,
+   "package": "tracker",
+   "parameters": {
+    "attitude_ff": [
+     "bool",
+     true
+    ],
+    "cable_accel_cap": [
+     "double",
+     14.5
+    ],
+    "cable_ff_scale": [
+     "double",
+     1.0
+    ],
+    "cable_lp_hz": [
+     "double",
+     0.0
+    ],
+    "cable_lp_order": [
+     "int",
+     1
+    ],
+    "cable_notch_hz": [
+     "double",
+     5.3
+    ],
+    "cable_notch_q": [
+     "double",
+     1.0
+    ],
+    "cable_pull_up_max": [
+     "double",
+     0.0
+    ],
+    "cable_source": [
+     "string",
+     "mocap"
+    ],
+    "carriers_down_alone": [
+     "bool",
+     true
+    ],
+    "cmd_next_tick": [
+     "bool",
+     false
+    ],
+    "control_mode": [
+     "string",
+     "velocity_after_handover"
+    ],
+    "drone_id": [
+     "int",
+     3
+    ],
+    "drop_on_loss": [
+     "bool",
+     true
+    ],
+    "drop_tilt_deg": [
+     "double",
+     55.0
+    ],
+    "enable_diag_log": [
+     "bool",
+     false
+    ],
+    "ground_idle": [
+     "bool",
+     true
+    ],
+    "kt_batt_sag_frac": [
+     "double",
+     0.0
+    ],
+    "kt_batt_v_empty": [
+     "double",
+     21.0
+    ],
+    "kt_batt_v_full": [
+     "double",
+     25.2
+    ],
+    "kt_trim": [
+     "bool",
+     false
+    ],
+    "kt_trim_max": [
+     "double",
+     0.25
+    ],
+    "kt_trim_tau": [
+     "double",
+     1.5
+    ],
+    "mux_state_topic": [
+     "string",
+     "/drone_3/mux_state"
+    ],
+    "payload_rest_z": [
+     "double",
+     0.0275
+    ],
+    "pos_limit_m": [
+     "double",
+     1.8
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "ref_time_shift": [
+     "bool",
+     false
+    ],
+    "safety_ref_timeout_s": [
+     "double",
+     1.0
+    ],
+    "takeoff_spool_s": [
+     "double",
+     0.0
+    ],
+    "takeoff_thrust_ratio": [
+     "double",
+     0.0
+    ],
+    "throttle_max": [
+     "double",
+     0.95
+    ],
+    "thrust_offset": [
+     "double",
+     0.185
+    ],
+    "thrust_offset_v_slope": [
+     "double",
+     0.022
+    ],
+    "thrust_ratio": [
+     "double",
+     35.2
+    ],
+    "thrust_v_ref": [
+     "double",
+     23.5
+    ],
+    "vel_k_att": [
+     "double",
+     8.0
+    ],
+    "vel_ki": [
+     "double",
+     0.0
+    ],
+    "vel_kp_pos": [
+     "double",
+     2.0
+    ],
+    "vel_kv": [
+     "double",
+     4.0
+    ],
+    "vel_swing_k": [
+     "double",
+     0.0
+    ],
+    "w_thr_ref": [
+     "double",
+     0.0
+    ],
+    "warm_follow_applied": [
+     "bool",
+     true
+    ],
+    "x0_relax_frac": [
+     "double",
+     0.0
+    ],
+    "x0_relax_symmetric": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": [
+    [
+     "/drone_3/ELRSCommand",
+     "/drone_3/ELRSCommand_diss"
+    ],
+    [
+     "/drone_3/ELRSCommand_applied",
+     "/drone_3/ELRSCommand"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "elrs_interface",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "elrs_interface",
+   "namespace": "/drone_0",
+   "package": "drone_communication",
+   "parameters": {
+    "magnet_channel": [
+     "int",
+     6
+    ],
+    "magnet_initial": [
+     "string",
+     "ON"
+    ],
+    "serial_port": [
+     "string",
+     "/dev/QUAD1"
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "elrs_interface",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "elrs_interface",
+   "namespace": "/drone_1",
+   "package": "drone_communication",
+   "parameters": {
+    "magnet_channel": [
+     "int",
+     6
+    ],
+    "magnet_initial": [
+     "string",
+     "ON"
+    ],
+    "serial_port": [
+     "string",
+     "/dev/QUAD2"
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "elrs_interface",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "elrs_interface",
+   "namespace": "/drone_2",
+   "package": "drone_communication",
+   "parameters": {
+    "magnet_channel": [
+     "int",
+     6
+    ],
+    "magnet_initial": [
+     "string",
+     "ON"
+    ],
+    "serial_port": [
+     "string",
+     "/dev/QUAD3"
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "elrs_interface",
+   "global_parameters": {
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "kind": "node",
+   "name": "elrs_interface",
+   "namespace": "/drone_3",
+   "package": "drone_communication",
+   "parameters": {
+    "magnet_channel": [
+     "int",
+     6
+    ],
+    "magnet_initial": [
+     "string",
+     "ON"
+    ],
+    "serial_port": [
+     "string",
+     "/dev/QUAD4"
+    ]
+   },
+   "remappings": [
+    [
+     "magnet",
+     "/drone_3/magnet_coil"
+    ]
+   ]
+  },
+  {
+   "arguments": [],
+   "executable": "magnet_attachment_manager_irl",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "magnet_attachment_manager_irl",
+   "namespace": "tejen",
+   "package": "tejen_mission",
+   "parameters": {
+    "attach_dwell_s": [
+     "double",
+     0.8
+    ],
+    "attach_radius_m": [
+     "double",
+     0.12
+    ],
+    "attach_speed_threshold_mps": [
+     "double",
+     0.25
+    ],
+    "attachment_state_topic": [
+     "string",
+     "/tejen/attachment_state"
+    ],
+    "detach_dwell_s": [
+     "double",
+     0.2
+    ],
+    "elrs_magnet_channel": [
+     "int",
+     10
+    ],
+    "elrs_magnet_channels": [
+     "array",
+     [
+      [
+       "int",
+       5
+      ],
+      [
+       "int",
+       6
+      ],
+      [
+       "int",
+       7
+      ],
+      [
+       "int",
+       8
+      ],
+      [
+       "int",
+       9
+      ],
+      [
+       "int",
+       10
+      ]
+     ]
+    ],
+    "elrs_magnet_command_topic": [
+     "string",
+     "/tejen/magnet/ELRSCommand"
+    ],
+    "elrs_magnet_off_value": [
+     "double",
+     -1.0
+    ],
+    "elrs_magnet_on_value": [
+     "double",
+     1.0
+    ],
+    "elrs_repeat_rate_hz": [
+     "double",
+     2.0
+    ],
+    "enable_elrs_magnet_output": [
+     "bool",
+     false
+    ],
+    "magnet_command_topic": [
+     "string",
+     "/tejen/magnet/command"
+    ],
+    "magnet_marker_to_contact_face_x": [
+     "double",
+     0.0
+    ],
+    "magnet_marker_to_contact_face_y": [
+     "double",
+     0.0
+    ],
+    "magnet_marker_to_contact_face_z": [
+     "double",
+     -0.0225
+    ],
+    "magnet_tip_pose_topic": [
+     "string",
+     "/tejen/magnet_tip_pose"
+    ],
+    "object_attached_topic": [
+     "string",
+     "/tejen/object_attached"
+    ],
+    "pickup_object_index": [
+     "int",
+     0
+    ],
+    "pickup_object_pose_topic": [
+     "string",
+     "/tejen/pickup_object/pose"
+    ],
+    "pickup_point_offset_x": [
+     "double",
+     -0.0045
+    ],
+    "pickup_point_offset_y": [
+     "double",
+     -0.0107
+    ],
+    "pickup_point_offset_z": [
+     "double",
+     -0.0115
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "partner_rig_state",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "partner_rig_state",
+   "namespace": "tejen",
+   "package": "tejen_mission",
+   "parameters": {
+    "anchor_offset_z": [
+     "double",
+     -0.03
+    ],
+    "ball_topic": [
+     "string",
+     "/pickup/motion_capture_state"
+    ],
+    "body_topic": [
+     "string",
+     "/drone_3/motion_capture_state"
+    ],
+    "max_pair_age_s": [
+     "double",
+     0.2
+    ],
+    "ns": [
+     "string",
+     "/tejen"
+    ],
+    "tip_topic": [
+     "string",
+     "/magnet_tip_pose"
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ]
+   },
+   "remappings": []
+  },
+  {
+   "arguments": [],
+   "executable": "main",
+   "global_parameters": {},
+   "kind": "node",
+   "name": "tejen_mpc",
+   "namespace": "tejen",
+   "package": "tejen_mpc",
+   "parameters": {
+    "acados_cache_dir": [
+     "string",
+     "/home/wesley/.cache/multi_drone_control/tejen_payload_mpc"
+    ],
+    "arming_state_feedback_period_s": [
+     "double",
+     0.5
+    ],
+    "battery_comp_slope": [
+     "double",
+     0.022
+    ],
+    "cable_length": [
+     "double",
+     1.0
+    ],
+    "enable_thrust_ratio_feedback": [
+     "bool",
+     true
+    ],
+    "enable_thrust_ratio_ukf": [
+     "bool",
+     true
+    ],
+    "enable_xy_integral_action": [
+     "bool",
+     true
+    ],
+    "lateral_disturbance_airborne_height_m": [
+     "double",
+     0.2
+    ],
+    "lateral_disturbance_max_abs_mps2": [
+     "double",
+     2.0
+    ],
+    "lateral_disturbance_max_dt_s": [
+     "double",
+     0.15
+    ],
+    "lateral_disturbance_observer_bandwidth_rad_s": [
+     "double",
+     0.3
+    ],
+    "mpc_command_execution": [
+     "string",
+     "profile"
+    ],
+    "mpc_profile": [
+     "string",
+     "oct10"
+    ],
+    "object_attached_topic": [
+     "string",
+     "/tejen/object_attached"
+    ],
+    "object_mass_kg": [
+     "double",
+     0.0
+    ],
+    "object_vehicle_mass_kg": [
+     "double",
+     0.55
+    ],
+    "pose_timeout_s": [
+     "double",
+     0.25
+    ],
+    "throttle_state_max": [
+     "double",
+     0.8
+    ],
+    "thrust_ratio": [
+     "double",
+     22.0
+    ],
+    "thrust_ratio_feedback_deadband": [
+     "double",
+     0.2
+    ],
+    "thrust_ratio_feedback_max_fractional_change": [
+     "double",
+     0.25
+    ],
+    "thrust_ratio_feedback_max_std": [
+     "double",
+     1.5
+    ],
+    "thrust_ratio_feedback_min_updates": [
+     "int",
+     15
+    ],
+    "thrust_ratio_feedback_rate_per_s": [
+     "double",
+     0.5
+    ],
+    "use_external_reference": [
+     "bool",
+     true
+    ],
+    "use_sim_time": [
+     "bool",
+     false
+    ],
+    "xy_bias_mode": [
+     "string",
+     "legacy_integral"
+    ],
+    "xy_integral_limit": [
+     "double",
+     0.3
+    ],
+    "xy_integral_reference_jump_reset_m": [
+     "double",
+     0.25
+    ],
+    "xy_integral_terminal_weight": [
+     "double",
+     30.0
+    ],
+    "xy_integral_weight": [
+     "double",
+     15.0
+    ]
+   },
+   "remappings": [
+    [
+     "ELRSCommand",
+     "/drone_3/ELRSCommand_tejen"
+    ],
+    [
+     "motion_capture_state",
+     "/drone_3/motion_capture_state"
+    ],
+    [
+     "telemetry",
+     "/drone_3/telemetry"
+    ]
+   ]
+  }
+ ],
+ "launch": "real_control_launch.py"
+}

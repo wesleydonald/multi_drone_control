@@ -1,0 +1,135 @@
+name: t15x_hover_normal
+description: '15 Nov C++ exit twin wiring check (handoff 15 Nov, plan v2 section 7; exploratory, wiring only, not timing): hover first: the exit end to end, AT_START -> LANDING, then the fleet LAND after LANDED_DISARMED. The exit trial line: return_after_drop:=cpp exit_handoff:=moving max_body_z:=3.2 cpp_max_z:=3.3 on t15_fig8_s9_cpp_sw3_spl2_retdirect_endless_twin with the ring hovering. Falsifier: no AT_START or LANDED_DISARMED, a stationary seed, a reference step over 5 cm at a switch, QUAD4 over 3.2 m, an abort.'
+world: three_rigid_ground_rig_attach_held_pickup_s9_L100.sdf
+ball_start:
+- -0.0
+- 2.898847
+- 0.08
+lab_env:
+  SIM_MOCAP_VEL_FILTER: slope
+  MDC_MOCAP_VEL_DRONES: 0,1,2
+launch:
+  package: bringup
+  file: sim_control_launch.py
+  args:
+    attach_radius: 0.225
+    attach_z: 0.02
+    cable_len: 1.0
+    creep_vel: 0.2
+    drone_mass: 0.55
+    ff_cap_force: 0.75
+    ff_cap_release_s: 2.0
+    handover_settle_s: 1.0
+    kt_trim: false
+    lift_ramp_vel: 0.15
+    load_mass: 0.86
+    attach_pause: false
+    measure_rod_len: true
+    num_drones: 3
+    payload_rest_z: 0.02
+    pivot_offset_z: -0.04
+    pretension_s: 3.0
+    reconfig_mode: ocp
+    rod_spread_m: 0.08
+    rod_tol_frac: 0.25
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+    sim_thrust_offset: 0.181,0.185,0.187,0.187
+    start_taut: false
+    takeoff_thrust_ratio: 0.0
+    target_z: 1.2
+    throttle_max: 0.95
+    cable_notch_hz: 5.3
+    drop_tilt_deg: 55.0
+    detach_detect_m: 0.15
+    thrust_offset: 0.185
+    thrust_offset_v_slope: 0.022
+    thrust_ratio: 35.2
+    z_i_gate: 0.25
+    z_taut_gate: 0.9
+    pos_limit_m: 1.8
+    mode: attach
+    reserved_attach: 1
+    attach_azimuths_deg: 90,330,210
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    partner: true
+    weld_radius: 0.01
+    weld_point_z: 0.032
+    partner_contact: true
+    proof_rules: comotion
+    proof_h_plate: 0.0025
+    weld_speed_gate: 0.05
+    tip_max_rate_hz: 120.0
+    tip_noise_sd_m: 0.0005
+    load_traj: hover
+io_launch:
+  file: sim_io_launch.py
+  args:
+    num_drones: 3
+    attach: true
+    clock_hz: 500
+    sim_pack_v0: 23.8
+    sim_thrust_map: rig
+fleet:
+  num_drones: 3
+  n_total: 4
+timing:
+  duration_s: 700.0
+  stop_after_abort_s: 8.0
+  stop_after_landed_s: 5.0
+  ready_timeout_s: 420.0
+  pose_timeout_s: 8.0
+  launch_expect_topics:
+  - /join_planner/phase
+  - /fake_payload/pose
+  dds_udp_only: true
+  bg_param_dump: false
+events:
+- t: 1.0
+  do: LAUNCH
+  arg: tejen_mission partner_mission.launch.py geometry:=rig_twin_L100 plate:=9 carrier_azimuths_deg:=[90.0,330.0,210.0] contact_attach:=true
+    carry_clearance:=0.25 mission_mode:=delivery_rejoin ring_z:=1.2 commit_backdate:=0.04 tracking_check:=off attach_cpp_transit:=false
+    attach_transit_clearance:=0.30 minimum_search_z_m:=2.20 approach_offset_z:=0.30 attach_twist:=zero match_xy:=0.05 match_dwell:=0.5
+    climb_speed:=0.3 match_speed:=0.20 descent_abort_speed:=0.35 descent_hold:=true descent_debounce:=1.0 descent_abort_xy:=0.05
+    contact_give_up_s:=120 contact_dz:=-0.03 lift_full:=true mpc_throttle_max:=0.8 drop_height:=0.48 max_body_z:=3.2 mpc_battery_comp:=0.022
+    drop_release:=0.03 max_swing_angle_rad:=0.0524 spline_time_factor:=2 cooperative_tracking_half_m:=0.04 swing_envelope:=outer_octagon
+    target_time_iterations:=30 cpp_max_z:=3.3 return_after_drop:=cpp exit_handoff:=moving
+- t: 3.0
+  do: ARM
+- t: 6.0
+  do: TAKEOFF
+- t: 8.0
+  do: WAIT_LIFT
+  arg: 0.3 60
+- t: 20.0
+  do: WAIT_LOG
+  arg: 500 PHASE:AT_START
+- t: 40.0
+  do: WAIT_LOG
+  arg: 200 PHASE:LANDED_DISARMED
+- t: 41.0
+  do: LAND
+criteria:
+  require_weld: false
+  forbid_abort: true
+  min_payload_z: 0.005
+  min_peak_payload_z: 0.5
+record:
+  period_s: 0.0333
+  fps: 30
+  render: false
+  cameras:
+    baseline:
+      pos:
+      - 2.6
+      - -4.4
+      - 3.2
+      look_at:
+      - 0.0
+      - 0.4
+      - 1.8
+      hfov_deg: 60.0
+      size:
+      - 1280
+      - 720

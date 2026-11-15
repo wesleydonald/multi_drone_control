@@ -1,0 +1,56 @@
+17:09:53 fm9h_2_e_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:10:23 fm9h_2_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:10:53 fm9h_2_e_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:11:23 fm9h_2_p_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:11:54 fm9hc_10_e_mat_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:12:24 fm9hc_10_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:12:55 fm9hc_10_e_mat_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:13:36 fm9hc_11_e_mat_idle: 31 events; phase RETURN_TO_START -> AT_START 
+17:14:06 fm9hc_11_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:14:47 fm9hc_11_e_mat_load8: 31 events; phase RETURN_TO_START -> AT_START 
+17:15:17 fm9hc_11_p_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:15:51 fm9h8_13_e_mat_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:16:23 fm9h8_13_p_mat_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:16:57 fm9h8_13_e_mat_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:17:28 fm9h8_13_p_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:17:54 fm9h8_14_e_mat_idle: 22 events; handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:18:26 fm9h8_14_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:18:53 fm9h8_14_e_mat_load8: 22 events; handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:19:25 fm9h8_14_p_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:19:57 fm9h8_5_e_mat_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:20:29 fm9h8_5_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:20:54 fm9h8_5_e_mat_load8: 20 events; handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:21:26 fm9h8_5_p_mat_load8: 27 events; phase RETURN_TO_START -> AT_START 
+17:21:58 fm9hc_e_mat_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:22:28 fm9hc_p_mat_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:22:59 fm9hc_e_mat_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:23:30 fm9hc_p_mat_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:24:01 fm9hc_8_e_mat_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:24:32 fm9hc_8_p_mat_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:25:03 fm9hc_8_e_mat_load8: 27 events; phase RETURN_TO_START -> AT_START 
+17:25:33 fm9hc_8_p_mat_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:26:03 fm9h_2_e_own_idle: 25 events; phase RETURN_TO_START -> AT_START 
+17:26:33 fm9h_2_e_own_load8: 25 events; phase RETURN_TO_START -> AT_START 
+17:27:03 fm9hc_10_e_own_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:27:37 fm9hc_10_e_own_load8: 33 events; phase RETURN_TO_START -> AT_START 
+17:28:12 fm9hc_11_e_own_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:28:39 fm9hc_11_e_own_load8: 22 events; handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:29:11 fm9h8_13_e_own_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:29:42 fm9h8_13_e_own_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:30:15 fm9h8_14_e_own_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:30:42 fm9h8_14_e_own_load8: 22 events; handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:31:13 fm9h8_5_e_own_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:31:44 fm9h8_5_e_own_load8: 27 events; phase RETURN_TO_START -> AT_START 
+17:32:15 fm9hc_e_own_idle: 29 events; phase RETURN_TO_START -> AT_START 
+17:32:45 fm9hc_e_own_load8: 29 events; phase RETURN_TO_START -> AT_START 
+17:33:15 fm9hc_8_e_own_idle: 27 events; phase RETURN_TO_START -> AT_START 
+17:33:46 fm9hc_8_e_own_load8: 27 events; phase RETURN_TO_START -> AT_START 
+17:34:17 fm9h_2_e_mat_idle_drop: 25 events; phase RETURN_TO_START -> AT_START 
+17:34:48 fm9hc_10_e_mat_idle_drop: 27 events; phase RETURN_TO_START -> AT_START 
+17:35:24 fm9hc_11_e_mat_idle_drop: 29 events; phase RETURN_TO_START -> AT_START 
+17:35:57 fm9h8_13_e_mat_idle_drop: 29 events; phase RETURN_TO_START -> AT_START 
+17:36:33 fm9h8_14_e_mat_idle_drop: 27 events; phase RETURN_TO_START -> AT_START 
+17:37:05 fm9h8_5_e_mat_idle_drop: 27 events; phase RETURN_TO_START -> AT_START 
+17:37:35 fm9hc_e_mat_idle_drop: 25 events; phase RETURN_TO_START -> AT_START 
+17:38:06 fm9hc_8_e_mat_idle_drop: 27 events; phase RETURN_TO_START -> AT_START 
+summary.csv written

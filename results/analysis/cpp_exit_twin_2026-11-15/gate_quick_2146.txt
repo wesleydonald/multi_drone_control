@@ -1,0 +1,32 @@
+
+══ 1/6  workspace ══
+   ok
+
+══ 2/6  unit tests ══
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+2331 passed, 19 skipped, 10 warnings in 190.06s (0:03:10)
+
+══ 3/6  import check (every console-script module) ══
+   ok   tracker.tracker_node
+
+56 module(s) imported, 1 skipped, 0 failed
+
+══ 4/6  world geometry vs controller config ══
+   ok   three_rigid_ground_rig_L100.sdf (mode mpc)
+   ok   four_rigid_ground_rig_L100.sdf (mode dissipative)
+   ok   four_rigid_ground_rig_L100.sdf (mode network)
+   ok   three_rigid_ground_rig_attach_L100.sdf (mode attach)
+   ok   three_rigid_ground.sdf (mode mpc)
+   ok   four_rigid_ground.sdf (mode dissipative)
+   ok   three_attach.sdf (mode attach)
+   ok   three_rigid_ground.sdf (mode network)
+   ok   weld variants up to date
+   ok   rig carry worlds up to date
+   ok   rig 1 m attach worlds up to date
+
+══ 5/6  offline dissipative harness — SKIPPED (--quick) ══
+
+══ 6/6  SIL smoke suite — SKIPPED (--quick) ══
+
+══ GATE PASSED ══

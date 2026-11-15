@@ -1,0 +1,11 @@
+18:25:49 fm9h8_14_e_mat_idle_r2: phase RETURN_TO_START -> AT_START 
+18:26:18 fm9h_2_e_own_idle_r2: phase RETURN_TO_START -> AT_START 
+18:26:49 fm9h8_5_e_own_idle_r2: phase RETURN_TO_START -> AT_START 
+18:27:30 fm9hc_11_e_mat_idle_r2: phase RETURN_TO_START -> AT_START 
+18:28:02 fm9h8_5_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+18:28:32 fm9hc_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+18:29:03 fm9hc_8_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+18:29:36 fm9hc_10_e_mat_load8_r2: phase RETURN_TO_START -> AT_START 
+18:30:07 fm9h8_5_e_own_load8_r2: phase RETURN_TO_START -> AT_START 
+18:30:59 fm9h8_14_e_mat_idle_r3: phase RETURN_TO_START -> AT_START
+18:31:37 fm9hc_e_own_load8_r2: phase RETURN_TO_START -> AT_START

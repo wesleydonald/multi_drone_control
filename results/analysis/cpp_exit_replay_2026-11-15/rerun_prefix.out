@@ -1,0 +1,9 @@
+17:39:29 fm9h8_14_e_mat_idle_r2: phase RETURN_TO_START -> AT_START 
+17:39:58 fm9h_2_e_own_idle_r2: phase RETURN_TO_START -> AT_START 
+17:40:30 fm9h8_5_e_own_idle_r2: phase RETURN_TO_START -> AT_START 
+17:41:11 fm9hc_11_e_mat_idle_r2: phase RETURN_TO_START -> AT_START 
+17:41:42 fm9h8_5_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+17:42:12 fm9hc_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+17:42:43 fm9hc_8_e_mat_idle_drop_r2: phase RETURN_TO_START -> AT_START 
+17:43:10 fm9hc_10_e_mat_load8_r2: handoff preparing -> failed (the prefix no longer covers the published horizon) 
+17:43:41 fm9h8_5_e_own_load8_r2: phase RETURN_TO_START -> AT_START 
