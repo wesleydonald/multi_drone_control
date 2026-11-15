@@ -56,6 +56,8 @@ class RingBridge(FakeCooperativeTransportWorld):
         self._ring_q = None              # its attitude (w, x, y, z)
         self._zf = None                  # attach_z_lowpass_hz: the two filter stages, and when they ran
         self._zf_t = None
+        self._traj_key = None            # the LoadTrajectory built for these constructor arguments
+        self._traj_obj = None
         super().__init__()
         self.create_subscription(String, '/payload/trajectory_state', self._traj_cb, 5)
         self.create_subscription(MotionCaptureState, '/payload/motion_capture_state',
@@ -154,7 +156,7 @@ class RingBridge(FakeCooperativeTransportWorld):
             return RigidBodyState(x=0.0, y=0.0, z=0.0, yaw=0.0, vx=0.0, vy=0.0, vz=0.0,
                                   yaw_rate=0.0)
         s = self._traj_state
-        traj = LoadTrajectory(s['kind'], s['speed'], s.get('distance', 1.0), s['radius'], laps=s.get('laps', 1))
+        traj = self._trajectory(s)
         age = max(0.0, self.get_clock().now().nanoseconds * 1e-9 - float(self._traj_rx_s))
         run = max(0.0, ahead + age - float(s.get('hold_s', 0.0)))
         moving = bool(s.get('running', False))
@@ -169,6 +171,16 @@ class RingBridge(FakeCooperativeTransportWorld):
         z = self._ring.z if (self._ring is not None and moving) else float(s['z'])
         return RigidBodyState(x=float(s['hover_x']) + dx, y=float(s['hover_y']) + dy,
                               z=z, yaw=yaw, vx=vx, vy=vy, vz=0.0, yaw_rate=0.0)
+
+    def _trajectory(self, s) -> LoadTrajectory:
+        """One LoadTrajectory per set of constructor arguments: a new one per call rebuilt the figure-eight's
+        arc-length table at every commitment control point, and that refresh blocked this node's pose and state
+        publishers (15 Nov). Its caches are pure functions of these arguments, so the output is unchanged."""
+        key = (s['kind'], s['speed'], s.get('distance', 1.0), s['radius'], s.get('laps', 1))
+        if key != self._traj_key:
+            self._traj_obj = LoadTrajectory(key[0], key[1], key[2], key[3], laps=key[4])
+            self._traj_key = key
+        return self._traj_obj
 
     def refresh_shared_commitments(self, valid_from_s: float) -> None:
         """shared_trajectory_backdate_s > 0: the carriers' shared commitments start that long before now. His parent
