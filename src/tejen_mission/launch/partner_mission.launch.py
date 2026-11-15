@@ -186,6 +186,21 @@ DROP_RELEASE_CLEARANCE = 0.14      # his planner's drop_release_clearance defaul
 # 0.15 kg plate, to 2.62 m from a 2.43 m climb), and that overshoot counted in the ceiling check
 DROP_CLEAR_ABOVE_RELEASE = 0.03
 DROP_UNLOAD_OVERSHOOT_M = 0.20
+# exit_handoff:=moving (15 Nov, docs/rig/cpp_exit_impl_contract_2026-11-15.md 3.10; typed only, return_after_drop:=cpp):
+# his C++ exit seeded from the moving prefix his planner publishes, at the trial line's settled starting values
+EXIT_PREFIX_TOPIC = '/dynamic_planner/transfer_prefix'
+EXIT_HOLD_Z = 2.9                   # QUAD4's body at the clearance hold
+EXIT_MAX_BODY_Z = 3.2               # the trial line's general body limit: max_body_z may be typed up to it
+EXIT_PLANNER = {'c1f2_exit_moving_handoff': True, 'exit_prefix_topic': EXIT_PREFIX_TOPIC,
+                'exit_ring_commitment_topic': '/fake_payload/committed_trajectory', 'exit_prefix_horizon_s': 5.0,
+                'exit_prefix_refresh_s': 1.0, 'exit_blend_s': 1.0, 'exit_protected_s': 1.5,
+                'exit_handoff_timeout_s': 7.0, 'exit_hold_z_m': EXIT_HOLD_Z, 'at_start_land_after_s': 2.0}
+# his twin supervisor on a return_after_drop line: success is landing at the start once it was reached
+RETURN_SUPERVISOR = {'success_phase': 'LANDED_DISARMED', 'success_after_phase': 'AT_START', 'require_handoff_ready': False}
+# his backend's exit-only context: 5 deg swing, the +-1.8 m assembly workspace up to the body's top face at 3.2 m
+EXIT_BACKEND = {'moving_prefix_topic': EXIT_PREFIX_TOPIC, 'exit_max_swing_angle_rad': math.radians(5.0),
+                'exit_workspace_min': [-1.8, -1.8, 0.0], 'exit_workspace_max': [1.8, 1.8, 3.26],
+                'exit_max_search_z_m': EXIT_MAX_BODY_Z, 'exit_protected_s': EXIT_PLANNER['exit_protected_s']}
 # his geometry-aware pickup on the twin's plate (in place of the spanner_8mm.yaml profile): the target 0.0225 over its
 # centre (its top face 0.0125, less his 0.002 overtravel, plus the twin tip's 0.012 sphere)
 PLATE_PROFILE = {'payload_name': 'plate_100mm', 'payload_collision_size_x': 0.100, 'payload_collision_size_y': 0.100,
@@ -244,12 +259,35 @@ def _release_typed(context):
 
 def _ceiling(context):
     """QUAD4's ceiling: max_body_z if typed (Wesley 4 Nov: the pickup line up to ~2.8 m), else QUAD4_MAX_BODY_Z;
-    never above 3.0 m."""
+    never above 3.0 m (EXIT_MAX_BODY_Z on the exit_handoff:=moving trial line)."""
     v = LaunchConfiguration('max_body_z').perform(context).strip()
     c = float(v) if v else QUAD4_MAX_BODY_Z
-    if not QUAD4_MAX_BODY_Z <= c <= 3.0:
-        raise RuntimeError(f'partner_mission: max_body_z {c} outside [{QUAD4_MAX_BODY_Z}, 3.0]')
+    top = EXIT_MAX_BODY_Z if _exit_moving(context) else 3.0
+    if not QUAD4_MAX_BODY_Z <= c <= top:
+        raise RuntimeError(f'partner_mission: max_body_z {c} outside [{QUAD4_MAX_BODY_Z}, {top}]')
     return c
+
+
+def _exit_moving(context):
+    """exit_handoff:=moving, typed only and refused unless return_after_drop:=cpp."""
+    v = context.launch_configurations.get('exit_handoff', '').strip()
+    if v not in ('', 'moving'):
+        raise RuntimeError(f'partner_mission: exit_handoff:={v}: only moving')
+    if not v:
+        return False
+    if context.launch_configurations.get('return_after_drop', '').strip() != 'cpp':
+        raise RuntimeError('partner_mission: exit_handoff:=moving needs return_after_drop:=cpp')
+    return True
+
+
+def _exit_drop_clear(ring_z, rod):
+    """The drop zone's climb (tip above the drop point) that holds QUAD4's body at EXIT_HOLD_Z over a ring at ring_z: the
+    launch's height checks see the hold (his planner climbs to exit_hold_z_m from the drop point's measured height)."""
+    return EXIT_HOLD_Z - (ring_z + DROP_OFFSET_Z) - rod
+
+
+def _exit_handoff(context):
+    return dict(EXIT_PLANNER) if _exit_moving(context) else {}
 
 
 def _release_clear(context, drop_clear, drop_approach):
@@ -339,6 +377,10 @@ def _backend_margins(context):
     # says so on this topic, instead of moving it with the basket's committed future
     if LaunchConfiguration('return_after_drop').perform(context).strip() == 'cpp':
         out['static_target_topic'] = '/dynamic_planner/static_target'
+    if _exit_moving(context):
+        # the line's general body limit (max_body_z, 3.2 m on the trial) bounds his searches too: the exit's, and the
+        # loaded approach's (review 15 Nov: cpp_max_z 3.3 left the loaded search above it); assembly bounds unchanged
+        out.update({**EXIT_BACKEND, 'exit_max_search_z_m': min(EXIT_MAX_BODY_Z, _ceiling(context))})
     # cpp_max_z (typed only, 13 Nov): the top of his local search box, QUAD4's body z (his start/goal + 1 m otherwise;
     # he climbed to 3.2-3.6 m on a moving ring in the twin, the rig keeps QUAD4 under 2.8-3.0 m)
     # temporal_refinement:=true (typed only, 13 Nov; Te-Jen's Codex: his existing, offline-tested opt-in): his collision
@@ -356,7 +398,13 @@ def _backend_margins(context):
     if refresh:
         out['cooperative_world_refresh_period_s'] = float(refresh)
     top = LaunchConfiguration('cpp_max_z').perform(context).strip()
-    if top:
+    if _exit_moving(context):
+        ceiling = _ceiling(context)
+        if top and float(top) > ceiling + 1e-9:
+            raise RuntimeError(f'partner_mission: cpp_max_z {float(top)} is above max_body_z {ceiling}, the '
+                               'exit_handoff:=moving line\'s general body limit (the loaded approach included)')
+        out['maximum_search_z_m'] = float(top) if top else ceiling
+    elif top:
         out['maximum_search_z_m'] = float(top)
     envelope = LaunchConfiguration('swing_envelope').perform(context).strip()
     if envelope:
@@ -551,6 +599,7 @@ PLANNER_TOPICS = {
     'c1f2_recovery_request_topic': '/dynamic_planner/reference_recovery_request',
     'c1f2_recovery_status_topic': '/dynamic_planner/reference_recovery_status',
     'c1f2_recovery_continuation_topic': '/dynamic_planner/transfer_reference_continuation',
+    'exit_prefix_topic': EXIT_PREFIX_TOPIC, 'exit_ring_commitment_topic': '/fake_payload/committed_trajectory',
     'm2d_mission_permission_topic': '/m2d/mission_permission', 'm2d_assigned_plate_topic': '/m2d/assigned_plate_id',
     'm2b_joint_truth_topic': '/m2a/sim/joint_detached_truth', 'm2b_bootstrap_release_topic': '/m2b/bootstrap/release',
     'm2b_raw_detach_request_topic': '/m2b/sim/raw_detach_request',
@@ -759,6 +808,8 @@ def _nodes(context):
         # return_climb:=transit (13 Nov, twin R4406: the C++ hand-over in the usual 3 cm climb sank onto his search floor):
         # climb back to the transit height first, as pickup_cpp_reattach's hand-over does
         extra['drop_clear_height'] = height('drop_approach_clearance')
+    if _exit_moving(context):
+        extra['drop_clear_height'] = _exit_drop_clear(float(L('ring_z').perform(context)), G['magnet_drop_below_quad'])
     if LaunchConfiguration('return_after_drop').perform(context).strip():
         # the return leaves from the drop zone's usual climb (the rig's 2.8 m ceiling refuses a climb back to the
         # transit height, 2.96 m with the unload overshoot); its C++ hand-over must sit above his search floor
@@ -961,6 +1012,7 @@ def _nodes(context):
                 **({'end_after_drop': True}
                    if LaunchConfiguration('end_after_drop').perform(context).strip() == 'true' else {}),
                 **_return_after_drop(context),
+                **_exit_handoff(context),
                 **_cpp_python_fallback(context),
                 **_prepare_and_release(context),
                 **_drop_on_arrival(context), **_takeoff_gate(context),
@@ -1000,10 +1052,12 @@ def _nodes(context):
             },
         ])
 
-    # a C++ leg after the drop flies with no object: his backend must not wait for one
+    # a C++ leg after the drop flies with no object: his backend must not wait for one (the moving exit keeps the wait:
+    # his exit context skips the object checks for its own transaction)
     overrides = dict(G=G, rod=G['magnet_drop_below_quad'],
                      floor_join=floor_join or cpp_reattach
-                     or LaunchConfiguration('return_after_drop').perform(context).strip() == 'cpp',
+                     or (LaunchConfiguration('return_after_drop').perform(context).strip() == 'cpp'
+                         and not _exit_moving(context)),
                      carrier_model=carrier_model, margins=_backend_margins(context), count=len(azimuths))
     if inst.legacy:
         backend = [IncludeLaunchDescription(
@@ -1080,12 +1134,18 @@ def _nodes(context):
             # wall-clock limits; the stack runs at ~0.25 real time and the backend's 1 Hz
             # (sim) status arrives every ~4 s wall (R0613 READINESS_LOST at 3.0 s)
             'freshness_timeout_s': 5.0,
-            'planner_status_timeout_s': 15.0,
+            # supervisor_status_timeout_s (typed only, one twin check): the C++ exit's 7 s timeout with his backend
+            # frozen (SIGSTOP) needs his backend status to go quiet ~50 s wall (Te-Jen and Codex 15 Nov)
+            'planner_status_timeout_s': float(L('supervisor_status_timeout_s').perform(context) or 15.0),
             # our ring weld is the success, not his phase: a supervisor stop disarms his
             # MPC, which would drop drone 3 if it came before the weld
             'success_phase': 'NONE_PARTNER_WELD_OWNS_SUCCESS',
             'failure_phase': 'LANDED_DISARMED',
             'require_handoff_ready': True,
+            # return_after_drop (no re-attach): the line ends LANDED_DISARMED at its start, after AT_START; a landing
+            # before AT_START, or a disarm in flight, still fails (Te-Jen and Codex 15 Nov: R4536/R4537's
+            # EARLY_TERMINAL_DISARM was this end, not an early one)
+            **(RETURN_SUPERVISOR if L('return_after_drop').perform(context).strip() else {}),
             'landing_request_phase': '',
             **({'pickup_release_state_topic': PICKUP_STATE} if confirm_release else {}),
         }],
@@ -1254,6 +1314,8 @@ def _rig_nodes(context):
         """A typed launch argument, else the rig default (the sim launch's own default is not the rig's)."""
         return LaunchConfiguration(name).perform(context).strip() if name in typed else default
 
+    if LaunchConfiguration('supervisor_status_timeout_s').perform(context).strip():
+        raise RuntimeError('partner_mission real:=true: supervisor_status_timeout_s is a twin check only')
     geometry = val('geometry', 'rig')
     if geometry not in RIG_GEOMETRIES:
         raise RuntimeError(f'partner_mission real:=true flies geometry:=rig (the 28 Oct payload) or rig_m2a (the M2A '
@@ -1307,6 +1369,8 @@ def _rig_nodes(context):
                   if route == 'low' and not floor_join else DROP_CLEAR_HEIGHT)
     if val('return_climb', '') == 'transit':   # as on the sim path: back to the transit height before the hand-over
         drop_clear = f('drop_approach_clearance', H['drop_approach_clearance'])
+    if _exit_moving(context):
+        drop_clear = _exit_drop_clear(float(LaunchConfiguration('ring_z').perform(context)), rod)
     if val('return_after_drop', ''):     # the return's C++ hand-over at the drop zone's climb, above his search floor
         check_search_floor(search_floor, what='return hand-over',
                            start_body_z=float(LaunchConfiguration('ring_z').perform(context)) + DROP_OFFSET_Z
@@ -1462,6 +1526,7 @@ def _rig_nodes(context):
                 # end_after_drop:=true: after the drop QUAD4 holds clear of the drop zone until LAND (no reattach)
                 **({'end_after_drop': True} if val('end_after_drop', '') == 'true' else {}),
                 **_return_after_drop(context),
+                **_exit_handoff(context),
                 **_cpp_python_fallback(context),
                 **_prepare_and_release(context),
                 # drop_on_arrival:=true (Wesley 4 Nov, k1m_2-4: the swinging object never passed his 0.18 m held 0.5 s):
@@ -1559,8 +1624,10 @@ def _rig_nodes(context):
             },
         ])
 
-    # the C++ return flies with no object: his backend must not wait for one
-    overrides = dict(G=G, rod=rod, floor_join=floor_join or val('return_after_drop', '') == 'cpp',
+    # the C++ return flies with no object: his backend must not wait for one (the moving exit keeps the wait: his exit
+    # context skips the object checks for its own transaction)
+    overrides = dict(G=G, rod=rod, floor_join=floor_join or (val('return_after_drop', '') == 'cpp'
+                                                             and not _exit_moving(context)),
                      carrier_model=carrier_model, margins={**backend_object, **_backend_margins(context)},
                      count=len(azimuths))
     if inst.legacy:
@@ -1734,6 +1801,8 @@ def _arguments():
         DeclareLaunchArgument('drop_release_wait', default_value=''),   # s, ...but never longer than this ('' = 3)
         DeclareLaunchArgument('cpp_python_fallback', default_value=''),   # s; his C++ lost this long in the drop transit -> Python
         DeclareLaunchArgument('return_after_drop', default_value='', choices=['', 'cpp', 'direct']),   # back to the start after the drop
+        DeclareLaunchArgument('exit_handoff', default_value='', choices=['', 'moving']),   # cpp: his C++ exit from the moving prefix
+        DeclareLaunchArgument('supervisor_status_timeout_s', default_value=''),   # s, twin checks only ('' = 15)
         DeclareLaunchArgument('return_climb', default_value='', choices=['', 'transit']),
         DeclareLaunchArgument('cpp_max_z', default_value=''),
         DeclareLaunchArgument('cpp_world_refresh', default_value=''),

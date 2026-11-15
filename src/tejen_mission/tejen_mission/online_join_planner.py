@@ -92,6 +92,7 @@ from .reference_generators import (
     TrajectoryReference,
     TransferConfig,
     VirtualTransferGenerator,
+    clamp_velocity,
     rate_controlled_manoeuvre,
     smooth_rate_controlled_manoeuvre,
     stationary_regulation,
@@ -115,7 +116,17 @@ from .moving_obstacle_prediction import (
     MovingObstacleState,
 )
 from .c1f2_handoff import (
+    EXIT_JOIN_GRACE_NS,
+    EXIT_JOIN_TOLERANCE,
+    EXIT_JUNCTION_MARGIN_S,
+    EXIT_TIME_TOLERANCE_S,
+    CommittedSpline,
+    MovingExitHandoff,
     ReferenceRecovery,
+    fit_moving_prefix,
+    fit_relative_blend,
+    refresh_moving_prefix,
+    relative_grant_state,
     TargetRelativeBridgeFeasibility,
     TargetRelativeBridgeState,
     advance_reference_window,
@@ -175,6 +186,9 @@ DROP_ON_ARRIVAL_DWELL_S = 0.10
 # multi_drone_control 12 Nov (the object raised on a stand, 13 Nov): under pickup_lift_max_tip_z the loaded lift still
 # climbs at least this far, so the object leaves its support
 PICKUP_LIFT_MIN_M = 0.10
+# the C++ exit's blends and the reference each falls back to when its checks fail
+EXIT_BLEND_INTO = {'cancel': 'live ring-following reference', 'escape': 'direct return (from the executed reference)',
+                   'arrival': 'start hover (from the executed reference)'}
 
 
 def line_up_stage(ring_xy, plate_xy, quad_xy, radius, lateral):
@@ -712,6 +726,37 @@ class OnlineJoinPlanner(Node):
             raise ValueError("return_after_drop 'cpp' needs c1f1_shadow_transfer_enabled and c1f2_cpp_authority_enabled")
         self.return_prepare_started = False
         self.return_hover: Optional[np.ndarray] = None
+        # the C++ exit on the moving prefix (15 Nov, docs/rig/cpp_exit_impl_contract_2026-11-15.md section 3; off by
+        # default): no world-fixed hold after the drop, one fitted curve both sides execute, a 7 s hand-over budget
+        self.c1f2_exit_moving_handoff = bool(self.declare_parameter('c1f2_exit_moving_handoff', False).value)
+        self.exit_prefix_topic = str(self.declare_parameter(
+            'exit_prefix_topic', '/dynamic_planner/transfer_prefix').value)
+        self.exit_ring_commitment_topic = str(self.declare_parameter(
+            'exit_ring_commitment_topic', '/fake_payload/committed_trajectory').value)
+        self.exit_ring_commitment_max_age_s = float(self.declare_parameter(
+            'exit_ring_commitment_max_age_s', 2.0).value)    # two of ring_bridge's 1 s refreshes
+        self.exit_prefix_horizon_s = float(self.declare_parameter('exit_prefix_horizon_s', 5.0).value)
+        self.exit_prefix_refresh_s = float(self.declare_parameter('exit_prefix_refresh_s', 1.0).value)
+        self.exit_blend_s = float(self.declare_parameter('exit_blend_s', 1.0).value)
+        self.exit_protected_s = float(self.declare_parameter('exit_protected_s', 1.5).value)
+        self.exit_handoff_timeout_s = float(self.declare_parameter('exit_handoff_timeout_s', 7.0).value)
+        self.exit_hold_z_m = float(self.declare_parameter('exit_hold_z_m', 2.9).value)
+        # AT_START -> LANDING after this long of held capture (0 = off: AT_START holds until LAND)
+        self.at_start_land_after_s = max(0.0, float(self.declare_parameter('at_start_land_after_s', 0.0).value))
+        if self.c1f2_exit_moving_handoff and self.return_after_drop != 'cpp':
+            raise ValueError("c1f2_exit_moving_handoff needs return_after_drop 'cpp'")
+        self.exit_handoff: Optional[MovingExitHandoff] = None
+        self.exit_blend: Optional[dict] = None
+        self.exit_escape_active = False
+        self.exit_climb_tip_z: Optional[float] = None
+        self.exit_reference_stamp_ns: Optional[int] = None
+        self.exit_last_source = 'other'
+        self.exit_ring_commitment = None
+        self.exit_ring_commitment_sequence = -1
+        self.exit_ring_commitment_receive_s: Optional[float] = None
+        self.exit_land_epoch: Optional[int] = None
+        self.exit_land_sequence: Optional[int] = None
+        self.last_reference_stamp_ns: Optional[int] = None
         self.drop_on_arrival = bool(self.declare_parameter('drop_on_arrival', False).value)
         self.drop_on_arrival_xy_m = float(self.declare_parameter('drop_on_arrival_xy_m', 0.12).value)
         # multi_drone_control 4 Nov (Wesley's supervisor; RIG-1104-k1m_2-4: the magnet swung into the carriers' cables):
@@ -2848,6 +2893,16 @@ class OnlineJoinPlanner(Node):
         self.reference_publisher = self.create_publisher(
             MultiDOFJointTrajectory, self.reference_topic, 1
         )
+        self.exit_prefix_publisher = None
+        if self.c1f2_exit_moving_handoff:
+            self.validate_exit_timing()
+            self.exit_handoff = MovingExitHandoff()
+            exit_qos = QoSProfile(depth=1)
+            exit_qos.reliability = ReliabilityPolicy.RELIABLE
+            exit_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+            self.exit_prefix_publisher = self.create_publisher(CommittedTrajectory, self.exit_prefix_topic, exit_qos)
+            self.create_subscription(CommittedTrajectory, self.exit_ring_commitment_topic,
+                                     self.exit_ring_commitment_callback, exit_qos)
         self.committed_trajectory_publisher = None
         if self.publish_committed_trajectory:
             # Match the C++ shared-trajectory consumer.  Reliable + transient-local
@@ -4838,6 +4893,8 @@ class OnlineJoinPlanner(Node):
     def external_landing_callback(self, msg: Bool) -> None:
         if not bool(msg.data):
             return
+        if getattr(self, 'c1f2_exit_moving_handoff', False) and self.exit_land():
+            return
         self.takeoff_held = False                             # a held TAKEOFF does not outlive a LAND
         self.cancel_c1f2_reference_recovery()
         if self.ground_ring_exit is not None:
@@ -5140,6 +5197,9 @@ class OnlineJoinPlanner(Node):
         requires the backend ACK, a post-grant 61-sample window, and sample-0
         continuity with the physical hold through p/v/a before leaving the hold.
         """
+        if getattr(self, 'c1f2_exit_moving_handoff', False) and self.exit_preparing():
+            self.exit_try_accept()
+            return
         recovery = getattr(self, "c1f2_reference_recovery", None)
         if recovery is not None and recovery.active:
             if self.c1f1_shadow_reference_last_receive_time is not None:
@@ -5307,6 +5367,8 @@ class OnlineJoinPlanner(Node):
                 status["epoch"] > self.c1f2_recovery_last_accept_epoch and
                 status["stamp_ns"] > self.c1f2_recovery_last_accept_stamp_ns):
             self.begin_c1f2_reference_recovery("backend_withdrew_authority")
+        if getattr(self, 'exit_handoff', None) is not None:
+            self.exit_handoff.observe_status(status, now_s=self._physical_now_s())
         self.c1f2_reference_recovery.observe_status(status, now_s=self._physical_now_s())
         self._c1f2_try_finalize_authority_handoff()
 
@@ -5317,6 +5379,475 @@ class OnlineJoinPlanner(Node):
             if self.c1f2_recovery_request_pub is not None:
                 self.c1f2_recovery_request_pub.publish(String(data=request))
             recovery.request_id = ""
+
+    # ----------------------------------------------------------------------
+    # The C++ exit on the moving prefix (c1f2_exit_moving_handoff, return_after_drop 'cpp' only;
+    # docs/rig/cpp_exit_impl_contract_2026-11-15.md section 3). Pure parts: c1f2_handoff.py.
+    # ----------------------------------------------------------------------
+    def validate_exit_timing(self) -> None:
+        horizon = (self.horizon_samples - 1) * self.dt
+        values = (self.exit_prefix_horizon_s, self.exit_prefix_refresh_s, self.exit_blend_s, self.exit_protected_s,
+                  self.exit_handoff_timeout_s, self.exit_hold_z_m, self.exit_ring_commitment_max_age_s)
+        if not all(math.isfinite(v) and v > 0.0 for v in values):
+            raise ValueError('the C++ exit times and hold height must be finite and positive')
+        # a refresh copies the protected window from the bound prefix, and no publication outruns its coverage
+        protected = self.exit_protected_s + EXIT_JUNCTION_MARGIN_S
+        if self.exit_prefix_refresh_s + self.dt + max(protected, horizon) >= self.exit_prefix_horizon_s:
+            raise ValueError('exit_prefix_horizon_s must exceed exit_prefix_refresh_s + one tick + the larger of '
+                             f'exit_protected_s and the published horizon ({horizon:.2f} s)')
+
+    def _exit_now_ns(self) -> int:
+        return int(self.get_clock().now().nanoseconds)
+
+    def exit_preparing(self) -> bool:
+        handoff = getattr(self, 'exit_handoff', None)
+        return bool(getattr(self, 'c1f2_exit_moving_handoff', False) and handoff is not None
+                    and handoff.state == 'preparing' and self.phase == MissionPhase.CLEAR_DROP_ZONE)
+
+    def exit_limits(self) -> dict:
+        """The planner's own limits (his v_max 1, a_max 1/1/1.5, refinement j_max 4), as C1F.6's bridge check."""
+        return dict(max_velocity=self.c1f2_bridge_max_velocity, max_acceleration=self.c1f2_bridge_max_acceleration,
+                    max_jerk=self.c1f2_bridge_max_jerk, sample_dt=self.c1f2_bridge_feasibility_sample_dt_s)
+
+    def exit_ring_commitment_callback(self, msg: CommittedTrajectory) -> None:
+        if msg.header.frame_id and msg.header.frame_id != self.frame_id:
+            return
+        if self.exit_ring_commitment is not None and int(msg.sequence) <= self.exit_ring_commitment_sequence:
+            return
+        try:
+            spline = CommittedSpline.from_message(msg)
+        except (ValueError, AttributeError, TypeError, IndexError):
+            return
+        self.exit_ring_commitment = spline
+        self.exit_ring_commitment_sequence = int(msg.sequence)
+        self.exit_ring_commitment_receive_s = self._physical_now_s()
+
+    def exit_ring_target(self, t0: float, t1: float, offset: np.ndarray):
+        """R(t) + c over [t0, t1] (the ring's committed future plus the clearance offset), or why not."""
+        ring = self.exit_ring_commitment
+        if ring is None or self.exit_ring_commitment_receive_s is None:
+            return 'no ring commitment'
+        age = self._physical_now_s() - self.exit_ring_commitment_receive_s
+        if not 0.0 <= age <= self.exit_ring_commitment_max_age_s:
+            return f'ring commitment {age:.2f} s old'
+        if not ring.covers(t0, t1):
+            return 'ring commitment does not cover the prefix'
+
+        def target(times):
+            p, v, a, _ = ring.state(times)
+            return p + offset, v, a
+        return target
+
+    def exit_seed_transfer(self) -> None:
+        """The existing transfer generator of this phase (the direct return, or the start hover) starts from the
+        executed reference at this publication's time (p, v), not from the measured state (review 15 Nov, continuity
+        2-3: the measured restart stepped the reference by the tracking error, up to 0.116 m in the replay)."""
+        executed = self.exit_executed_state(self._exit_now_ns() * 1e-9)
+        if executed is None:
+            return                   # the existing start from the measured state
+        generator = self.transfer_generator
+        generator.reset()
+        generator.phase_key = self.phase.value
+        generator.reference_position = np.asarray(executed[0], dtype=float).copy()
+        generator.reference_velocity = clamp_velocity(np.asarray(executed[1], dtype=float),
+                                                      generator.config.max_reference_speed)
+        self.get_logger().info(
+            f'C++ exit: {self.phase.value} starts on the executed reference (|p - measured| '
+            f'{float(np.linalg.norm(generator.reference_position - self.drone_position)):.3f} m)')
+
+    def exit_executed_state(self, t: float):
+        """The already published reference horizon at time t, never its sample 0 relabelled as t: the prefix spline
+        itself when the last publication was the prefix, else the published samples advanced from their stamp."""
+        handoff = self.exit_handoff
+        if (getattr(self, 'exit_previous_source', 'other') == 'prefix' and handoff is not None
+                and handoff.prefix is not None and handoff.prefix.covers(t, t)):
+            return tuple(x[0] for x in handoff.prefix.state([t])[:3])
+        if self.last_reference is None:
+            return None
+        stamp_ns = getattr(self, 'last_reference_stamp_ns', None)
+        published = stamp_ns * 1e-9 if stamp_ns is not None else self.last_reference_time_s
+        if published is None:
+            return None
+        window = advance_reference_window(self.last_reference, elapsed_s=max(0.0, t - published),
+                                          sample_dt_s=self.dt, output_count=1)
+        return window.positions[0], window.velocities[0], window.accelerations[0]
+
+    def update_exit_clearance(self, cleared: bool) -> None:
+        """CLEAR_DROP_ZONE with the exit on: the clearance keeps following the ring (no world-fixed latch). Its
+        completion starts the 7 s budget before any other check or fit; the prefix and the transaction then run in
+        the reference selection. A granted reference that joins the prefix leaves for the C++ return; a failure flies
+        the live ring-following reference until the operator's LAND."""
+        handoff = self.exit_handoff
+        if not self.return_prepare_started:
+            if not cleared:
+                return
+            now_ns = self._exit_now_ns()
+            handoff.start(now_s=now_ns * 1e-9, now_ns=now_ns, timeout_s=self.exit_handoff_timeout_s)
+            self.latch_return_hover()
+            self.reset_c1f2_for_pickup_retry()
+            self.return_prepare_started = True
+            self.get_logger().info(
+                f'C++ exit: clearance complete; hand-over deadline +{self.exit_handoff_timeout_s:.1f} s '
+                f'({handoff.deadline_ns} ns), on the moving prefix')
+            return
+        if handoff.state == 'accepted':
+            self.transition_to(MissionPhase.RETURN_TO_START, 'C++ exit: the granted reference joins the moving prefix')
+
+    def exit_shadow_step(self) -> None:
+        """update_c1f1_shadow_transfer while the exit prepares: the start hover as the backend's still goal, the
+        transaction's reset and seedtraj, and the grant once the backend has a candidate and QUAD4 moves with the
+        executing reference (relative readiness, no dwell). The seedtraj enables the backend: no Bool enable."""
+        handoff = self.exit_handoff
+        target = self.c1f2_transfer_target_state()
+        self.c1f1_shadow_live_body_target = target.position.copy()
+        self.c1f1_shadow_latched_body_target = target.position.copy()
+        self.c1f1_shadow_target_latch_time = self._physical_now_s()
+        self.c1f1_shadow_target_drift_m = 0.0
+        if getattr(self, 'c1f2_static_target_publisher', None) is not None:
+            self.c1f2_static_target_publisher.publish(Bool(data=True))
+        self.c1f1_publish_shadow_target(target.position)
+        self.c1f2_publish_target_velocity(target.velocity)
+        if self.c1f2_recovery_request_pub is None:
+            return
+        for request in handoff.requests():
+            self.c1f2_recovery_request_pub.publish(String(data=request))
+        if not (handoff.grant_ready() and self.exit_relatively_ready()):
+            return
+        now_ns = self._exit_now_ns()
+        self.c1f2_recovery_request_pub.publish(String(data=f'{handoff.request_id} grant {now_ns}'))
+        if not self.c1f2_authority_grant_pending:
+            self.c1f2_authority_grant_pending = True
+            self.c1f2_authority_grant_time = self.c1f2_authority_grant_ros_time_s = now_ns * 1e-9
+            self.c1f2_authority_grant_count = getattr(self, 'c1f2_authority_grant_count', 0) + 1
+
+    def exit_relatively_ready(self) -> bool:
+        """The stationary gate's bounds on QUAD4's measured p/v/a relative to the prefix now (relative_grant_state)."""
+        handoff = self.exit_handoff
+        if (handoff.prefix is None or self.drone_position is None or self.drone_velocity is None
+                or getattr(self, 'drone_acceleration', None) is None):
+            return False
+        now = self._exit_now_ns() * 1e-9
+        if not handoff.prefix.covers(now, now):
+            return False
+        p, v, a, _ = handoff.prefix.state([now])
+        state = relative_grant_state(
+            reference_position=p[0], reference_velocity=v[0], reference_acceleration=a[0],
+            measured_position=self.drone_position, measured_velocity=self.drone_velocity,
+            measured_acceleration=self.drone_acceleration, max_drift_m=self.c1f2_prepare_max_lift_drift_m,
+            settle_speed_mps=self.c1f2_prepare_settle_speed_mps,
+            settle_acceleration_mps2=self.c1f2_prepare_settle_acceleration_mps2)
+        self.c1f2_prepare_drift_m, self.c1f2_prepare_speed_mps = state.drift_m, state.speed_mps
+        return state.ready
+
+    def exit_select(self, python_reference: Optional[TrajectoryReference]) -> Optional[TrajectoryReference]:
+        """The exit's share of select_c1f2_authority_reference: a cancel or takeover blend, else the prefix while the
+        exit prepares (built, refreshed, then evaluated at this publication's own time). None: the existing
+        selection (before the clearance completes, the live reference, the C++ return)."""
+        self.exit_reference_stamp_ns = None
+        self.exit_previous_source, self.exit_last_source = getattr(self, 'exit_last_source', 'other'), 'other'
+        if self.exit_blend is not None:
+            return self.exit_blend_reference(python_reference)
+        handoff = self.exit_handoff
+        if not self.exit_preparing():
+            return None
+        now_ns = self._exit_now_ns()
+        now = now_ns * 1e-9
+        reason = handoff.reject_reason()
+        if reason:
+            return self.exit_fail(f'the backend rejected it ({reason})', python_reference)
+        if now >= handoff.deadline_s:
+            return self.exit_fail(f'no accepted grant within {self.exit_handoff_timeout_s:.1f} s', python_reference)
+        join = handoff.status.get('splice_time_ns') if handoff.status is not None else None
+        if (handoff.status is not None and handoff.status.get('granted') and type(join) is int and join > 0
+                and now_ns > join + EXIT_JOIN_GRACE_NS):
+            # the backend holds authority nobody executes: cancel now, not at the prefix's coverage end
+            return self.exit_fail('granted, but no C++ window joined the prefix by its join + 0.1 s',
+                                  python_reference)
+        if handoff.prefix is None:
+            prefix, check = self.exit_build_prefix(now)
+            if prefix is None:
+                self.get_logger().warning(f'C++ exit: no prefix this tick ({getattr(check, "reason", check)}); the '
+                                          'live ring-following reference flies', throttle_duration_sec=0.5)
+                return None
+            handoff.open(request_id=uuid.uuid4().hex, now_s=now, now_ns=now_ns)
+            self.exit_publish_prefix(prefix, now_ns, check)
+        elif (now - handoff.last_refresh_s >= self.exit_prefix_refresh_s - 1e-9
+              and not (handoff.status is not None and handoff.status['granted'])):   # his backend ignores them then
+            ring = self.exit_ring_target(now + self.exit_protected_s, now + self.exit_prefix_horizon_s, handoff.offset)
+            if isinstance(ring, str):
+                return self.exit_fail(f'no refresh: {ring}', python_reference)
+            try:
+                prefix, check = refresh_moving_prefix(
+                    bound=handoff.prefix, refresh_time=now, protected_s=self.exit_protected_s,
+                    end_time=now + self.exit_prefix_horizon_s, target=ring, blend_s=self.exit_blend_s,
+                    **self.exit_limits())
+            except (ValueError, np.linalg.LinAlgError) as exc:
+                prefix, check = None, str(exc)
+            if prefix is None:
+                return self.exit_fail(f'no refresh: {getattr(check, "reason", check)}', python_reference)
+            self.exit_publish_prefix(prefix, now_ns, check)
+        times = now + np.arange(self.horizon_samples) * self.dt
+        if times[-1] > handoff.prefix.end + 1e-9:
+            return self.exit_fail('the prefix no longer covers the published horizon', python_reference)
+        p, v, a, _ = handoff.prefix.state(times)
+        self.exit_reference_stamp_ns = now_ns
+        self.exit_last_source = 'prefix'
+        return TrajectoryReference(p, v, a)
+
+    def exit_build_prefix(self, now: float):
+        """Prefix 1 from the executed reference's p/v/a at this publication: P = R + c + b, c the live reference's
+        offset from the measured ring centre now (latched for the exit)."""
+        if (self.payload_position is None or getattr(self, 'last_payload_pose_time', None) is None
+                or not 0.0 <= self._physical_now_s() - self.last_payload_pose_time <= self.input_timeout_s):
+            return None, 'no live ring pose'
+        offset = (self.drop_target_state().position + self.desired_tip_offset()
+                  + self.quad_reference_offset_from_tip() - self.payload_position)
+        target = self.exit_ring_target(now, now + self.exit_prefix_horizon_s, offset)
+        if isinstance(target, str):
+            return None, target
+        start = self.exit_executed_state(now)
+        if start is None:
+            return None, 'no published reference'
+        try:
+            check = fit_moving_prefix(start_time=now, end_time=now + self.exit_prefix_horizon_s, start_state=start,
+                                      target=target, blend_s=self.exit_blend_s, **self.exit_limits())
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            return None, str(exc)
+        if not check.ok:
+            return None, check
+        self.exit_handoff.offset = offset
+        return CommittedSpline([check.piece]), check
+
+    def exit_publish_prefix(self, prefix: CommittedSpline, now_ns: int, check) -> None:
+        """Bind and publish prefix k (its seedtraj goes out on the next tick: exit_shadow_step)."""
+        sequence = self.exit_handoff.bind(prefix, stamp_ns=now_ns, now_s=now_ns * 1e-9)
+        msg = CommittedTrajectory()
+        msg.header.stamp.sec, msg.header.stamp.nanosec = divmod(int(now_ns), 1_000_000_000)
+        msg.header.frame_id = self.frame_id
+        msg.vehicle_id = self.vehicle_id
+        msg.sequence = sequence
+        msg.terminal_hold = False
+        for piece in prefix.pieces:
+            out = CubicTrajectoryPiece()
+            out.valid_from_s, out.valid_until_s = piece.valid_from, piece.valid_until
+            out.knots = [float(k) for k in piece.knots]
+            out.control_points = [_make_point(q) for q in piece.control_points]
+            msg.pieces.append(out)
+        if getattr(self, 'exit_prefix_publisher', None) is not None:
+            self.exit_prefix_publisher.publish(msg)
+        self.get_logger().info(
+            f'C++ exit: prefix {sequence} [{prefix.start:.3f}, {prefix.end:.3f}] s, {len(prefix.pieces)} piece(s); '
+            f'blend {check.blend_s:.2f} s after {check.attempts} fit(s), fit error {check.fit_error_m:.4f} m, peaks '
+            f'|v| {check.peak_velocity:.2f} |a| {check.peak_acceleration:.2f} |j| {check.peak_jerk:.2f}')
+
+    def exit_fail(self, reason: str, python_reference) -> Optional[TrajectoryReference]:
+        """Contract 3.6: reported, Cancel and enable=false (no acknowledgement wait), and a blend back to the live
+        ring-following reference from the executed curve. No Python return, no world-fixed stop."""
+        handoff = self.exit_handoff
+        cancel = handoff.close('failed', reason)
+        if cancel is not None and self.c1f2_recovery_request_pub is not None:
+            self.c1f2_recovery_request_pub.publish(String(data=cancel))
+        self.c1f2_publish_authority(False)
+        self.c1f1_publish_shadow_enable(False)
+        self.c1f2_authority_grant_pending = False
+        self.get_logger().error(f'C++ exit hand-off FAILED: {reason}; cancelled, back on the live ring-following '
+                                'reference until LAND')
+        if getattr(self, 'exit_previous_source', 'other') != 'prefix':
+            return None      # the live reference is already the executed one
+        self.exit_blend = {'kind': 'cancel', 'piece': None, 't0': None}
+        return self.exit_blend_reference(python_reference)
+
+    def exit_blend_reference(self, python_reference: Optional[TrajectoryReference]) -> TrajectoryReference:
+        """A cancel (into the live ring-following reference) or the manual escape (into the direct return): the error
+        between the executed curve at this publication and the new reference, decayed by a checked fitted cubic added
+        to the new reference. A blend that fails its checks after its refits: the new reference as it is, the phase's
+        existing reference (live ring-following, or the direct return from the measured state)."""
+        blend = self.exit_blend
+        if python_reference is None:
+            python_reference = self.build_reference()
+        now_ns = self._exit_now_ns()
+        now = now_ns * 1e-9
+        if blend['piece'] is None:
+            executed = self.exit_executed_state(now)
+            check = None
+            if executed is not None:
+                columns = (python_reference.positions, python_reference.velocities, python_reference.accelerations)
+                error = tuple(np.asarray(e, dtype=float) - c[0] for e, c in zip(executed, columns))
+                ref_time = np.arange(python_reference.positions.shape[0]) * self.dt
+
+                def along(values):
+                    return lambda tau: np.stack([np.interp(tau, ref_time, values[:, k]) for k in range(3)], axis=1)
+                try:
+                    check = fit_relative_blend(error_state=error, blend_s=self.exit_blend_s,
+                                               target_velocity=along(python_reference.velocities),
+                                               target_acceleration=along(python_reference.accelerations),
+                                               **self.exit_limits())
+                except (ValueError, np.linalg.LinAlgError):
+                    check = None
+            if check is None or not check.ok:
+                self.exit_blend = None
+                self.get_logger().error(
+                    f'C++ exit: the {blend["kind"]} blend failed its checks '
+                    f'({"not built" if check is None else check.reason}); flying the '
+                    f'{EXIT_BLEND_INTO.get(blend["kind"], "new reference")} as it is')
+                return python_reference
+            blend.update(piece=check.piece, t0=now)
+            self.get_logger().info(
+                f'C++ exit: {blend["kind"]} blend {check.blend_s:.2f} s from |dp| {np.linalg.norm(error[0]):.3f} m '
+                f'|dv| {np.linalg.norm(error[1]):.3f} m/s |da| {np.linalg.norm(error[2]):.3f} m/s^2')
+        tau = now - blend['t0'] + np.arange(python_reference.positions.shape[0]) * self.dt
+        if tau[0] >= blend['piece'].valid_until:
+            self.exit_blend = None
+            return python_reference
+        e, ev, ea, _ = blend['piece'].state(tau)
+        self.exit_reference_stamp_ns = now_ns
+        self.exit_last_source = 'blend'
+        return TrajectoryReference(python_reference.positions + e, python_reference.velocities + ev,
+                                   python_reference.accelerations + ea)
+
+    def exit_source_time(self) -> bool:
+        """The C++ exit's granted return: the backend stamps each window with its sample-0 time (an exit transaction),
+        so the selection advances the window from that time, not its receipt, for the whole return (Te-Jen and Codex's
+        review 15 Nov, continuity 1; the receipt age stepped the reference up to 11 mm per window under load)."""
+        handoff = getattr(self, 'exit_handoff', None)
+        return bool(getattr(self, 'c1f2_exit_moving_handoff', False) and handoff is not None
+                    and handoff.state in ('accepted', 'granted'))
+
+    def exit_try_accept(self) -> None:
+        """A granted C++ window joins the prefix only if it equals it at the same absolute times up to the joining
+        time; then the existing recovery acceptance's bookkeeping, and the state machine's RETURN_TO_START switch."""
+        handoff = self.exit_handoff
+        if not handoff.active:
+            return
+        if self.c1f1_shadow_reference_last_receive_time is not None:
+            handoff.observe_reference(self.c1f1_shadow_reference,
+                                      source_stamp_ns=self.c1f1_shadow_reference_source_stamp_ns,
+                                      receive_time_s=self.c1f1_shadow_reference_last_receive_time,
+                                      full_reference=self.c1f1_shadow_full_reference)
+        if self._exit_now_ns() * 1e-9 >= handoff.deadline_s:
+            return
+        matched = handoff.matching_reference(now_s=self._physical_now_s(),
+                                             timeout_s=self.c1f1_shadow_reference_timeout_s)
+        if matched is None:
+            return
+        joined, errors = handoff.window_matches(matched[0], stamp_ns=matched[1], dt=self.dt,
+                                                tolerance=EXIT_JOIN_TOLERANCE)
+        if not joined:
+            handoff.waiting_reason = 'reference_not_on_prefix'
+            self.get_logger().warning(f'C++ exit: the granted window is not the prefix to its join ({errors})',
+                                      throttle_duration_sec=0.5)
+            return
+        handoff.state = 'accepted'
+        self._c1f2_accept_cpp_candidate(matched[0])
+        self.c1f2_cached_cpp_reference = handoff.full_references.get(matched[1], matched[0])
+        self.c1f2_cached_cpp_reference_receive_time = matched[1] * 1e-9          # its sample-0 time (exit_source_time)
+        self.c1f2_handoff_ready = True
+        self.c1f2_authority_grant_pending = False
+        self.c1f2_authority_acknowledged = True
+        self.c1f2_recovery_last_accept_epoch = handoff.epoch
+        self.c1f2_recovery_last_accept_stamp_ns = matched[1]
+        self.c1f2_publish_authority(True)
+        self.get_logger().info(f'C++ exit: granted window joins the prefix (max |dp| {errors[0]:.2e} m, '
+                               f'|dv| {errors[1]:.2e} m/s, |da| {errors[2]:.2e} m/s^2)')
+
+    def exit_land(self) -> bool:
+        """Operator LAND in the C++ exit (contract 3.7), all in this callback: local selection first (authority flags
+        cleared, the transaction ended, Python selected, the backend epoch and prefix sequence recorded: the old
+        transaction's results are ignored), then Cancel and enable=false with no acknowledgement wait, then the
+        existing direct return to the start hover and LANDING there. The escape's first sample is the published horizon
+        at the next publication's own time (exit_blend_reference). DISARM is unchanged."""
+        if not getattr(self, 'c1f2_exit_moving_handoff', False) or getattr(self, 'exit_handoff', None) is None:
+            return False
+        handoff = self.exit_handoff
+        if not ((self.phase == MissionPhase.CLEAR_DROP_ZONE and self.return_prepare_started)
+                or self.phase == MissionPhase.RETURN_TO_START):
+            return False
+        if self.exit_escape_active:
+            # as a repeated LAND in the ground-ring exit: it cannot skip the landing already under way
+            self.get_logger().warning('LAND repeated in the C++ exit escape: already returning to land')
+            return True
+        status = getattr(self, 'c1f2_recovery_backend_status', None)
+        self.exit_land_epoch = None if status is None else status.get('epoch')
+        self.exit_land_sequence = handoff.sequence
+        self.c1f2_cpp_authority_active = False
+        self.c1f2_handoff_ready = False
+        self.c1f2_authority_grant_pending = False
+        self.c1f2_authority_acknowledged = False
+        self.c1f2_prepare_active = False
+        self.c1f2_cached_cpp_reference = None
+        self.c1f2_cached_cpp_reference_receive_time = None
+        self.c1f2_cached_continuation_active = False
+        cancel = handoff.close('landed', 'operator LAND')
+        self.exit_escape_active = True
+        self.exit_blend = {'kind': 'escape', 'piece': None, 't0': None}
+        self.takeoff_held = False
+        if cancel is not None and self.c1f2_recovery_request_pub is not None:
+            self.c1f2_recovery_request_pub.publish(String(data=cancel))
+        self.cancel_c1f2_reference_recovery()
+        self.c1f2_publish_authority(False)
+        self.c1f1_publish_shadow_enable(False)
+        if self.phase == MissionPhase.RETURN_TO_START:
+            self.transfer_generator.reset()
+            self.condition_start_time = None
+        else:
+            self.transition_to(MissionPhase.RETURN_TO_START,
+                               'operator LAND in the C++ exit: the direct return to the start, then LANDING')
+        self.exit_seed_pending = MissionPhase.RETURN_TO_START          # its transfer starts on the executed curve
+        self.get_logger().warning(f'C++ exit: operator LAND; C++ cancelled (epoch {self.exit_land_epoch}, prefix '
+                                  f'{self.exit_land_sequence}); the direct return, then LANDING at the start')
+        return True
+
+    def exit_on_transition(self, new_phase: MissionPhase) -> None:
+        """Leaving the exit by any other route ends its transaction (Cancel and enable=false) and its blend; leaving
+        the C++ return (AT_START) cancels it too, so the backend restores its loaded context."""
+        if not getattr(self, 'c1f2_exit_moving_handoff', False) or getattr(self, 'exit_handoff', None) is None:
+            return
+        handoff = self.exit_handoff
+        if new_phase == MissionPhase.CLEAR_DROP_ZONE:
+            self.exit_climb_tip_z = None
+        if new_phase == MissionPhase.RETURN_TO_START:
+            if handoff.state == 'accepted':
+                handoff.state = 'granted'
+            return
+        arrival = new_phase == MissionPhase.AT_START and handoff.state == 'granted'
+        self.exit_blend = None
+        if handoff.state in ('preparing', 'accepted', 'granted'):
+            cancel = handoff.close('done' if handoff.state == 'granted' else 'aborted', f'left for {new_phase.value}')
+            if cancel is not None and self.c1f2_recovery_request_pub is not None:
+                self.c1f2_recovery_request_pub.publish(String(data=cancel))
+            self.c1f1_publish_shadow_enable(False)
+        if arrival:
+            # the C++ return's arrival (review 15 Nov, continuity 2): the start hover's existing transfer starts on the
+            # C++ reference at this tick (p, v) and a checked blend takes up the acceleration; the capture and the
+            # dwell stay measured
+            self.exit_seed_pending = MissionPhase.AT_START
+            self.exit_blend = {'kind': 'arrival', 'piece': None, 't0': None}
+
+    def exit_climb_goal_tip_z(self) -> float:
+        """The clearance climb's goal (tip above the drop point) that puts the body at exit_hold_z_m, from the drop
+        point's height when the climb begins."""
+        if self.exit_climb_tip_z is None:
+            try:
+                drop_z = float(self.drop_target_state().position[2])
+            except RuntimeError:
+                return self.drop_clear_height
+            self.exit_climb_tip_z = max(self.drop_release_clearance, self.exit_hold_z_m - drop_z
+                                        - float(self.quad_reference_offset_from_tip()[2]))
+        return self.exit_climb_tip_z
+
+    def update_at_start_landing(self) -> None:
+        """AT_START -> the existing LANDING after at_start_land_after_s (> 0; 0 = off: hold until LAND) of held
+        capture; the C++ exit's manual escape lands there after the same dwell (none when off)."""
+        dwell = float(getattr(self, 'at_start_land_after_s', 0.0) or 0.0)
+        escape = bool(getattr(self, 'exit_escape_active', False))
+        if (dwell <= 0.0 and not escape) or self.return_hover is None:
+            return
+        error = self.drone_position - self.return_hover
+        captured = bool(float(np.linalg.norm(error[:2])) < self.c1f2_nav_capture_xy_threshold_m
+                        and abs(float(error[2])) < self.c1f2_nav_capture_z_threshold_m)
+        if self.condition_true_for(captured, dwell):
+            self.transition_to(MissionPhase.LANDING, 'operator LAND: the escape reached the start hover' if escape
+                               else f'held the start hover {dwell:.1f} s (at_start_land_after_s)')
 
     def transfer_body_target(self) -> TargetState:
         """Return the exact body target used by the Python TRANSFER generator."""
@@ -5453,6 +5984,8 @@ class OnlineJoinPlanner(Node):
             phases.add(MissionPhase.RETURN_TO_START)
         if getattr(self, 'c1f2_python_fallback_active', False):
             phases.discard(MissionPhase.TRANSIT_TO_DROP_POINT)
+        if getattr(self, 'exit_escape_active', False):
+            phases.discard(MissionPhase.RETURN_TO_START)      # the operator's LAND: the direct (Python) return
         return phases
 
     def _c1f2_python_fallback_step(self) -> None:
@@ -5663,6 +6196,9 @@ class OnlineJoinPlanner(Node):
         """Drive C1F.1 target/enable topics without changing controller authority."""
         if not self.c1f1_shadow_transfer_enabled:
             return
+        if getattr(self, 'c1f2_exit_moving_handoff', False) and self.exit_preparing():
+            self.exit_shadow_step()
+            return
 
         c1f1_active = self.c1f1_shadow_phase_active()
         c1f2_active = self.c1f2_cpp_phase_active()
@@ -5789,6 +6325,8 @@ class OnlineJoinPlanner(Node):
         if getattr(self, 'c1f2_stopped_continuation_enabled',
                    getattr(self, 'c1f2_reference_recovery_enabled', False)):
             self.c1f2_cached_cpp_reference = self.c1f1_shadow_full_reference
+            self.c1f2_cached_cpp_reference_receive_time = self.c1f1_shadow_reference_source_stamp_s
+        elif self.exit_source_time():
             self.c1f2_cached_cpp_reference_receive_time = self.c1f1_shadow_reference_source_stamp_s
         self.c1f2_cached_continuation_active = False
         self.c1f2_cached_reference_age_ms = self.c1f1_shadow_reference_age_ms()
@@ -5984,6 +6522,10 @@ class OnlineJoinPlanner(Node):
         advance through the last committed window rather than falling back to a
         separately moving Python transfer.
         """
+        if getattr(self, 'c1f2_exit_moving_handoff', False):
+            selected = self.exit_select(python_reference)
+            if selected is not None:
+                return selected
         self._c1f2_python_fallback_step()
         if (getattr(self, 'c1f2_python_fallback_active', False) and python_reference is None
                 and self.phase == MissionPhase.TRANSIT_TO_DROP_POINT):
@@ -6146,6 +6688,8 @@ class OnlineJoinPlanner(Node):
                    getattr(self, 'c1f2_reference_recovery_enabled', False)):
             source_reference = self.c1f1_shadow_full_reference
             elapsed_s = max(0., self._physical_now_s()-self.c1f1_shadow_reference_source_stamp_s)
+        elif self.exit_source_time():
+            elapsed_s = max(0., self._physical_now_s()-self.c1f1_shadow_reference_source_stamp_s)
         candidate_now = advance_reference_window(
             source_reference,
             elapsed_s=elapsed_s,
@@ -6189,6 +6733,11 @@ class OnlineJoinPlanner(Node):
             source = self.c1f1_shadow_reference_source_stamp_s
             if source is None or not 0. <= self._physical_now_s()-source <= self.c1f1_shadow_reference_timeout_s:
                 return False
+        elif self.exit_source_time():
+            source = self.c1f1_shadow_reference_source_stamp_s
+            if (source is None or not -EXIT_TIME_TOLERANCE_S <= self._physical_now_s() - source
+                    <= self.c1f1_shadow_reference_timeout_s):
+                return False
         return bool(
             np.isfinite(age_ms)
             and age_ms <= 1000.0 * self.c1f1_shadow_reference_timeout_s
@@ -6213,6 +6762,8 @@ class OnlineJoinPlanner(Node):
     def transition_to(self, new_phase: MissionPhase, reason: str) -> None:
         if new_phase == self.phase:
             return
+        if getattr(self, 'c1f2_exit_moving_handoff', False):
+            self.exit_on_transition(new_phase)
         # FORCE DROP's state lives only as long as its phases (Te-Jen's review 11 Nov: an abandoned press must not fire
         # later)
         if new_phase not in FORCE_DROP_PHASES:
@@ -6463,7 +7014,8 @@ class OnlineJoinPlanner(Node):
             self.get_logger().warn(
                 "C1F.2b authority source switched stationary Python hold -> C++ at TRANSIT_TO_REATTACH entry."
             )
-        elif new_phase == MissionPhase.RETURN_TO_START and getattr(self, 'return_after_drop', '') == 'cpp':
+        elif (new_phase == MissionPhase.RETURN_TO_START and getattr(self, 'return_after_drop', '') == 'cpp'
+              and not getattr(self, 'exit_escape_active', False)):
             if (
                 not self.c1f2_handoff_ready
                 or not self.c1f2_authority_acknowledged
@@ -7468,17 +8020,20 @@ class OnlineJoinPlanner(Node):
                 self.drop_descent_speed,
             )
         if phase == MissionPhase.CLEAR_DROP_ZONE:
+            # the C++ exit climbs to its hold height (exit_hold_z_m, body), ring-relative as ever
+            clear = (self.exit_climb_goal_tip_z() if getattr(self, 'c1f2_exit_moving_handoff', False)
+                     else self.drop_clear_height)
             held = getattr(self, 'drop_hold_offset', None)        # a FORCE DROP released away from the release height
             if held is not None:
-                return RateProfile(held, np.array([held[0], held[1], max(float(held[2]), self.drop_clear_height)]),
+                return RateProfile(held, np.array([held[0], held[1], max(float(held[2]), clear)]),
                                    self.drop_clear_speed)
             if getattr(self, 'drop_on_arrival', False):
                 start = self.drop_approach_clearance
                 return RateProfile(np.array([0.0, 0.0, start]),
-                                   np.array([0.0, 0.0, max(start, self.drop_clear_height)]), self.drop_clear_speed)
+                                   np.array([0.0, 0.0, max(start, clear)]), self.drop_clear_speed)
             return RateProfile(
                 np.array([0.0, 0.0, self.drop_release_clearance]),
-                np.array([0.0, 0.0, self.drop_clear_height]),
+                np.array([0.0, 0.0, clear]),
                 self.drop_clear_speed,
             )
         if phase == MissionPhase.DESCEND_TO_ATTACHMENT:
@@ -8881,6 +9436,9 @@ class OnlineJoinPlanner(Node):
         if self.phase == MissionPhase.CLEAR_DROP_ZONE and getattr(self, 'return_after_drop', ''):
             cleared = self.rate_profile().complete(elapsed) and abs_z_error < self.pickup_z_tolerance
             if self.return_after_drop == 'cpp':
+                if getattr(self, 'c1f2_exit_moving_handoff', False):
+                    self.update_exit_clearance(cleared)
+                    return
                 # as pickup_cpp_reattach: once clear, a fresh hand-over (the drop leg's is spent), then the C++ return
                 if not self.return_prepare_started:
                     if not cleared:
@@ -8908,6 +9466,8 @@ class OnlineJoinPlanner(Node):
             return
 
         if self.phase == MissionPhase.AT_START:
+            if getattr(self, 'at_start_land_after_s', 0.0) > 0.0 or getattr(self, 'exit_escape_active', False):
+                self.update_at_start_landing()
             return
 
         if self.phase == MissionPhase.CLEAR_DROP_ZONE:
@@ -9357,6 +9917,9 @@ class OnlineJoinPlanner(Node):
         if self.phase in {MissionPhase.RETURN_TO_START, MissionPhase.AT_START}:
             if self.return_hover is None:
                 raise RuntimeError('return_after_drop: no start hover latched')
+            pending, self.exit_seed_pending = getattr(self, 'exit_seed_pending', None), None
+            if pending == self.phase:
+                self.exit_seed_transfer()
             return self.transfer_generator.generate(
                 phase_key=self.phase.value,
                 measured_position=self.drone_position,
@@ -10002,7 +10565,16 @@ class OnlineJoinPlanner(Node):
 
     def publish_reference(self, reference: TrajectoryReference) -> None:
         message = MultiDOFJointTrajectory()
-        message.header.stamp = self.get_clock().now().to_msg()
+        # the C++ exit evaluates its curves at one tick time: the stamp is that time, so sample i is at stamp + i dt
+        stamp_ns = getattr(self, 'exit_reference_stamp_ns', None)
+        self.exit_reference_stamp_ns = None
+        if stamp_ns is None:
+            now = self.get_clock().now()
+            message.header.stamp = now.to_msg()
+            self.last_reference_stamp_ns = int(now.nanoseconds)
+        else:
+            message.header.stamp.sec, message.header.stamp.nanosec = divmod(int(stamp_ns), 1_000_000_000)
+            self.last_reference_stamp_ns = int(stamp_ns)
         message.header.frame_id = self.frame_id
         message.joint_names = [self.vehicle_id]
 

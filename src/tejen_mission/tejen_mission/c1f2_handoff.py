@@ -663,3 +663,496 @@ def post_grant_reference_is_fresh(
         reference_source_stamp_s > grant_ros_time_s + tolerance_s
         and reference_receive_time >= ack_receive_time
     )
+
+
+# ---------------------------------------------------------------------------
+# The C++ exit (docs/rig/cpp_exit_impl_contract_2026-11-15.md, section 3): one
+# fitted C2 cubic B-spline in absolute time that Python publishes from and the
+# backend seeds from, plus the relative blends of every cancel and takeover.
+# ---------------------------------------------------------------------------
+
+EXIT_CONTINUITY_TOLERANCE = 1e-6
+# the backend's message-level C2 tolerance (trajectoryFromMessage); stamps are ns and
+# absolute times ~1e9 s carry ~2e-7 s of double rounding
+EXIT_JOIN_TOLERANCE = 1e-5
+EXIT_IDENTITY_TOLERANCE = 1e-9
+EXIT_TIME_TOLERANCE_S = 1e-6        # dynamic_planner::kTrajectoryTimeToleranceS
+EXIT_JOIN_GRACE_NS = 100_000_000     # granted with no window joined by the join + this: cancel (3 periods at 30 Hz)
+# half the ring commitment's 0.5 s control interval: the 1 s blend is fitted within ~2 mm (0.5 s: 1-4 cm)
+EXIT_PREFIX_KNOT_S = 0.25
+EXIT_BLEND_SEGMENTS = 8
+EXIT_FIT_ATTEMPTS = 3
+EXIT_BLEND_GROWTH = 1.5
+# the copied pieces run strictly past t_R + protected_s: the backend tests the window's end to 1e-9, and a new piece
+# starting exactly there differs by ~5e-6 m/s^2 at ROS-scale times
+EXIT_JUNCTION_MARGIN_S = 0.05
+
+
+def open_uniform_knots(t_start: float, t_end: float, segments: int) -> np.ndarray:
+    """dynamic_planner::openUniformKnots (cubic, clamped), operation for operation."""
+    segments = int(segments)
+    if segments < 1 or not np.isfinite(t_start) or not np.isfinite(t_end) or not t_end > t_start:
+        raise ValueError("invalid open-uniform knot request")
+    knots = np.full(segments + 7, float(t_start))
+    knots[segments + 3:] = float(t_end)
+    dt = (float(t_end) - float(t_start)) / float(segments)
+    for i in range(1, segments):
+        knots[3 + i] = float(t_start) + dt * float(i)
+    return knots
+
+
+def initial_control_points(position, velocity, acceleration, knots) -> np.ndarray:
+    """dynamic_planner::initialControlPointsFromState: q0..q2 that give the clamped cubic this p/v/a at its start."""
+    knots = np.asarray(knots, dtype=float)
+    if knots.size < 9:
+        raise ValueError("knot vector is too short")
+    p = 3.0
+    q0 = np.asarray(position, dtype=float).reshape(3)
+    v = np.asarray(velocity, dtype=float).reshape(3)
+    a = np.asarray(acceleration, dtype=float).reshape(3)
+    t1, t2, tp1, t1p1 = knots[1], knots[2], knots[4], knots[5]
+    q1 = q0 + (-t1 + tp1) * v / p
+    q2 = (p * p * q1 - (t1p1 - t2) * (a * (t2 - tp1) + v) - p * (q1 + (-t1p1 + t2) * v)) / ((p - 1.0) * p)
+    return np.vstack([q0, q1, q2])
+
+
+def _deboor_many(control_points, knots, degree, times) -> np.ndarray:
+    """dynamic_planner::evaluateBSpline for many times (same span rule, clamp and recurrence)."""
+    n = control_points.shape[0] - 1
+    lo, hi = knots[degree], knots[n + 1]
+    t = np.clip(np.asarray(times, dtype=float), lo, hi)
+    span = np.clip(np.searchsorted(knots, t, side="right") - 1, degree, n)
+    span = np.where(t >= hi, n, span)
+    d = control_points[span[:, None] - degree + np.arange(degree + 1)[None, :]].copy()
+    for r in range(1, degree + 1):
+        for j in range(degree, r - 1, -1):
+            i = span - degree + j
+            lower = knots[i]
+            denom = knots[i + degree - r + 1] - lower
+            alpha = np.where(denom > 0.0, (t - lower) / np.where(denom > 0.0, denom, 1.0), 0.0)[:, None]
+            d[:, j] = (1.0 - alpha) * d[:, j - 1] + alpha * d[:, j]
+    return d[:, degree]
+
+
+def _derivative_chain(knots, control_points):
+    chain = [(control_points, knots, 3)]
+    for _ in range(3):
+        cps, kn, degree = chain[-1]
+        index = np.arange(cps.shape[0] - 1)
+        denom = kn[index + degree + 1] - kn[index + 1]
+        if np.any(denom <= 0.0):
+            raise ValueError("degenerate derivative knot interval")
+        chain.append(((degree / denom)[:, None] * (cps[1:] - cps[:-1]), kn[1:-1], degree - 1))
+    return chain
+
+
+class SplinePiece:
+    """One cubic B-spline piece in absolute time, as the backend's TrajectoryPiece: evaluated by de Boor at the time
+    clamped to its logical validity."""
+
+    def __init__(self, knots, control_points, valid_from=None, valid_until=None):
+        knots = np.array(knots, dtype=float).reshape(-1)
+        cps = np.array(control_points, dtype=float).reshape(-1, 3)
+        n = cps.shape[0]
+        if (n < 4 or knots.size != n + 4 or not np.all(np.isfinite(knots)) or not np.all(np.isfinite(cps))
+                or np.any(np.diff(knots) < 0.0)):
+            raise ValueError("invalid cubic B-spline piece")
+        self.knots, self.control_points = knots, cps
+        self.valid_from = float(knots[3] if valid_from is None else valid_from)
+        self.valid_until = float(knots[n] if valid_until is None else valid_until)
+        if not (np.isfinite(self.valid_from) and np.isfinite(self.valid_until)
+                and self.valid_until >= self.valid_from
+                and self.valid_from >= knots[3] - EXIT_TIME_TOLERANCE_S
+                and self.valid_until <= knots[n] + EXIT_TIME_TOLERANCE_S):
+            raise ValueError("piece validity lies outside its spline domain")
+        self._chain = _derivative_chain(knots, cps)
+
+    def trimmed(self, valid_from, valid_until) -> "SplinePiece":
+        return SplinePiece(self.knots, self.control_points, valid_from, valid_until)
+
+    def state(self, times):
+        """(p, v, a, j), each (len(times), 3)."""
+        t = np.clip(np.atleast_1d(np.asarray(times, dtype=float)), self.valid_from, self.valid_until)
+        return tuple(_deboor_many(c, k, d, t) for c, k, d in self._chain)
+
+
+class CommittedSpline:
+    """Pieces combined as the backend's CommittedTrajectory::replaceSuffix does: a later piece replaces the commitment
+    from its valid_from on, C2 at the splice (1e-5, trajectoryFromMessage's tolerance); the latest piece wins at a
+    boundary."""
+
+    def __init__(self, pieces):
+        self.pieces = []
+        for piece in pieces:
+            self._replace_suffix(piece)
+        if not self.pieces:
+            raise ValueError("a committed spline needs a piece")
+
+    def _replace_suffix(self, piece: SplinePiece) -> None:
+        if not self.pieces:
+            self.pieces.append(piece)
+            return
+        t = piece.valid_from
+        if t < self.start - EXIT_TIME_TOLERANCE_S or t > self.end + EXIT_TIME_TOLERANCE_S:
+            raise ValueError("splice lies outside the commitment")
+        old, new = self.state([t]), piece.state([t])
+        if any(float(np.max(np.abs(o - n))) > EXIT_JOIN_TOLERANCE for o, n in zip(old[:3], new[:3])):
+            raise ValueError("pieces are not C2-continuous")
+        kept = []
+        for previous in self.pieces:
+            if previous.valid_from >= t - EXIT_TIME_TOLERANCE_S:
+                break
+            if previous.valid_until > t:
+                previous = previous.trimmed(previous.valid_from, t)
+            if previous.valid_until > previous.valid_from + 1e-12:
+                kept.append(previous)
+        self.pieces = kept + [piece]
+
+    @property
+    def start(self) -> float:
+        return self.pieces[0].valid_from
+
+    @property
+    def end(self) -> float:
+        return self.pieces[-1].valid_until
+
+    def covers(self, t0: float, t1: float) -> bool:
+        return bool(self.start - EXIT_TIME_TOLERANCE_S <= t0 and t1 <= self.end + EXIT_TIME_TOLERANCE_S)
+
+    def state(self, times):
+        times = np.atleast_1d(np.asarray(times, dtype=float))
+        if (times.size and (float(np.min(times)) < self.start - EXIT_TIME_TOLERANCE_S
+                            or float(np.max(times)) > self.end + EXIT_TIME_TOLERANCE_S)):
+            raise ValueError("evaluation outside the committed coverage")
+        owner = np.zeros(times.size, dtype=int)
+        for k, piece in enumerate(self.pieces):
+            owner[times >= piece.valid_from - EXIT_TIME_TOLERANCE_S] = k
+        out = [np.empty((times.size, 3)) for _ in range(4)]
+        for k in np.unique(owner):
+            mask = owner == k
+            for dst, src in zip(out, self.pieces[k].state(times[mask])):
+                dst[mask] = src
+        return tuple(out)
+
+    @classmethod
+    def from_message(cls, msg) -> "CommittedSpline":
+        """interfaces/CommittedTrajectory -> pieces (duck-typed, no ROS import)."""
+        pieces = [SplinePiece([float(k) for k in m.knots],
+                              [[float(p.x), float(p.y), float(p.z)] for p in m.control_points],
+                              float(m.valid_from_s), float(m.valid_until_s)) for m in msg.pieces]
+        return cls(pieces)
+
+
+def _quintic_many(state: TargetRelativeBridgeState, tau, duration):
+    """_quintic_error_sample_with_jerk for many tau; zero from duration on."""
+    tau = np.asarray(tau, dtype=float)
+    s = np.clip(tau / duration, 0.0, 1.0)[:, None]
+    b0 = state.position_error
+    b1 = duration * state.velocity_error
+    b2 = 0.5 * duration * duration * state.acceleration_error
+    b3 = -10.0 * b0 - 6.0 * b1 - 3.0 * b2
+    b4 = 15.0 * b0 + 8.0 * b1 + 3.0 * b2
+    b5 = -6.0 * b0 - 3.0 * b1 - b2
+    e = b0 + b1 * s + b2 * s**2 + b3 * s**3 + b4 * s**4 + b5 * s**5
+    ev = (b1 + 2.0 * b2 * s + 3.0 * b3 * s**2 + 4.0 * b4 * s**3 + 5.0 * b5 * s**4) / duration
+    ea = (2.0 * b2 + 6.0 * b3 * s + 12.0 * b4 * s**2 + 20.0 * b5 * s**3) / duration**2
+    ej = (6.0 * b3 + 24.0 * b4 * s + 60.0 * b5 * s**2) / duration**3
+    done = (tau >= duration)[:, None]
+    return tuple(np.where(done, 0.0, x) for x in (e, ev, ea, ej))
+
+
+def _basis(knots, count, times):
+    """Cubic B-spline basis values and first derivatives (len(times), count): the least-squares rows."""
+    t = np.clip(np.asarray(times, dtype=float), knots[3], knots[count])
+    m = t.size
+    span = np.clip(np.searchsorted(knots, t, side="right") - 1, 3, count - 1)
+    basis = np.zeros((m, knots.size - 1))
+    basis[np.arange(m), span] = 1.0
+    quadratic = None
+    for p in (1, 2, 3):
+        if p == 3:
+            quadratic = basis
+        nxt = np.zeros((m, knots.size - 1 - p))
+        for i in range(knots.size - 1 - p):
+            left, right = knots[i + p] - knots[i], knots[i + p + 1] - knots[i + 1]
+            if left > 0.0:
+                nxt[:, i] += (t - knots[i]) / left * basis[:, i]
+            if right > 0.0:
+                nxt[:, i] += (knots[i + p + 1] - t) / right * basis[:, i + 1]
+        basis = nxt
+    derivative = np.zeros((m, count))
+    for i in range(count):
+        left, right = knots[i + 3] - knots[i], knots[i + 4] - knots[i + 1]
+        if left > 0.0:
+            derivative[:, i] += 3.0 / left * quadratic[:, i]
+        if right > 0.0:
+            derivative[:, i] -= 3.0 / right * quadratic[:, i + 1]
+    return basis, derivative
+
+
+def _fit_piece(*, t0, t1, segments, start_state, desired, end_zero=False) -> SplinePiece:
+    """q0..q2 from the start p/v/a (the backend's boundary equations); with end_zero the last three are zero (p, v, a
+    end at exactly 0); the rest least squares to desired(times) -> (p, v)."""
+    knots = open_uniform_knots(t0, t1, segments)
+    count = segments + 3
+    q = np.zeros((count, 3))
+    q[:3] = initial_control_points(*start_state, knots)
+    free_end = count - 3 if end_zero else count
+    if free_end > 3:
+        times = np.linspace(t0, t1, 8 * segments + 1)
+        want_p, want_v = desired(times)
+        basis, derivative = _basis(knots, count, times)
+        weight = (t1 - t0) / segments
+        lhs = np.vstack([basis[:, 3:free_end], weight * derivative[:, 3:free_end]])
+        rhs = np.vstack([want_p - basis @ q, weight * (want_v - derivative @ q)])
+        q[3:free_end] = np.linalg.lstsq(lhs, rhs, rcond=None)[0]
+    return SplinePiece(knots, q)
+
+
+@dataclass(frozen=True)
+class ExitCurveCheck:
+    """A fitted curve and its checks (contract 3.3): start continuity to 1e-6 and |v|, |a|, |j| under the planner's
+    limits over its span. The fit error is reported, never the acceptance test."""
+
+    piece: object
+    reason: str
+    blend_s: float
+    attempts: int
+    start_error: float = float("nan")
+    fit_error_m: float = float("nan")
+    peak_velocity: float = float("nan")
+    peak_acceleration: float = float("nan")
+    peak_jerk: float = float("nan")
+
+    @property
+    def ok(self) -> bool:
+        return self.piece is not None
+
+
+def _check_times(piece: SplinePiece, sample_dt: float) -> np.ndarray:
+    t0, t1 = piece.valid_from, piece.valid_until
+    inner = piece.knots[(piece.knots > t0) & (piece.knots < t1)]
+    middles = 0.5 * (piece.knots[3:-4] + piece.knots[4:-3])
+    return np.unique(np.concatenate([np.linspace(t0, t1, max(2, int(np.ceil((t1 - t0) / sample_dt)) + 1)),
+                                     inner, middles[(middles > t0) & (middles < t1)]]))
+
+
+def _limits_reason(v, a, j, max_velocity, max_acceleration, max_jerk, tolerance=1e-9):
+    peaks = [np.max(np.abs(x), axis=0) for x in (v, a, j)]
+    for name, peak, limit in zip(("VELOCITY_LIMIT", "ACCELERATION_LIMIT", "JERK_LIMIT"), peaks,
+                                 (max_velocity, max_acceleration, max_jerk)):
+        if np.any(peak > np.asarray(limit, dtype=float).reshape(3) + tolerance):
+            return name, peaks
+    return "OK", peaks
+
+
+def _start_error(piece: SplinePiece, start_state) -> float:
+    got = piece.state([piece.valid_from])
+    return float(max(np.max(np.abs(g[0] - np.asarray(w, dtype=float).reshape(3))) for g, w in zip(got[:3], start_state)))
+
+
+def fit_moving_prefix(*, start_time, end_time, start_state, target, blend_s, max_velocity, max_acceleration,
+                      max_jerk, sample_dt=0.02, knot_s=EXIT_PREFIX_KNOT_S) -> ExitCurveCheck:
+    """P(t) = R(t) + c + b(t) (v2 section 1), fitted from start_state (the executed p/v/a at start_time). target(times)
+    -> (p, v, a) of R + c; b is the C1F.6 quintic decaying start_state - target(start_time) over the blend. A failed
+    check lengthens the blend and refits, EXIT_FIT_ATTEMPTS times in all."""
+    start_state = tuple(np.asarray(x, dtype=float).reshape(3) for x in start_state)
+    span = float(end_time) - float(start_time)
+    segments = max(2, int(np.ceil(span / knot_s - 1e-9)))
+    tp, tv, ta = (x[0] for x in target(np.array([float(start_time)])))
+    error = TargetRelativeBridgeState(start_state[0] - tp, start_state[1] - tv, start_state[2] - ta)
+    blend = float(blend_s)
+    result = None
+    for attempt in range(1, EXIT_FIT_ATTEMPTS + 1):
+        duration = min(blend, span)
+
+        def desired(times, duration=duration):
+            p, v, _ = target(times)
+            e, ev, _, _ = _quintic_many(error, times - float(start_time), duration)
+            return p + e, v + ev
+
+        piece = _fit_piece(t0=float(start_time), t1=float(end_time), segments=segments, start_state=start_state,
+                           desired=desired)
+        times = _check_times(piece, sample_dt)
+        p, v, a, j = piece.state(times)
+        want_p, _ = desired(times)
+        start = _start_error(piece, start_state)
+        reason, peaks = _limits_reason(v, a, j, max_velocity, max_acceleration, max_jerk)
+        if start > EXIT_CONTINUITY_TOLERANCE:
+            reason = "START_DISCONTINUOUS"
+        result = ExitCurveCheck(piece if reason == "OK" else None, reason, duration, attempt, start,
+                                float(np.max(np.linalg.norm(p - want_p, axis=1))), *(float(np.max(x)) for x in peaks))
+        if result.ok:
+            return result
+        blend *= EXIT_BLEND_GROWTH
+    return result
+
+
+def fit_relative_blend(*, error_state, blend_s, target_velocity, target_acceleration, max_velocity,
+                       max_acceleration, max_jerk, sample_dt=0.02) -> ExitCurveCheck:
+    """A cancel or takeover blend in relative time tau >= 0: the error e(tau) a fitted cubic from error_state (the
+    executed curve's p/v/a less the new reference's) to exactly zero, added to the new reference. Checked as
+    C1F.6's bridge (target_relative_bridge_feasibility): |v_ref + e'|, |a_ref + e''| and the added jerk |e'''|."""
+    error_state = tuple(np.asarray(x, dtype=float).reshape(3) for x in error_state)
+    error = TargetRelativeBridgeState(*error_state)
+    blend = float(blend_s)
+    result = None
+    for attempt in range(1, EXIT_FIT_ATTEMPTS + 1):
+
+        def desired(tau, duration=blend):
+            e, ev, _, _ = _quintic_many(error, tau, duration)
+            return e, ev
+
+        piece = _fit_piece(t0=0.0, t1=blend, segments=EXIT_BLEND_SEGMENTS, start_state=error_state,
+                           desired=desired, end_zero=True)
+        tau = _check_times(piece, sample_dt)
+        _, v, a, j = piece.state(tau)
+        start = _start_error(piece, error_state)
+        reason, peaks = _limits_reason(v + target_velocity(tau), a + target_acceleration(tau), j,
+                                       max_velocity, max_acceleration, max_jerk)
+        if start > EXIT_CONTINUITY_TOLERANCE:
+            reason = "START_DISCONTINUOUS"
+        result = ExitCurveCheck(piece if reason == "OK" else None, reason, blend, attempt, start, 0.0,
+                                *(float(np.max(x)) for x in peaks))
+        if result.ok:
+            return result
+        blend *= EXIT_BLEND_GROWTH
+    return result
+
+
+def refresh_moving_prefix(*, bound: CommittedSpline, refresh_time, protected_s, end_time, target, blend_s,
+                          max_velocity, max_acceleration, max_jerk, sample_dt=0.02, knot_s=EXIT_PREFIX_KNOT_S):
+    """Prefix k+1: prefix k's pieces copied unchanged over [t_R, t_R + protected_s + EXIT_JUNCTION_MARGIN_S], then a
+    new piece fitted C2 from prefix k's p/v/a at that junction. Returns (CommittedSpline or None, ExitCurveCheck or
+    reason)."""
+    refresh_time = float(refresh_time)
+    protected_end = refresh_time + float(protected_s)
+    junction = protected_end + EXIT_JUNCTION_MARGIN_S
+    if not bound.covers(refresh_time, junction) or junction >= float(end_time):
+        return None, "PROTECTED_WINDOW_NOT_COVERED"
+    copied = [p.trimmed(max(p.valid_from, refresh_time), min(p.valid_until, junction)) for p in bound.pieces
+              if p.valid_until > refresh_time + 1e-12 and p.valid_from < junction - 1e-12]
+    start = tuple(x[0] for x in bound.state([junction])[:3])
+    check = fit_moving_prefix(start_time=junction, end_time=end_time, start_state=start, target=target,
+                              blend_s=blend_s, max_velocity=max_velocity, max_acceleration=max_acceleration,
+                              max_jerk=max_jerk, sample_dt=sample_dt, knot_s=knot_s)
+    if not check.ok:
+        return None, check
+    spline = CommittedSpline(copied + [check.piece])
+    times = np.linspace(refresh_time, protected_end, 21)          # the backend's identity test
+    if any(float(np.max(np.abs(o - n))) > EXIT_IDENTITY_TOLERANCE
+           for o, n in zip(bound.state(times)[:3], spline.state(times)[:3])):
+        return None, "PROTECTED_WINDOW_CHANGED"
+    return spline, check
+
+
+def relative_grant_state(*, reference_position, reference_velocity, reference_acceleration, measured_position,
+                         measured_velocity, measured_acceleration, max_drift_m, settle_speed_mps,
+                         settle_acceleration_mps2) -> StationaryGrantState:
+    """stationary_grant_state's bounds on the measured state relative to the executing reference: no zero-velocity
+    requirement and no dwell (v2 section 1)."""
+    return stationary_grant_state(
+        lift_end_position=reference_position, measured_position=measured_position,
+        measured_velocity=np.asarray(measured_velocity, dtype=float) - np.asarray(reference_velocity, dtype=float),
+        measured_acceleration=(np.asarray(measured_acceleration, dtype=float)
+                               - np.asarray(reference_acceleration, dtype=float)),
+        max_drift_m=max_drift_m, settle_speed_mps=settle_speed_mps,
+        settle_acceleration_mps2=settle_acceleration_mps2)
+
+
+class MovingExitHandoff(ReferenceRecovery):
+    """The C++ exit's one transaction on the existing recovery protocol: `reset`, then `seedtraj exit <sequence>
+    <stamp_ns> <deadline_ns>` once per published prefix, then `grant`. Its 7 s budget starts when the clearance
+    completes (start()); prefix fits, rejections and refreshes never move it. Status and reference bookkeeping are
+    ReferenceRecovery's (request id, monotonic epoch, references kept by source stamp)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.state = "idle"     # idle -> preparing -> accepted -> granted -> done; or failed / landed
+        self.t0_s = None
+        self.deadline_s = None
+        self.deadline_ns = 0
+        self.prefix = None
+        self.bound = []         # recent prefixes, oldest first: a window planned on k joins after k+1 is out
+        self.sequence = 0
+        self.prefix_stamp_ns = 0
+        self.last_refresh_s = None
+        self.offset = None
+        self.reset_sent = False
+        self.sent_sequence = 0
+        self.failure = ""
+
+    def start(self, *, now_s, now_ns, timeout_s) -> None:
+        self.state = "preparing"
+        self.t0_s = float(now_s)
+        self.deadline_s = self.t0_s + float(timeout_s)
+        self.deadline_ns = int(now_ns) + int(round(float(timeout_s) * 1e9))
+
+    def open(self, *, request_id, now_s, now_ns) -> None:
+        self.active = True
+        self.request_id = request_id
+        self.started_s = float(now_s)
+        self.started_ros_ns = int(now_ns)
+        self.waiting_reason = "reset_backend"
+
+    def bind(self, prefix: CommittedSpline, *, stamp_ns, now_s) -> int:
+        self.prefix = prefix
+        self.bound = (self.bound + [prefix])[-3:]
+        self.sequence += 1
+        self.prefix_stamp_ns = int(stamp_ns)
+        self.last_refresh_s = float(now_s)
+        return self.sequence
+
+    def requests(self) -> list:
+        """This tick's transaction messages: the reset once, each new prefix's seedtraj once (a tick after its prefix
+        was published, so the backend holds it before the request)."""
+        if not self.active or self.state != "preparing" or self.sequence == 0:
+            return []
+        out = []
+        if not self.reset_sent:
+            out.append(f"{self.request_id} reset")
+            self.reset_sent = True
+        if self.sent_sequence != self.sequence:
+            out.append(f"{self.request_id} seedtraj exit {self.sequence} {self.prefix_stamp_ns} {self.deadline_ns}")
+            self.sent_sequence = self.sequence
+        return out
+
+    def grant_ready(self) -> bool:
+        return bool(self.active and self.state == "preparing" and self.sent_sequence >= 1
+                    and self.status is not None and (self.status["prepared"] or self.status["granted"]))
+
+    def reject_reason(self) -> str:
+        reason = None if self.status is None else self.status.get("exit_reject_reason", "")
+        return reason if isinstance(reason, str) else ""
+
+    def source_is_fresh(self, stamp_ns, *, now_s, timeout_s):
+        # as ReferenceRecovery's, with the planner's time tolerance: a window received at its own stamp read as
+        # 'from the future' by float rounding at ROS-scale times (replay 15 Nov: 21 of 44 runs)
+        age = now_s - self.started_s - (stamp_ns - self.started_ros_ns) * 1e-9
+        return bool(np.isfinite(age) and -EXIT_TIME_TOLERANCE_S <= age <= timeout_s)
+
+    def window_matches(self, window, *, stamp_ns, dt, tolerance=EXIT_JOIN_TOLERANCE):
+        """The granted window against the prefix at the same absolute times (its stamp + i dt), sample 0 to the joining
+        time (status splice_time_ns; sample 0 alone without it), on the newest bound prefix that starts by the window
+        (the copies agree on their protected windows). A window stamped after its join shows no prefix: refused.
+        Returns (ok, (dp, dv, da))."""
+        times = int(stamp_ns) * 1e-9 + np.arange(window.positions.shape[0]) * float(dt)
+        join = None if self.status is None else self.status.get("splice_time_ns")
+        join_s = join * 1e-9 if type(join) is int and join > 0 else times[0]
+        prefix = next((b for b in reversed(self.bound) if b.start - EXIT_TIME_TOLERANCE_S <= times[0]), None)
+        # float seconds near 1.8e9 resolve 2.4e-7 s: compare to the planner's time tolerance, not 1e-9
+        if prefix is None or times[0] > join_s + EXIT_TIME_TOLERANCE_S or times[0] > prefix.end:
+            return False, None
+        mask = (times <= join_s + EXIT_TIME_TOLERANCE_S) & (times <= prefix.end + EXIT_TIME_TOLERANCE_S)
+        mask[0] = True
+        p, v, a, _ = prefix.state(times[mask])
+        errors = tuple(float(np.max(np.linalg.norm(got[mask] - want, axis=1)))
+                       for got, want in ((window.positions, p), (window.velocities, v), (window.accelerations, a)))
+        return bool(max(errors) <= tolerance), errors
+
+    def close(self, state, reason="") -> str | None:
+        """End the transaction locally; returns its Cancel request (None if none was opened)."""
+        self.state = state
+        if reason:
+            self.failure = reason
+        return self.cancel()
