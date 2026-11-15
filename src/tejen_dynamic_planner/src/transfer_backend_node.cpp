@@ -41,6 +41,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -223,6 +224,21 @@ struct RingPoseSample {
     Vec3 position = Vec3::Zero();
     Eigen::Matrix3d rotation = Eigen::Matrix3d::Identity();
     double receive_ros_s = std::numeric_limits<double>::quiet_NaN();
+};
+
+// A moving exit prefix as received; error is non-empty when it may not be bound.
+struct ReceivedPrefix {
+    std::uint64_t sequence = 0U;
+    std::int64_t stamp_ns = 0;
+    std::string error;
+    CommittedTrajectory trajectory;
+};
+
+// After an identical refresh: where the superseded sequence's in-flight candidates may still splice.
+struct KeptWindow {
+    std::uint64_t sequence = 0U;
+    double from_s = 0.0;
+    double until_s = 0.0;
 };
 
 CommittedTrajectory trajectoryFromMessage(
@@ -530,6 +546,7 @@ struct PlannerOutcome {
     std::string installation_rejection;
     bool worker_exception = false;
     std::string worker_error;
+    std::uint64_t exit_prefix_sequence = 0U;  // the bound prefix the incumbent came from, 0 = none
 };
 
 struct ScopedSteadyDurationRecorder {
@@ -748,6 +765,26 @@ public:
         };
         workspace_min_ = workspace_vector("workspace_min", {-2.5, -2.5, 0.});
         workspace_max_ = workspace_vector("workspace_max", {2.5, 2.5, 3.5});
+        // multi_drone_control 15 Nov (C++ exit, opt-in): QUAD4's moving exit prefix (CommittedTrajectory). '' (default)
+        // = off: `seedtraj` requests are ignored and every check is as before. The exit_* values apply only inside a
+        // validated `seedtraj exit` transaction: swing (0 = max_swing_angle_rad), assembly workspace ([] = the
+        // workspace_* setting), search top (body z; 0 = maximum_search_z_m) and the refresh's protected window (s).
+        moving_prefix_topic_ = declare_parameter<std::string>("moving_prefix_topic", "");
+        exit_max_swing_angle_rad_ = declare_parameter<double>("exit_max_swing_angle_rad", 0.0);
+        const auto exit_workspace_min = declare_parameter<std::vector<double>>(
+            "exit_workspace_min", std::vector<double>{});
+        const auto exit_workspace_max = declare_parameter<std::vector<double>>(
+            "exit_workspace_max", std::vector<double>{});
+        if (exit_workspace_min.size() != exit_workspace_max.size() ||
+            (!exit_workspace_min.empty() && exit_workspace_min.size() != 3U))
+            throw std::invalid_argument("exit_workspace_min/max require XYZ together");
+        if (!exit_workspace_min.empty()) {
+            exit_workspace_ = std::make_pair(
+                Vec3(exit_workspace_min[0], exit_workspace_min[1], exit_workspace_min[2]),
+                Vec3(exit_workspace_max[0], exit_workspace_max[1], exit_workspace_max[2]));
+        }
+        exit_max_search_z_m_ = declare_parameter<double>("exit_max_search_z_m", 0.0);
+        exit_protected_s_ = declare_parameter<double>("exit_protected_s", 1.5);
         payload_collision_enabled_ = declare_parameter<bool>(
             "payload_collision_enabled", false);
         require_payload_attached_for_enable_ = declare_parameter<bool>(
@@ -1050,6 +1087,14 @@ public:
         // The opt-in flag still controls the in-flight stopped-tail transport.
         recovery_status_pub_ = create_publisher<std_msgs::msg::String>(
             recovery_status_topic_, rclcpp::QoS(10));
+        if (exitFeatureEnabled()) {
+            // Created before the request subscription so a ready prefix is taken before its seedtraj.
+            rclcpp::QoS prefix_qos(1);
+            prefix_qos.reliable().transient_local();
+            moving_prefix_sub_ = create_subscription<interfaces::msg::CommittedTrajectory>(
+                moving_prefix_topic_, prefix_qos,
+                std::bind(&TransferBackendNode::movingPrefixCallback, this, std::placeholders::_1));
+        }
         recovery_request_sub_ = create_subscription<std_msgs::msg::String>(
             recovery_request_topic_, rclcpp::QoS(10),
             std::bind(&TransferBackendNode::recoveryRequestCallback, this, std::placeholders::_1));
@@ -1112,15 +1157,22 @@ private:
     LocalPlannerConfig localConfig(const Vec3& start, const Vec3& goal, double minimum_z,
         double jerk_weight, double goal_weight, double runtime_s) const {
         auto config = unboundedLocalConfig(start, goal, minimum_z, jerk_weight, goal_weight, runtime_s);
-        if (maximum_search_z_m_ > 0.0) {
-            const double top = std::max({maximum_search_z_m_, start.z(), goal.z(), config.octopus.xyz_min.z() + 0.2});
+        const bool exit_context = exitContextActive();
+        const double search_top_m = exit_context && exit_max_search_z_m_ > 0.0
+            ? exit_max_search_z_m_ : maximum_search_z_m_;
+        if (search_top_m > 0.0) {
+            const double top = std::max({search_top_m, start.z(), goal.z(), config.octopus.xyz_min.z() + 0.2});
             config.octopus.xyz_max.z() = std::min(config.octopus.xyz_max.z(), top);
             config.refinement.xyz_max.z() = config.octopus.xyz_max.z();
         }
         config.refinement.j_max.x() = planner_max_jerk_xy_mps3_;
         config.refinement.j_max.y() = planner_max_jerk_xy_mps3_;
-        if (workspace_bounds_enabled_ && body_orientation_mode_ != "measured_snapshot") {
-            const auto bounds = assemblyWorkspaceBounds(workspace_min_, workspace_max_,
+        const bool exit_workspace = exit_context && exit_workspace_.has_value();
+        if ((workspace_bounds_enabled_ || exit_workspace) && body_orientation_mode_ != "measured_snapshot") {
+            // suspended_geometry_ is the exit geometry while the exit context is installed.
+            const auto bounds = assemblyWorkspaceBounds(
+                exit_workspace ? exit_workspace_->first : workspace_min_,
+                exit_workspace ? exit_workspace_->second : workspace_max_,
                 body_half_extents_, suspended_geometry_, ego_tracking_error_half_extents_);
             config.octopus.xyz_min = config.octopus.xyz_min.cwiseMax(bounds.first);
             config.octopus.xyz_max = config.octopus.xyz_max.cwiseMin(bounds.second);
@@ -1141,6 +1193,16 @@ private:
         if (workspace_bounds_enabled_ && (!workspace_min_.allFinite() || !workspace_max_.allFinite() ||
             (workspace_min_.array() >= workspace_max_.array()).any()))
             throw std::invalid_argument("invalid experiment workspace");
+        if (!std::isfinite(exit_max_swing_angle_rad_) || exit_max_swing_angle_rad_ < 0. ||
+            exit_max_swing_angle_rad_ >= 0.5 * kPi || !std::isfinite(exit_max_search_z_m_) ||
+            exit_max_search_z_m_ < 0. || !std::isfinite(exit_protected_s_) || !(exit_protected_s_ > 0.))
+            throw std::invalid_argument("invalid exit-context parameters");
+        if (exit_workspace_ && (!exit_workspace_->first.allFinite() || !exit_workspace_->second.allFinite() ||
+            (exit_workspace_->first.array() >= exit_workspace_->second.array()).any()))
+            throw std::invalid_argument("invalid exit workspace");
+        // The measured-attitude mode keeps its workspace in the world snapshot, which has no runtime setter.
+        if (exit_workspace_ && body_orientation_mode_ == "measured_snapshot")
+            throw std::invalid_argument("exit_workspace requires body_orientation_mode axis_aligned");
         if (shadow_reference_topic_ == kMpcAuthorityTopic) {
             throw std::invalid_argument(
                 "C1F.0 is PASSIVE ONLY: shadow_reference_topic must not be /join_planner/reference");
@@ -1514,6 +1576,8 @@ private:
         const double now_s = get_clock()->now().seconds();
         latest_object_attached_ = msg->data;
         last_object_attached_receive_ros_s_ = now_s;
+        // The exit context keeps its unloaded geometry until cleanup restores the loaded one.
+        if (exitContextActive()) return;
         if (!payload_collision_enabled_) return;
 
         if (suspended_geometry_.payload_attached != msg->data) {
@@ -2277,7 +2341,8 @@ private:
         // resets the backend atomically when the commissioned phase ends.
         if (!msg->data || authority_granted_ || authority_fresh_plan_pending_) return;
         if (!recovery_.request_id.empty() &&
-            (recovery_.cancelled || !recovery_.grant_requested || !recovery_.seed)) return;
+            (recovery_.cancelled || !recovery_.grant_requested || !recovery_.hasSeed())) return;
+        if (checkExitDeadline()) return;
         pollPlannerFuture();
         if (!enabled_ || !prepared_candidate_ready_ || !shadow_commit_.has_value() ||
             !active_target_.has_value() || planner_future_.valid()) {
@@ -2286,7 +2351,8 @@ private:
         }
 
         const double now_s = get_clock()->now().seconds();
-        if (payload_collision_enabled_ && require_payload_attached_for_enable_) {
+        const bool prefix_seed = exitPrefixTransaction();
+        if (payloadAttachedChecksApply()) {
             bool object_attached = false;
             double attachment_age_s = 0.0;
             if (!currentObjectAttached(now_s, &object_attached, &attachment_age_s)) {
@@ -2309,7 +2375,13 @@ private:
             latest_status_ = "AUTHORITY_GRANT_REJECTED_STALE_STATE";
             return;
         }
-        if (require_stationary_activation_ &&
+        if (prefix_seed) {
+            if (!exitContextActive()) {
+                latest_status_ = "AUTHORITY_GRANT_REJECTED_EXIT_CONTEXT_CLOSED";
+                return;
+            }
+            if (!activationKinematicsReady(now_s, measured, "AUTHORITY_GRANT_REJECTED_RELATIVE_READINESS")) return;
+        } else if (require_stationary_activation_ &&
             (measured.velocity.norm() > activation_speed_tolerance_mps_ ||
              measured.acceleration.norm() > activation_accel_tolerance_mps2_)) {
             latest_status_ = "AUTHORITY_GRANT_REJECTED_NOT_STATIONARY";
@@ -2422,6 +2494,18 @@ private:
             // profiles retain the completed-iteration history instead of resetting
             // it or interpreting the zero policy sentinel as a fixed duration.
             const double authority_handoff_splice_s = preAuthoritySpliceLookaheadS();
+            if (prefix_seed) {
+                // Splice on the prefix at now + lookahead, absolute time kept; the search box starts there.
+                const auto exit_config = exitPrefixPlannerConfig(
+                    authority_timing_seed_s, active_target_velocity_.value_or(Vec3::Zero()));
+                const double lookahead_s = configuredSpliceLookaheadS(exit_config);
+                if (!prefixCoverageSufficient(*exit_prefix_, now_s, lookahead_s)) {
+                    latest_status_ = "AUTHORITY_GRANT_REJECTED_EXIT_PREFIX_COVERAGE_SHORT";
+                    return;
+                }
+                grant_origin = exit_prefix_->evaluate(now_s + lookahead_s).position;
+                exit_planner_config_ = exit_config;
+            }
             auto fresh_planner = std::make_unique<RecedingHorizonPlanner>(
                 *active_target_,
                 withPlannerFeatures(recedingConfig(
@@ -2440,17 +2524,26 @@ private:
                     grant_origin, *active_target_, minimum_search_z_m_,
                     smoother_jerk_weight_, smoother_goal_weight_,
                     octopus_pre_authority_max_runtime_s_));
-            // Keep a stationary seed longer than one 5 Hz timer period. The first
-            // candidate splices at authority_handoff_splice_s; this extra tail is
-            // only a handshake buffer if scheduling is briefly delayed or a solve
-            // is rejected and must be retried while Python continues to hold.
-            const double fresh_authority_hold_s = std::max(
-                0.50, fixed_splice_lookahead_s_ + 2.0 / std::max(1.0, planner_rate_hz_));
-            CommittedTrajectory stationary_seed = dynamic_planner::makeStationaryHoverTrajectory(
-                grant_origin, now_s, fresh_authority_hold_s);
-            fresh_planner->initializeCommittedTrajectory(stationary_seed);
-            planner_ = std::move(fresh_planner);
-            shadow_commit_ = std::move(stationary_seed);
+            if (prefix_seed) {
+                // The incumbent is the prefix Python is executing: no stationary seed, no clock shift.
+                fresh_planner->initializeCommittedTrajectory(*exit_prefix_);
+                planner_ = std::move(fresh_planner);
+                shadow_commit_ = *exit_prefix_;
+                exit_planner_sequence_ = recovery_.prefix_sequence;
+                exit_rebind_pending_ = false;
+            } else {
+                // Keep a stationary seed longer than one 5 Hz timer period. The first
+                // candidate splices at authority_handoff_splice_s; this extra tail is
+                // only a handshake buffer if scheduling is briefly delayed or a solve
+                // is rejected and must be retried while Python continues to hold.
+                const double fresh_authority_hold_s = std::max(
+                    0.50, fixed_splice_lookahead_s_ + 2.0 / std::max(1.0, planner_rate_hz_));
+                CommittedTrajectory stationary_seed = dynamic_planner::makeStationaryHoverTrajectory(
+                    grant_origin, now_s, fresh_authority_hold_s);
+                fresh_planner->initializeCommittedTrajectory(stationary_seed);
+                planner_ = std::move(fresh_planner);
+                shadow_commit_ = std::move(stationary_seed);
+            }
             prepared_candidate_ready_ = false;
             authority_fresh_plan_pending_ = true;
             execution_tracking_consecutive_violations_ = 0;
@@ -2466,9 +2559,10 @@ private:
             RCLCPP_WARN(
                 get_logger(),
                 "C1F.8c authority requested at ROS time %.6f; prepared reuse unavailable or "
-                "rejected, seeded stationary hold, and launching a fresh post-grant solve immediately "
+                "rejected, seeded %s, and launching a fresh post-grant solve immediately "
                 "with %.1f ms handoff splice lead.",
-                now_s, 1e3 * authority_handoff_splice_s);
+                now_s, prefix_seed ? "the bound exit prefix" : "stationary hold",
+                1e3 * authority_handoff_splice_s);
 
             // Do not wait up to one 5 Hz timer period before the first post-request solve.
             // replanTimer() sees prepared_candidate_ready_=false and starts the normal
@@ -2520,6 +2614,7 @@ private:
         execution_fallback_restart_z_m_ = std::numeric_limits<double>::quiet_NaN();
         scene_witness_passed_ = !require_scene_witness_;
         scene_witness_summary_ = require_scene_witness_ ? "PENDING" : "NOT_REQUIRED";
+        endExitContext();
         std_msgs::msg::Bool ack;
         ack.data = false;
         authority_ack_pub_->publish(ack);
@@ -2541,7 +2636,22 @@ private:
             << ",\"reference_stamp_ns\":" <<
                 (recovery_reference_granted_ == authority_granted_ ? recovery_reference_stamp_ns_ : 0)
             << ",\"reason\":" << std::quoted(latest_status_)
-            << ",\"blockers\":" << std::quoted(cooperativeInputBlockers(get_clock()->now().seconds())) << "}";
+            << ",\"blockers\":" << std::quoted(cooperativeInputBlockers(get_clock()->now().seconds()));
+        if (exitFeatureEnabled()) {
+            out << ",\"seed_kind\":"
+                << std::quoted(recovery_.seed_kind == SeedKind::Prefix ? "prefix" : "stationary")
+                << ",\"exit_context\":" << (exitContextActive() ? "true" : "false")
+                << ",\"prefix_sequence\":" << recovery_.prefix_sequence
+                << ",\"prefix_coverage_end_ns\":" << recovery_.prefix_coverage_end_ns
+                << ",\"deadline_ns\":" << recovery_.deadline_ns
+                << ",\"splice_time_ns\":" << secondsToNs(exit_installed_splice_s_)
+                << ",\"exit_reject_reason\":" << std::quoted(exit_reject_reason_)
+                << ",\"candidates_attempted\":" << exit_candidates_attempted_
+                << ",\"candidates_accepted\":" << exit_candidates_accepted_
+                << ",\"candidates_late\":" << exit_candidates_late_
+                << ",\"candidates_invalidated\":" << exit_candidates_invalidated_;
+        }
+        out << "}";
         std_msgs::msg::String message;
         message.data = out.str();
         recovery_status_pub_->publish(message);
@@ -2550,12 +2660,21 @@ private:
     void recoveryRequestCallback(const std_msgs::msg::String::SharedPtr msg) {
         const auto request = parseRecoveryRequest(msg->data);
         if (!request) return;
+        // Feature off: a seedtraj request is ignored exactly as an unparsed request was.
+        if (request->action == RecoveryAction::SeedTrajectory && !exitFeatureEnabled()) return;
         const double now_s = get_clock()->now().seconds();
         if ((request->action == RecoveryAction::Seed || request->action == RecoveryAction::Grant) &&
             (now_s - 1e-9 * static_cast<double>(request->stamp_ns) < -0.02 ||
              now_s - 1e-9 * static_cast<double>(request->stamp_ns) > state_timeout_s_)) return;
+        if (request->action == RecoveryAction::SeedTrajectory) {
+            // Its stamp is the prefix's header stamp (up to a refresh period old), not a fresh-command stamp.
+            handleSeedTrajectory(*request);
+            publishRecoveryStatus();
+            return;
+        }
         switch (recovery_.apply(*request)) {
         case RecoveryAction::Reset:
+            resetExitTransaction();
             disableBackend("RECOVERY_WAITING_COMMON_STOPPED_REFERENCE");
             break;
         case RecoveryAction::Seed:
@@ -2572,6 +2691,7 @@ private:
             disableBackend("RECOVERY_CANCELLED");
             break;
         case RecoveryAction::Ignore:
+        case RecoveryAction::SeedTrajectory:
             break;
         }
         publishRecoveryStatus();
@@ -2593,6 +2713,290 @@ private:
             return false;
         }
         return true;
+    }
+
+    // ---- C++ exit (multi_drone_control 15 Nov): the `seedtraj exit` transaction. Opt-in by moving_prefix_topic.
+    bool exitFeatureEnabled() const { return !moving_prefix_topic_.empty(); }
+    bool exitContextActive() const { return exit_loaded_geometry_.has_value(); }
+    bool exitPrefixTransaction() const {
+        return exitFeatureEnabled() && recovery_.prefixBound() && exit_prefix_.has_value();
+    }
+    // Skipped for the exit transaction only; every other transaction keeps them.
+    bool payloadAttachedChecksApply() const {
+        return payload_collision_enabled_ && require_payload_attached_for_enable_ && !exitContextActive();
+    }
+
+    // The pre-authority configuration tryActivate() and authorityCallback() build for this timing seed.
+    RecedingHorizonConfig exitPrefixPlannerConfig(double timing_seed_s, const Vec3& terminal_velocity) const {
+        return withPlannerFeatures(recedingConfig(
+            timing_seed_s, preAuthoritySpliceLookaheadS(), spline_time_factor_, factor_alloc_,
+            factor_alloc_close_, close_to_goal_m_,
+            incumbent_failure_recheck_horizon_s_,
+            terminal_hold_guard_s_, terminal_hold_guard_interval_s_,
+            require_terminal_hold_for_nominal_, require_rendezvous_backup_for_nominal_,
+            defer_incumbent_conflict_until_reaction_horizon_, emergency_panic_horizon_s_,
+            enable_octopus_useful_deadline_, octopus_post_search_reserve_s_,
+            moving_rendezvous_enabled_, terminal_velocity,
+            terminal_time_target_prediction_enabled_, target_time_fixed_point_iterations_,
+            target_time_fixed_point_tolerance_s_, target_lead_max_s_,
+            target_lead_high_confidence_max_s_, target_lead_max_distance_m_));
+    }
+
+    // RecedingHorizonPlanner::chooseSpliceLookahead() of a planner built from this configuration.
+    static double configuredSpliceLookaheadS(const RecedingHorizonConfig& config) {
+        if (config.fixed_splice_lookahead_s > 0.0) return config.fixed_splice_lookahead_s;
+        return dynamic_planner::adaptiveSpliceLookahead(config.initial_splice_timing_s, config.dc_s,
+            config.factor_alpha, config.min_splice_lookahead_s, config.max_splice_lookahead_s);
+    }
+
+    static std::int64_t secondsToNs(double t_s) {
+        return std::isfinite(t_s) ? static_cast<std::int64_t>(std::llround(1e9 * t_s)) : std::int64_t{0};
+    }
+
+    // Relative readiness: replaces both stationary gates in the exit transaction only.
+    bool activationKinematicsReady(double now_s, const State& measured, const std::string& status_prefix) {
+        State reference;
+        try {
+            reference = exit_prefix_->evaluate(now_s);
+        } catch (const std::exception&) {
+            latest_status_ = status_prefix + ":prefix_not_covering_now";
+            return false;
+        }
+        const std::string blocker = activationKinematicsBlocker(measured, reference,
+            ego_tracking_error_half_extents_, activation_speed_tolerance_mps_,
+            activation_accel_tolerance_mps2_, require_stationary_activation_);
+        if (blocker.empty()) return true;
+        latest_status_ = status_prefix + ":" + blocker;
+        return false;
+    }
+
+    void movingPrefixCallback(const interfaces::msg::CommittedTrajectory::SharedPtr msg) {
+        ReceivedPrefix received;
+        received.sequence = msg->sequence;
+        received.stamp_ns = static_cast<std::int64_t>(msg->header.stamp.sec) * 1000000000LL +
+            static_cast<std::int64_t>(msg->header.stamp.nanosec);
+        if (msg->vehicle_id != vehicle_id_) received.error = "vehicle_id '" + msg->vehicle_id + "'";
+        else if (msg->header.frame_id != frame_id_) received.error = "frame '" + msg->header.frame_id + "'";
+        else if (msg->terminal_hold) received.error = "terminal_hold";
+        else {
+            try {
+                received.trajectory = trajectoryFromMessage(*msg);
+            } catch (const std::exception& exc) {
+                received.error = exc.what();
+            }
+        }
+        if (!received.error.empty()) {
+            RCLCPP_WARN(get_logger(), "Exit prefix seq=%llu stamp_ns=%lld invalid: %s",
+                static_cast<unsigned long long>(received.sequence),
+                static_cast<long long>(received.stamp_ns), received.error.c_str());
+        }
+        received_prefixes_.push_back(std::move(received));
+        while (received_prefixes_.size() > 4U) received_prefixes_.pop_front();
+        // A seedtraj that overtook its prefix in transport is taken now.
+        if (exit_pending_request_ && exit_pending_request_->prefix_sequence == msg->sequence &&
+            exit_pending_request_->stamp_ns == received_prefixes_.back().stamp_ns) {
+            const RecoveryRequest pending = *exit_pending_request_;
+            exit_pending_request_.reset();
+            handleSeedTrajectory(pending);
+            publishRecoveryStatus();
+        }
+    }
+
+    // '' when the prefix may be bound now; the requirements in the contract's order of precedence.
+    std::string exitBindingBlocker(const ReceivedPrefix& received, std::int64_t deadline_ns,
+                                   std::int64_t now_ns) const {
+        const double now_s = 1e-9 * static_cast<double>(now_ns);
+        if (now_ns >= deadline_ns) return "deadline_passed";
+        if (!received.error.empty()) return "prefix_invalid";
+        const double lookahead_s = configuredSpliceLookaheadS(exitPrefixPlannerConfig(
+            planner_ ? planner_->previousSpliceTiming() : initial_splice_timing_s_, Vec3::Zero()));
+        if (!prefixCoverageSufficient(received.trajectory, now_s, lookahead_s)) return "prefix_coverage_short";
+        if (!exitContextActive()) {
+            // The existing release evidence and freshness rule: a fresh reading of false.
+            bool attached = true;
+            double age_s = 0.0;
+            if (!currentObjectAttached(now_s, &attached, &age_s) || attached) return "object_attached_or_stale";
+        }
+        return "";
+    }
+
+    void handleSeedTrajectory(const RecoveryRequest& request) {
+        // After the grant C++ executes its own commitment; the prefix no longer matters to it.
+        if (authority_granted_) return;
+        const PrefixBinding binding = recovery_.prefixBinding(request);
+        if (binding == PrefixBinding::Ignore) return;
+        const std::int64_t now_ns = get_clock()->now().nanoseconds();
+        if (binding == PrefixBinding::Resend) {
+            // A heartbeat only retries activation; the context opens on a new binding (first or refresh).
+            if (exitContextActive()) {
+                enable_requested_ = true;
+                tryActivate();
+            }
+            return;
+        }
+        const auto received = std::find_if(received_prefixes_.rbegin(), received_prefixes_.rend(),
+            [&](const ReceivedPrefix& p) {
+                return p.sequence == request.prefix_sequence && p.stamp_ns == request.stamp_ns;
+            });
+        if (received == received_prefixes_.rend()) {
+            const bool superseded = std::any_of(received_prefixes_.begin(), received_prefixes_.end(),
+                [&](const ReceivedPrefix& p) { return p.stamp_ns > request.stamp_ns; });
+            if (superseded) rejectExit("prefix_missing");
+            else exit_pending_request_ = request;
+            return;
+        }
+        exit_pending_request_.reset();
+        const std::string reason = exitBindingBlocker(*received, request.deadline_ns, now_ns);
+        if (!reason.empty()) {
+            rejectExit(reason);
+            return;
+        }
+        const CommittedTrajectory prefix = received->trajectory;
+        // Refresh: decide the old sequence's candidates before rebinding.
+        const bool rebind_now = recovery_.prefixBound() && enabled_ &&
+            !keepCandidatesAcrossRefresh(prefix, 1e-9 * static_cast<double>(now_ns));
+        recovery_.apply(request);
+        exit_prefix_ = prefix;
+        recovery_.prefix_coverage_end_ns = secondsToNs(prefix.endTime());
+        recovery_.protected_window_end_ns = secondsToNs(prefix.startTime() + exit_protected_s_);
+        exit_reject_reason_.clear();
+        if (!exitContextActive()) installExitContext();
+        if (rebind_now) rebindExitPlanner();
+        enable_requested_ = true;
+        tryActivate();
+    }
+
+    void rejectExit(const std::string& reason) {
+        exit_reject_reason_ = reason;
+        RCLCPP_WARN(get_logger(), "Exit transaction %s rejected: %s",
+            recovery_.request_id.c_str(), reason.c_str());
+        if (exitContextActive()) disableBackend("EXIT_REJECTED:" + reason);
+        else latest_status_ = "EXIT_REJECTED:" + reason;
+    }
+
+    // Returns false when the old sequence's candidates were invalidated (epoch bumped).
+    bool keepCandidatesAcrossRefresh(const CommittedTrajectory& refreshed, double now_s) {
+        const double from_s = std::max(now_s, refreshed.startTime());
+        const double until_s = refreshed.startTime() + exit_protected_s_;
+        exit_rebind_pending_ = true;
+        if (prefixesIdenticalOver(*exit_prefix_, refreshed, from_s, until_s)) {
+            exit_kept_window_ = KeptWindow{recovery_.prefix_sequence, from_s, until_s};
+            const bool splice_kept = exit_installed_splice_s_ >= from_s && exit_installed_splice_s_ <= until_s;
+            if (prepared_candidate_ready_ && !splice_kept) {
+                prepared_candidate_ready_ = false;
+                ++exit_candidates_invalidated_;
+            }
+            return true;
+        }
+        exit_candidates_invalidated_ += (planner_future_.valid() ? 1U : 0U) + (prepared_candidate_ready_ ? 1U : 0U);
+        ++epoch_;
+        prepared_candidate_ready_ = false;
+        exit_kept_window_.reset();
+        if (authority_fresh_plan_pending_) {
+            // That grant referred to the superseded prefix: a new grant is required.
+            authority_fresh_plan_pending_ = false;
+            recovery_.grant_requested = false;
+        }
+        latest_status_ = "EXIT_PREFIX_REFRESH_INVALIDATED";
+        return false;
+    }
+
+    // The bound prefix becomes the incumbent, with the configuration of the planner it replaces.
+    void rebindExitPlanner() {
+        exit_rebind_pending_ = false;
+        if (!enabled_ || authority_granted_ || !exitPrefixTransaction() || !active_target_ ||
+            !exit_planner_config_) return;
+        auto config = *exit_planner_config_;
+        if (planner_) config.initial_splice_timing_s = planner_->previousSpliceTiming();
+        const double now_s = get_clock()->now().seconds();
+        const double lookahead_s = configuredSpliceLookaheadS(config);
+        try {
+            if (!prefixCoverageSufficient(*exit_prefix_, now_s, lookahead_s))
+                throw std::runtime_error("prefix coverage short");
+            auto planner = std::make_unique<RecedingHorizonPlanner>(*active_target_, config,
+                localConfig(exit_prefix_->evaluate(now_s + lookahead_s).position, *active_target_,
+                    minimum_search_z_m_, smoother_jerk_weight_, smoother_goal_weight_,
+                    octopus_pre_authority_max_runtime_s_));
+            planner->initializeCommittedTrajectory(*exit_prefix_);
+            planner_ = std::move(planner);
+            exit_planner_sequence_ = recovery_.prefix_sequence;
+        } catch (const std::exception& exc) {
+            // Never plan on a superseded prefix: no planner until a rebind succeeds.
+            planner_.reset();
+            exit_rebind_pending_ = true;
+            latest_status_ = std::string("EXIT_PREFIX_REBIND_FAILED:") + exc.what();
+        }
+        shadow_commit_ = *exit_prefix_;
+    }
+
+    void installExitContext() {
+        exit_loaded_geometry_ = suspended_geometry_;
+        suspended_geometry_.payload_attached = false;
+        if (exit_max_swing_angle_rad_ > 0.0) suspended_geometry_.max_swing_angle_rad = exit_max_swing_angle_rad_;
+        world_->setEgoSuspendedGeometry(suspended_geometry_);
+        RCLCPP_WARN(get_logger(), "Exit context installed for %s: payload off, swing %.2f deg (world version %llu).",
+            recovery_.request_id.c_str(), suspended_geometry_.max_swing_angle_rad * 180. / kPi,
+            static_cast<unsigned long long>(world_->currentVersion()));
+    }
+
+    // Every cleanup path (cancel, reset, enable=false, backend disable, the deadline) reaches disableBackend().
+    void endExitContext() {
+        exit_kept_window_.reset();
+        exit_rebind_pending_ = false;
+        if (!exit_loaded_geometry_) return;
+        SuspendedGeometry restored = *exit_loaded_geometry_;
+        // As objectAttachedCallback() would have kept it meanwhile.
+        if (payload_collision_enabled_ && latest_object_attached_) restored.payload_attached = *latest_object_attached_;
+        exit_loaded_geometry_.reset();
+        suspended_geometry_ = restored;
+        world_->setEgoSuspendedGeometry(suspended_geometry_);
+        RCLCPP_WARN(get_logger(), "Exit context ended: loaded geometry, bounds and payload checks restored.");
+    }
+
+    void resetExitTransaction() {
+        exit_prefix_.reset();
+        exit_pending_request_.reset();
+        exit_planner_config_.reset();
+        exit_planner_sequence_ = 0U;
+        exit_installed_splice_s_ = std::numeric_limits<double>::quiet_NaN();
+        exit_reject_reason_.clear();
+        exit_candidates_attempted_ = exit_candidates_accepted_ = 0U;
+        exit_candidates_late_ = exit_candidates_invalidated_ = 0U;
+    }
+
+    // The deadline ends an exit context that has no grant yet.
+    bool checkExitDeadline() {
+        if (!exitContextActive() || authority_granted_ || !recovery_.prefixBound() ||
+            get_clock()->now().nanoseconds() < recovery_.deadline_ns) return false;
+        exit_reject_reason_ = "deadline_passed";
+        disableBackend("EXIT_DEADLINE_PASSED");
+        return true;
+    }
+
+    // '' admits. Applies to solves whose incumbent was a bound prefix (before authority).
+    std::string exitPrefixAdmissionRejection(const PlannerOutcome& outcome) const {
+        if (outcome.exit_prefix_sequence == 0U || !exitPrefixTransaction()) return "";
+        const double splice_s = outcome.result.splice_time_s;
+        if (outcome.exit_prefix_sequence != recovery_.prefix_sequence &&
+            (!exit_kept_window_ || exit_kept_window_->sequence != outcome.exit_prefix_sequence ||
+             !(splice_s >= exit_kept_window_->from_s && splice_s <= exit_kept_window_->until_s)))
+            return "exit_prefix_refreshed";
+        return prefixAdmissionRejection(splice_s, exit_prefix_->startTime(), exit_prefix_->endTime(),
+            1e-9 * static_cast<double>(recovery_.deadline_ns));
+    }
+
+    void countExitOutcome(const PlannerOutcome& outcome) {
+        if (outcome.worker_exception) return;
+        if (outcome.result.attempted) ++exit_candidates_attempted_;
+        if (outcome.authority_installed) {
+            ++exit_candidates_accepted_;
+            exit_installed_splice_s_ = outcome.result.splice_time_s;
+        } else if (outcome.installation_rejection == "exit_prefix_refreshed") {
+            ++exit_candidates_invalidated_;
+        } else if (outcome.result.candidate_late ||
+                   outcome.installation_rejection.rfind("exit_splice_", 0) == 0) {
+            ++exit_candidates_late_;
+        }
     }
 
     bool currentState(double now_s, State* state, double* age_s) const {
@@ -2876,7 +3280,8 @@ private:
         }
 
         const double now_s = get_clock()->now().seconds();
-        if (payload_collision_enabled_ && require_payload_attached_for_enable_) {
+        const bool prefix_seed = exitPrefixTransaction();
+        if (payloadAttachedChecksApply()) {
             bool object_attached = false;
             double attachment_age_s = 0.0;
             if (!currentObjectAttached(now_s, &object_attached, &attachment_age_s)) {
@@ -2907,7 +3312,13 @@ private:
             latest_status_ = "WAITING_ABOVE_SEARCH_FLOOR";
             return false;
         }
-        if (require_stationary_activation_ &&
+        if (prefix_seed) {
+            if (!exitContextActive()) {
+                latest_status_ = "WAITING_EXIT_CONTEXT";
+                return false;
+            }
+            if (!activationKinematicsReady(now_s, measured, "WAITING_EXIT_RELATIVE_READINESS")) return false;
+        } else if (require_stationary_activation_ &&
             (measured.velocity.norm() > activation_speed_tolerance_mps_ ||
              measured.acceleration.norm() > activation_accel_tolerance_mps2_)) {
             latest_status_ = "WAITING_STATIONARY_ACTIVATION";
@@ -2939,6 +3350,20 @@ private:
         if (recovery_.seed) {
             if (!recoverySeedReady(now_s, measured) || !refreshCooperativeWorld(now_s)) return false;
             activation_origin = *recovery_.seed;
+        } else if (prefix_seed) {
+            // The search box starts where the first candidate splices: prefix(now + lookahead).
+            const double lookahead_s = configuredSpliceLookaheadS(
+                exitPrefixPlannerConfig(initial_splice_timing_s_, Vec3::Zero()));
+            if (!prefixCoverageSufficient(*exit_prefix_, now_s, lookahead_s)) {
+                latest_status_ = "WAITING_EXIT_PREFIX_COVERAGE";
+                return false;
+            }
+            if (!refreshCooperativeWorld(now_s)) return false;
+            activation_origin = exit_prefix_->evaluate(now_s + lookahead_s).position;
+            if (activation_origin.z() < minimum_search_z_m_) {
+                latest_status_ = "EXIT_PREFIX_BELOW_SEARCH_FLOOR";
+                return false;
+            }
         }
         // Resolve coverage from the exact planner/configuration being activated.
         // In adaptive mode preAuthoritySpliceLookaheadS() is a zero sentinel,
@@ -2979,6 +3404,21 @@ private:
                 latest_status_ = std::string("RECOVERY_COMMON_HOLD_NOT_CERTIFIED:") + exc.what();
                 return false;
             }
+        } else if (prefix_seed) {
+            // Certify the prefix itself over [now, now + lookahead], in place of the hold.
+            try {
+                const auto current_world = world_->snapshot(now_s);
+                auto checker = plannerSafetyChecker();
+                const auto safety = checker.checkCommitted(*exit_prefix_, now_s,
+                    now_s + activation_planner->chooseSpliceLookahead(), current_world);
+                if (!safety.safe || !world_->runIfVersionCurrent(current_world.version, []() {})) {
+                    latest_status_ = "EXIT_PREFIX_NOT_CERTIFIED";
+                    return false;
+                }
+            } catch (const std::exception& exc) {
+                latest_status_ = std::string("EXIT_PREFIX_NOT_CERTIFIED:") + exc.what();
+                return false;
+            }
         }
 
         ++epoch_;
@@ -3001,7 +3441,14 @@ private:
         // planning time alignment and does not grant C++ execution authority.
         const bool extended_pre_authority_seed =
             octopus_pre_authority_max_runtime_s_ > octopus_max_runtime_s_ + 1e-12;
-        if (seed_stationary_on_activation_ || extended_pre_authority_seed) {
+        if (prefix_seed) {
+            // Python executes the prefix: it is the incumbent, at its own absolute times.
+            planner_->initializeCommittedTrajectory(*exit_prefix_);
+            shadow_commit_ = *exit_prefix_;
+            exit_planner_config_ = exitPrefixPlannerConfig(initial_splice_timing_s_, activation_target_velocity);
+            exit_planner_sequence_ = recovery_.prefix_sequence;
+            exit_rebind_pending_ = false;
+        } else if (seed_stationary_on_activation_ || extended_pre_authority_seed) {
             CommittedTrajectory stationary_seed = dynamic_planner::makeStationaryHoverTrajectory(
                 activation_origin, now_s, 0.10);
             planner_->initializeCommittedTrajectory(stationary_seed);
@@ -3010,7 +3457,8 @@ private:
             shadow_commit_.reset();
         }
         enabled_ = true;
-        latest_status_ = (seed_stationary_on_activation_ || extended_pre_authority_seed)
+        latest_status_ = prefix_seed ? "ENABLED_EXIT_PREFIX_SEED"
+            : (seed_stationary_on_activation_ || extended_pre_authority_seed)
             ? "ENABLED_STATIONARY_SEED"
             : "ENABLED_WAITING_FIRST_COMMIT";
         RCLCPP_WARN(get_logger(),
@@ -3052,19 +3500,23 @@ private:
                 outcome.installation_splice_margin_ms = 1e3 * (
                     outcome.result.splice_time_s - outcome.installation_attempt_time_s);
                 outcome.installation_world_version = world_->currentVersion();
-                outcome.installation_rejection = dynamic_planner::installCertifiedReplacement(
-                    *world_, outcome.result, outcome.epoch, epoch_,
-                    outcome.candidate_available_time_s, outcome.installation_attempt_time_s,
-                    outcome.request_ros_time_s, authority_granted_, [&]() noexcept {
-                        planner_.swap(outcome.planner);
-                        shadow_commit_.swap(replacement_commit);
-                        outcome.authority_installed = true;
-                    }, [this] { return get_clock()->now().seconds(); },
-                    &outcome.authority_install_time_s);
+                outcome.installation_rejection = exitPrefixAdmissionRejection(outcome);
+                if (outcome.installation_rejection.empty()) {
+                    outcome.installation_rejection = dynamic_planner::installCertifiedReplacement(
+                        *world_, outcome.result, outcome.epoch, epoch_,
+                        outcome.candidate_available_time_s, outcome.installation_attempt_time_s,
+                        outcome.request_ros_time_s, authority_granted_, [&]() noexcept {
+                            planner_.swap(outcome.planner);
+                            shadow_commit_.swap(replacement_commit);
+                            outcome.authority_installed = true;
+                        }, [this] { return get_clock()->now().seconds(); },
+                        &outcome.authority_install_time_s);
+                }
             } catch (const std::exception& exc) {
                 outcome.installation_rejection = std::string("installation_exception:") + exc.what();
             }
         }
+        if (outcome.exit_prefix_sequence != 0U) countExitOutcome(outcome);
         if (!outcome.authority_installed) {
             if (!outcome.worker_exception && !outcome.result.accepted) {
                 // No replacement occurred: preserve native bookkeeping such as
@@ -3188,6 +3640,11 @@ private:
                             "C1F.8c execution authority granted from a fresh post-request commit "
                             "certified in the current dynamic world; normal %s splice policy restored.",
                             fixed_splice_lookahead_s_ > 0.0 ? "fixed" : "adaptive");
+                        // The mission joins only a window sampled by the splice; the install can land
+                        // under one 30 Hz period before it, so publish one now (window and status).
+                        if (exitPrefixTransaction()) {
+                            referenceTimer();
+                        }
                     } else {
                         prepared_candidate_ready_ = true;
                         latest_status_ = "PREPARED_WAITING_AUTHORITY";
@@ -3298,6 +3755,7 @@ private:
 
     void replanTimer() {
         pollPlannerFuture();
+        checkExitDeadline();
         if (!enabled_) {
             tryActivate();
             return;
@@ -3318,6 +3776,8 @@ private:
             latest_status_ = "PREPARED_WAITING_AUTHORITY";
             return;
         }
+        // A refreshed prefix becomes the incumbent before the next solve is launched.
+        if (exit_rebind_pending_) rebindExitPlanner();
         if (!planner_ || !active_target_.has_value()) {
             ++planner_worker_errors_;
             latest_status_ = "ENABLED_WITHOUT_PLANNER";
@@ -3325,7 +3785,7 @@ private:
         }
 
         const double now_s = get_clock()->now().seconds();
-        if (payload_collision_enabled_ && require_payload_attached_for_enable_) {
+        if (payloadAttachedChecksApply()) {
             bool object_attached = false;
             double attachment_age_s = 0.0;
             if (!currentObjectAttached(now_s, &object_attached, &attachment_age_s)) {
@@ -3456,12 +3916,16 @@ private:
         }
         auto world = world_;
         auto ros_clock = get_clock();
+        // Nonzero while the incumbent is a bound exit prefix (before authority): admission applies.
+        const std::uint64_t exit_prefix_sequence =
+            exitPrefixTransaction() && !authority_granted_ ? exit_planner_sequence_ : 0U;
         auto task = std::make_shared<std::packaged_task<PlannerOutcome()>>(
             [sequence, epoch, planner = std::move(planner), retained_planner = std::move(retained_planner), target, target_predictor, world,
-             ros_clock, measured, now_s, submitted_octopus_wall_budget_s]() mutable {
+             ros_clock, measured, now_s, submitted_octopus_wall_budget_s, exit_prefix_sequence]() mutable {
                 PlannerOutcome outcome;
                 outcome.sequence = sequence;
                 outcome.epoch = epoch;
+                outcome.exit_prefix_sequence = exit_prefix_sequence;
                 outcome.request_ros_time_s = now_s;
                 outcome.octopus_wall_budget_s = submitted_octopus_wall_budget_s;
                 outcome.request_state = measured;
@@ -3505,6 +3969,7 @@ private:
             &reference_callback_overrun_count_,
             1e3 / kControlReferenceHz};
         pollPlannerFuture();
+        checkExitDeadline();
         if (!enabled_ || !shadow_commit_.has_value()) return;
 
         const double now_s = get_clock()->now().seconds();
@@ -3551,8 +4016,10 @@ private:
             const rclcpp::Time publish_time = get_clock()->now();
             // Opt-in executing references carry sample time, not serialization
             // time. Pre-authority frozen windows remain readiness evidence only.
+            // An exit-prefix transaction always does: the mission matches its
+            // windows against the shared prefix at stamp + i*dt.
             const builtin_interfaces::msg::Time publish_stamp =
-                (stopped_continuation_enabled_ && authority_granted_)
+                ((stopped_continuation_enabled_ && authority_granted_) || exitPrefixTransaction())
                 ? rclcpp::Time(static_cast<std::int64_t>(std::llround(sampled_at_s * 1e9)),
                                get_clock()->get_clock_type()) : publish_time;
             const auto message = makeReferenceMessage(
@@ -3566,7 +4033,9 @@ private:
                 latest_reference_positions_.push_back(sample.state.position);
             }
             shadow_reference_pub_->publish(message);
-            if (recovery_continuation_pub_) {
+            // A moving exit prefix has no stopped tail to continue (the companion would throw every tick).
+            if (recovery_continuation_pub_ &&
+                !(exitContextActive() && !shadow_commit_->endsInStoppedHold())) {
                 const auto full = sampleStoppedContinuation(*shadow_commit_, sampled_at_s, reference_config_);
                 recovery_continuation_pub_->publish(makeReferenceMessage(
                     full, publish_stamp, frame_id_, vehicle_id_));
@@ -4226,6 +4695,7 @@ private:
 
     void diagnosticsTimer() {
         pollPlannerFuture();
+        checkExitDeadline();
         if (!enabled_) tryActivate();
 
         const double now_s = get_clock()->now().seconds();
@@ -4354,6 +4824,14 @@ private:
              << authority_rebase_count_ << "\n"
              << "scene_witness: " << scene_witness_summary_ << "\n"
              << "MPC authority publisher unchanged: true";
+        if (exitFeatureEnabled()) {
+            text << "\nexit context/swing_deg/seq/deadline_ns/reject/attempted/accepted/late/invalidated: "
+                 << exitContextActive() << " / " << suspended_geometry_.max_swing_angle_rad * 180. / kPi
+                 << " / " << recovery_.prefix_sequence << " / "
+                 << recovery_.deadline_ns << " / '" << exit_reject_reason_ << "' / "
+                 << exit_candidates_attempted_ << " / " << exit_candidates_accepted_ << " / "
+                 << exit_candidates_late_ << " / " << exit_candidates_invalidated_;
+        }
 
         std_msgs::msg::String message;
         message.data = text.str();
@@ -4487,6 +4965,26 @@ private:
     ReferenceRecoveryContext recovery_;
     std::int64_t recovery_reference_stamp_ns_ = 0;
     bool recovery_reference_granted_ = false;
+    std::string moving_prefix_topic_;
+    double exit_max_swing_angle_rad_ = 0.0;
+    std::optional<std::pair<Vec3, Vec3>> exit_workspace_;
+    double exit_max_search_z_m_ = 0.0;
+    double exit_protected_s_ = 1.5;
+    rclcpp::Subscription<interfaces::msg::CommittedTrajectory>::SharedPtr moving_prefix_sub_;
+    std::deque<ReceivedPrefix> received_prefixes_;
+    std::optional<CommittedTrajectory> exit_prefix_;              // the bound prefix
+    std::optional<SuspendedGeometry> exit_loaded_geometry_;       // set <=> the exit context is installed
+    std::optional<RecoveryRequest> exit_pending_request_;         // a seedtraj waiting for its prefix
+    std::optional<RecedingHorizonConfig> exit_planner_config_;
+    std::uint64_t exit_planner_sequence_ = 0U;                    // the prefix the planner's incumbent came from
+    std::optional<KeptWindow> exit_kept_window_;
+    bool exit_rebind_pending_ = false;
+    double exit_installed_splice_s_ = std::numeric_limits<double>::quiet_NaN();
+    std::string exit_reject_reason_;
+    std::size_t exit_candidates_attempted_ = 0U;
+    std::size_t exit_candidates_accepted_ = 0U;
+    std::size_t exit_candidates_late_ = 0U;
+    std::size_t exit_candidates_invalidated_ = 0U;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr recovery_status_pub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr recovery_request_sub_;
     std::string shadow_reference_topic_;

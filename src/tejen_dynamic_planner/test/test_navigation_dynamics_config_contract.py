@@ -24,7 +24,8 @@ def test_shared_configuration_paths_preserve_z_and_backup_defaults():
     for axis in 'xy':
         assert f'config.refinement.j_max.{axis}() = planner_max_jerk_xy_mps3_;' in local
     assert 'config.refinement.j_max.z()' not in local
-    assert SOURCE.count('withPlannerFeatures(recedingConfig(') == 6
+    # 7: the six construction paths + exitPrefixPlannerConfig (15 Nov), which builds the same pre-authority config.
+    assert SOURCE.count('withPlannerFeatures(recedingConfig(') == 7
     # Existing native constructor forwards shared acceleration to both stages.
     native = (Path(__file__).resolve().parents[1]/'standalone/src/receding_horizon_planner.cpp').read_text()
     assert 'local_config.octopus.a_max = config_.a_max;' in native

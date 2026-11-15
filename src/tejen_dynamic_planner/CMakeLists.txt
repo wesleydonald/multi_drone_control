@@ -315,6 +315,15 @@ if(BUILD_TESTING)
     target_compile_options(test_c1f3b_scene PRIVATE -Wall -Wextra -Wpedantic)
     add_test(NAME test_c1f3b_scene COMMAND test_c1f3b_scene)
 
+    # multi_drone_control 15 Nov: C++ exit hand-off, backend half (seedtraj transaction, moving-prefix seed).
+    add_executable(test_exit_prefix_handoff test/test_exit_prefix_handoff.cpp)
+    target_include_directories(test_exit_prefix_handoff PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CORE_INCLUDE}")
+    target_link_libraries(test_exit_prefix_handoff dynamic_planner_receding_ros)
+    target_compile_options(test_exit_prefix_handoff PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME test_exit_prefix_handoff COMMAND test_exit_prefix_handoff)
+    set_tests_properties(test_exit_prefix_handoff PROPERTIES TIMEOUT 30)
+
     add_executable(test_c1f4_execution_contract test/test_c1f4_execution_contract.cpp)
     target_include_directories(test_c1f4_execution_contract PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_include_directories(test_c1f4_execution_contract PRIVATE "${CORE_INCLUDE}")
