@@ -36,7 +36,7 @@ from std_msgs.msg import Bool, Empty, Float64, Float64MultiArray, Int32, String
 from interfaces.msg import ELRSCommand, MotionCaptureState
 
 from .config import (LAST_PROVEN, PARTNER_GO_TOPIC, drone_set_arg, instance_topic, mocap_loss_arg, mocap_tilt_arg,
-                     partner_go_topic, release_topic, wait_lift_arg, wait_log_spec, wait_reweld_arg, wait_reweld_spec,
+                     partner_go_topic, release_topic, signal_arg, wait_lift_arg, wait_log_spec, wait_reweld_arg, wait_reweld_spec,
                      wait_traj_arg, wrench_arg)
 
 ARM_FAIL = 'fleet manager ARM failed or refused'
@@ -570,6 +570,10 @@ class ExperimentRunner(Node):
             if 'LAND, every drone lands' in msg.msg:
                 self._log_event('FAULT_LAND')   # the manager landed the fleet on a newcomer's fault
             return
+        if msg.name.endswith('online_join_planner') and msg.msg.startswith('C++ exit'):
+            # WAIT_LOG can time an event into his C++ exit ('HIS:C++ exit: clearance complete': LAND while it prepares)
+            self._planner_lines.append((self._rel(), 'HIS:' + msg.msg))
+            return
         if not msg.name.endswith('dissipative_planner'):
             return
         self._planner_lines.append((self._rel(), msg.msg))
@@ -930,6 +934,15 @@ class ExperimentRunner(Node):
                 self._log_event('GIVE_UP_SENT', str(d))
         elif ev.do == 'FORCE_DROP':
             self._publish(self.force_drop_pub, Bool(data=True), '/join_planner/force_drop')
+        elif ev.do == 'SIGNAL':
+            import subprocess
+            sig, exe = signal_arg(ev.arg)
+            pattern = f'/lib/[A-Za-z0-9_]+/{exe}( |$)'
+            found = subprocess.run(['pgrep', '-f', pattern], capture_output=True, text=True, check=False).stdout.split()
+            subprocess.run(['pkill', f'-{sig}', '-f', pattern], check=False)
+            if not found:
+                self.failures.append(f'SIGNAL {sig} {exe} at t={self._rel():.2f}: no such process')
+            self._log_event('SIGNAL_SENT', f'{sig} {exe} pids {",".join(found)}')
         elif ev.do == 'PARTNER_GO':
             go = String(data='{"running": true}')
             for topic in partner_go_topics(ev.arg, self.n - 1):

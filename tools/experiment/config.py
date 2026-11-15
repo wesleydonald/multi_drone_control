@@ -50,6 +50,9 @@ EVENT_KINDS = {
     'HIS_LAND',   # /join_planner/land_now True: his planner's own LAND, as the console's his LAND button; arg
                   # (optional) partners' drone ids, another partner d's on /tejen_d<d>/join_planner/land_now
     'FORCE_DROP',  # /join_planner/force_drop True: the console's FORCE DROP (his drop gates skipped; 11 Nov)
+    'SIGNAL',     # not published: 'STOP|CONT <executable>' sends SIGSTOP / SIGCONT to that ROS executable's process in
+                  # this run's container (a frozen node: the C++ exit's 7 s preparation timeout with his backend
+                  # silent, 15 Nov); the executable a plain name, matched on .../lib/<package>/<executable>
     'WAIT_WELD',  # not published: block until /magnet/object_attached goes True
     'WAIT_LIFT',  # not published: block until the payload is above arg m (default 0.5), then
                   # shift every later event by the wait (a creep lift varies by ~10 s, R0553);
@@ -298,6 +301,17 @@ def mocap_tilt_arg(arg):
     return int(parts[0]), deg, secs, ramp
 
 
+SIGNAL_RE = re.compile(r'^(STOP|CONT) ([A-Za-z0-9_]+)$')
+
+
+def signal_arg(arg):
+    """SIGNAL's arg: 'STOP|CONT <executable>' -> (signal, executable)."""
+    m = SIGNAL_RE.match(str(arg).strip())
+    if not m:
+        raise ValueError(f"SIGNAL arg {arg!r}: 'STOP <executable>' or 'CONT <executable>'")
+    return m.group(1), m.group(2)
+
+
 def mocap_loss_arg(arg):
     """MOCAP_LOSS arg -> (drone id, seconds): 'id [seconds]' (default 600 s, the rest of the run)."""
     parts = str(arg if arg is not None else '').split()
@@ -417,6 +431,8 @@ class Event:
             self.arg = LAST_PROVEN if last else ','.join(str(d) for d in drone_set_arg(self.arg, self.do))
         if self.do == 'WAIT_LOG':
             wait_log_arg(self.arg)
+        if self.do == 'SIGNAL':
+            signal_arg(self.arg)
         if self.do == 'WAIT_TRAJ':
             wait_traj_arg(self.arg)
         if self.do == 'TASK':

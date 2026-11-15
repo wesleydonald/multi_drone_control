@@ -48,6 +48,9 @@ class SupervisorConfig:
     require_handoff_ready: bool = True
     failure_phase: str = "LANDED_DISARMED"
     landing_request_phase: str = ""
+    # '' = off. Else the success phase counts only once this phase has been seen while running: a return-after-drop
+    # line ends LANDED_DISARMED at its start after AT_START (multi_drone_control 15 Nov); a landing before it still fails
+    success_after_phase: str = ""
     takeoff_retry_s: float = 1.0
     takeoff_max_publications: int = 3
     shutdown_timeout_s: float = 3.0
@@ -101,6 +104,7 @@ class SupervisorCore:
         self.last_takeoff_publish_time: Optional[float] = None
         self.takeoff_publications = 0
         self.landing_requested = False
+        self.success_after_seen = False
         self.armed_once = False
         self.arm_result: Optional[bool] = None
         self.final_outcome: Optional[str] = None
@@ -219,12 +223,15 @@ class SupervisorCore:
                 self._event(now, "landing_request", phase=snapshot.phase)
                 return SupervisorDecision(actions=(SupervisorAction.PUBLISH_LAND,))
 
+            if self.config.success_after_phase and snapshot.phase == self.config.success_after_phase:
+                self.success_after_seen = True
             success_condition = (
                 snapshot.phase == self.config.success_phase
                 and (
                     snapshot.handoff_ready
                     or not self.config.require_handoff_ready
                 )
+                and (self.success_after_seen or not self.config.success_after_phase)
             )
             if success_condition:
                 if self.success_start_time is None:
@@ -331,7 +338,8 @@ class SimulationTestSupervisor(Node):
             failure_phase=str(self.declare_parameter("failure_phase", "LANDED_DISARMED").value),
             landing_request_phase=str(
                 self.declare_parameter("landing_request_phase", "").value
-            ).strip(),
+            ),
+            success_after_phase=str(self.declare_parameter("success_after_phase", "").value).strip(),
             takeoff_retry_s=float(self.declare_parameter("takeoff_retry_s", 1.0).value),
             takeoff_max_publications=int(self.declare_parameter("takeoff_max_publications", 3).value),
             shutdown_timeout_s=float(self.declare_parameter("shutdown_timeout_s", 3.0).value),

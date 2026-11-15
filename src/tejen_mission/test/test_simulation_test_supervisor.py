@@ -197,3 +197,46 @@ class StopActionTest(unittest.TestCase):
     def test_give_up_gives_up_and_neither_lands_nor_disarms(self):
         self.assertEqual(self._run('give_up'), ([], []))
         self.assertEqual([m.data for m in self.give_ups.msgs], [True])
+
+
+class ReturnLineSuccessTest(unittest.TestCase):
+    """success_after_phase (15 Nov, Te-Jen and Codex's v3 review): on a return-after-drop line the twin supervisor counts
+    LANDED_DISARMED at the start as success once AT_START was seen; a landing before it and a disarm in flight still
+    fail, and the default configuration is unchanged."""
+
+    RETURN = dict(control_mode="manual", success_phase="LANDED_DISARMED", success_after_phase="AT_START",
+                  require_handoff_ready=False, failure_phase="LANDED_DISARMED")
+
+    def fly(self, config, phases):
+        core = SupervisorCore(config, 0.0)
+        core.step(0.1, snapshot(armed=False))
+        core.step(0.2, snapshot(phase="TAKEOFF", armed=True))
+        t, decision = 0.2, None
+        for phase, armed in phases:
+            t += 0.5
+            decision = core.step(t, snapshot(phase=phase, armed=armed))
+            if decision.outcome:
+                return decision
+        return decision
+
+    def test_landing_at_the_start_after_at_start_is_a_pass(self):
+        decision = self.fly(SupervisorConfig(**self.RETURN), [
+            ("CLEAR_DROP_ZONE", True), ("RETURN_TO_START", True), ("AT_START", True), ("LANDING", True),
+            ("LANDED_DISARMED", False), ("LANDED_DISARMED", False), ("LANDED_DISARMED", False),
+            ("LANDED_DISARMED", False), ("LANDED_DISARMED", False), ("LANDED_DISARMED", False)])
+        self.assertEqual((decision.outcome, decision.reason), ("PASS", "SUCCESS_DWELL_REACHED"))
+
+    def test_a_landing_before_at_start_is_still_an_early_terminal_disarm(self):
+        decision = self.fly(SupervisorConfig(**self.RETURN), [
+            ("CLEAR_DROP_ZONE", True), ("RETURN_TO_START", True), ("LANDING", True), ("LANDED_DISARMED", False)])
+        self.assertEqual((decision.outcome, decision.reason), ("FAIL", "EARLY_TERMINAL_DISARM"))
+
+    def test_a_disarm_in_flight_is_still_premature(self):
+        decision = self.fly(SupervisorConfig(**self.RETURN), [
+            ("RETURN_TO_START", True), ("AT_START", True), ("AT_START", False)])
+        self.assertEqual((decision.outcome, decision.reason), ("FAIL", "PREMATURE_DISARM"))
+
+    def test_the_default_still_fails_the_same_landing(self):
+        decision = self.fly(SupervisorConfig(control_mode="manual", success_phase="NONE_PARTNER_WELD_OWNS_SUCCESS"), [
+            ("RETURN_TO_START", True), ("AT_START", True), ("LANDING", True), ("LANDED_DISARMED", False)])
+        self.assertEqual((decision.outcome, decision.reason), ("FAIL", "EARLY_TERMINAL_DISARM"))
