@@ -1706,9 +1706,15 @@ private:
         std::size_t index,
         double now_s,
         bool require_tether_inputs) {
-        if (index >= cooperative_trajectory_samples_.size()) return false;
+        if (index >= cooperative_trajectory_samples_.size()) {
+            diag_refresh_failure_ = "shared_obstacle_" + std::to_string(index) + ":index_out_of_range";  // DIAG
+            return false;
+        }
         const auto& trajectory_sample = cooperative_trajectory_samples_[index];
-        if (!trajectory_sample.received || trajectory_sample.trajectory.empty()) return false;
+        if (!trajectory_sample.received || trajectory_sample.trajectory.empty()) {
+            diag_refresh_failure_ = "shared_obstacle_" + std::to_string(index) + ":commitment_missing";  // DIAG
+            return false;
+        }
         CooperativeObstacleTrajectory obstacle;
         obstacle.name = "cooperative_drone_" + std::to_string(index);
         obstacle.trajectory = trajectory_sample.trajectory;
@@ -1723,7 +1729,9 @@ private:
         try {
             obstacle.attached_tether_geometry = cooperativeAttachedTetherGeometry(
                 index, body_position, now_s, require_tether_inputs);
-        } catch (const std::exception&) {
+        } catch (const std::exception& diag_exc) {
+            diag_refresh_failure_ = "shared_obstacle_" + std::to_string(index) + ":tether_geometry_exception:" +
+                diag_exc.what();  // DIAG
             return false;
         }
         world_->upsertCooperativeTrajectory(std::move(obstacle));
@@ -1772,6 +1780,15 @@ private:
             return;
         }
         q.normalize();
+        {   // DIAG (15 Nov disable diagnosis, logging only): the ring pose's header stamp and receive gaps
+            const double diag_now_s = get_clock()->now().seconds();
+            diag_ring_pose_header_s_ = rclcpp::Time(msg->header.stamp).seconds();
+            if (std::isfinite(diag_ring_pose_prev_receive_s_)) {
+                diag_ring_pose_last_gap_s_ = diag_now_s - diag_ring_pose_prev_receive_s_;
+                diag_ring_pose_max_gap_s_ = std::max(diag_ring_pose_max_gap_s_, diag_ring_pose_last_gap_s_);
+            }
+            diag_ring_pose_prev_receive_s_ = diag_now_s;
+        }
         cooperative_ring_pose_sample_.received = true;
         cooperative_ring_pose_sample_.position = position;
         cooperative_ring_pose_sample_.rotation = q.toRotationMatrix();
@@ -2123,15 +2140,23 @@ private:
     }
 
     bool refreshCooperativeWorld(double now_s) {
-        if (!movingBasketTrajectoryFresh(now_s)) return false;
+        diag_refresh_failure_.clear();  // DIAG
+        if (!movingBasketTrajectoryFresh(now_s)) {
+            diag_refresh_failure_ = "moving_basket_trajectory_not_fresh";  // DIAG
+            return false;
+        }
         if (!cooperative_scene_enabled_) {
             ++cooperative_world_refresh_count_;
             return true;
         }
         double max_age_s = 0.0;
-        if (!cooperativeStatesFresh(now_s, &max_age_s)) return false;
+        if (!cooperativeStatesFresh(now_s, &max_age_s)) {
+            diag_refresh_failure_ = "cooperative_states_not_fresh:max_age_s=" + std::to_string(max_age_s);  // DIAG
+            return false;
+        }
         if (cooperative_prediction_mode_ == "shared_trajectory") {
             if (cooperativeSharedFreshCount(now_s) != cooperative_state_samples_.size()) {
+                diag_refresh_failure_ = "shared_fresh_count_short:" + cooperativeInputBlockers(now_s);  // DIAG
                 return false;
             }
             for (std::size_t i = 0; i < cooperative_trajectory_samples_.size(); ++i) {
@@ -2574,6 +2599,34 @@ private:
             ++planner_worker_errors_;
             RCLCPP_ERROR(get_logger(), "C1F.8c authority fresh-plan setup failed: %s", exc.what());
         }
+    }
+
+    // DIAG (15 Nov disable diagnosis; logging only, no behaviour change): the failing check and the input ages
+    void logDisableDiagnosis(const char* where, double now_s, const std::string& failure) const {
+        std::ostringstream o;
+        o << std::fixed << std::setprecision(4) << "DISABLE_DIAG where=" << where << " failure='" << failure << "'"
+          << " exit_context=" << exitContextActive() << " authority_granted=" << authority_granted_
+          << " ring_pose_age_s=" << (cooperative_ring_pose_sample_.received
+                ? now_s - cooperative_ring_pose_sample_.receive_ros_s : std::numeric_limits<double>::quiet_NaN())
+          << " ring_pose_limit_s=" << cooperative_ring_pose_timeout_s_
+          << " ring_pose_header_age_s=" << now_s - diag_ring_pose_header_s_
+          << " ring_pose_last_gap_s=" << diag_ring_pose_last_gap_s_
+          << " ring_pose_max_gap_s=" << diag_ring_pose_max_gap_s_
+          << " state_limit_s=" << cooperative_state_timeout_s_
+          << " replan_gap_ros_s=" << diag_replan_gap_ros_s_ << " replan_gap_wall_s=" << diag_replan_gap_wall_s_
+          << " ref_cb_ms(last/max)=" << last_reference_callback_ms_ << "/" << max_reference_callback_ms_;
+        for (std::size_t i = 0; i < cooperative_state_samples_.size(); ++i) {
+            o << " peer" << i << "(state_age_s=" << now_s - cooperative_state_samples_[i].receive_ros_s;
+            if (i < cooperative_trajectory_samples_.size())
+                o << " traj_age_s=" << now_s - cooperative_trajectory_samples_[i].receive_ros_s
+                  << " traj_blocker='" << cooperativeSharedBlocker(i, now_s) << "'";
+            if (i < cooperative_attached_plate_samples_.size())
+                o << " plate_age_s=" << now_s - cooperative_attached_plate_samples_[i].receive_ros_s
+                  << " plate=" << cooperative_attached_plate_samples_[i].plate_id;
+            o << ")";
+        }
+        o << " basket_fresh=" << movingBasketTrajectoryFresh(now_s);
+        RCLCPP_ERROR(get_logger(), "%s", o.str().c_str());
     }
 
     void disableBackend(const std::string& reason) {
@@ -3754,6 +3807,17 @@ private:
     }
 
     void replanTimer() {
+        {   // DIAG: the gap since the previous replanTimer entry (ROS and wall)
+            const auto diag_wall = std::chrono::steady_clock::now();
+            const double diag_ros = get_clock()->now().seconds();
+            if (diag_replan_prev_set_) {
+                diag_replan_gap_ros_s_ = diag_ros - diag_replan_prev_ros_s_;
+                diag_replan_gap_wall_s_ = std::chrono::duration<double>(diag_wall - diag_replan_prev_wall_).count();
+            }
+            diag_replan_prev_wall_ = diag_wall;
+            diag_replan_prev_ros_s_ = diag_ros;
+            diag_replan_prev_set_ = true;
+        }
         pollPlannerFuture();
         checkExitDeadline();
         if (!enabled_) {
@@ -3800,6 +3864,9 @@ private:
         if ((cooperative_scene_enabled_ || moving_basket_scene_enabled_) &&
             !cooperativeInputsFresh(now_s)) {
             ++stale_cooperative_replan_skips_;
+            logDisableDiagnosis("replanTimer:cooperativeInputsFresh", now_s,
+                                "states_fresh=" + std::to_string(cooperativeStatesFresh(now_s)) +
+                                " blockers=" + cooperativeInputBlockers(now_s));  // DIAG
             disableBackend(cooperativeDisableStatus(now_s));
             return;
         }
@@ -3885,6 +3952,7 @@ private:
         latchBodyOrientation();
         if (!refreshCooperativeWorld(now_s)) {
             ++stale_cooperative_replan_skips_;
+            logDisableDiagnosis("replanTimer:refreshCooperativeWorld", now_s, diag_refresh_failure_);  // DIAG
             disableBackend(cooperativeDisableStatus(now_s));
             return;
         }
@@ -5167,6 +5235,17 @@ private:
     std::vector<CooperativeTrajectorySample> cooperative_trajectory_samples_;
     std::vector<CooperativeAttachedPlateSample> cooperative_attached_plate_samples_;
     RingPoseSample cooperative_ring_pose_sample_;
+    // DIAG (15 Nov disable diagnosis): logging only
+    std::string diag_refresh_failure_;
+    double diag_ring_pose_header_s_ = std::numeric_limits<double>::quiet_NaN();
+    double diag_ring_pose_prev_receive_s_ = std::numeric_limits<double>::quiet_NaN();
+    double diag_ring_pose_last_gap_s_ = std::numeric_limits<double>::quiet_NaN();
+    double diag_ring_pose_max_gap_s_ = 0.0;
+    bool diag_replan_prev_set_ = false;
+    std::chrono::steady_clock::time_point diag_replan_prev_wall_{};
+    double diag_replan_prev_ros_s_ = std::numeric_limits<double>::quiet_NaN();
+    double diag_replan_gap_ros_s_ = std::numeric_limits<double>::quiet_NaN();
+    double diag_replan_gap_wall_s_ = std::numeric_limits<double>::quiet_NaN();
     CooperativeTrajectorySample moving_basket_trajectory_sample_;
     std::optional<std::uint64_t> moving_basket_collision_sequence_;
     std::optional<Vec3> latest_target_;
