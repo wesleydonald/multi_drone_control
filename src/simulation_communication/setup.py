@@ -1,0 +1,44 @@
+from setuptools import find_packages, setup
+
+package_name = 'simulation_communication'
+
+setup(
+    name=package_name,
+    version='0.0.0',
+    packages=find_packages(exclude=['test']),
+    data_files=[
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        # Include launch files
+        ('share/' + package_name + '/launch', ['launch/betaflight_linear_simulation_launch.py', 'launch/betaflight_simulation_launch.py', 'launch/tejen_betaflight_linear_simulation_launch.py']),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='mitchell',
+    maintainer_email='mitch.torok@gmail.com',
+    description='TODO: Package description',
+    license='TODO: License declaration',
+    entry_points={
+        'console_scripts': [
+            'motion_capture_emulator = simulation_communication.motion_capture_emulator:main',
+            'betaflight_communication = simulation_communication.betaflight_communication:main',
+            'tejen_betaflight_communication = simulation_communication.tejen_betaflight_communication:main',
+            'tejen_motion_capture_emulator = simulation_communication.tejen_motion_capture_emulator:main',
+            'pendulum_state_listener = simulation_communication.pendulum_state_listener:main',
+            # Bridges for nested lift_system + payload worlds (two_*/four_*.sdf)
+            'payload_mocap_emulator = simulation_communication.payload_mocap_emulator:main',
+            # viz-only: TF for drones + payload, payload marker/track. Runs
+            # independently of the controllers so RViz can come up first.
+            'fleet_viz = simulation_communication.fleet_viz:main',
+            'payload_betaflight_comm = simulation_communication.payload_betaflight_comm:main',
+            # Placeholder Telemetry so the RViz battery rows populate in sim, and
+            # the low-battery warning path can be exercised off-hardware (F7).
+            'sim_telemetry = simulation_communication.sim_telemetry:main',
+            # /clock_gz -> /clock at a bounded rate (rclpy handles /clock in Python)
+            'clock_throttle = simulation_communication.clock_throttle:main',
+            # RViz MAGNET toggles -> tether DetachableJoint release (the rig's magnet latch)
+            'sim_magnet = simulation_communication.sim_magnet:main',
+        ],
+    },
+)

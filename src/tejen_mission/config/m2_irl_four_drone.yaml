@@ -1,0 +1,125 @@
+# Four-drone mapping: drone_N = QUAD(N+1). Two-drone YAML keeps QUAD2/QUAD4.
+# Geometry and gate values are copied from successful two-drone run 160421.
+m2_irl:
+  # Used only with completion_mode:=attach_park. Distances are metres.
+  parking:
+    max_radius_m: 0.4
+    slack_margin_m: 0.02
+    disarm_height_above_rest_m: 0.12
+    speed_mps: 0.16
+    final_speed_mps: 0.064
+    final_height_band_m: 0.15
+  attachment_policy: measured_contact_15deg
+  # QUAD3 first to distinguish airframe response from third-airborne workload.
+  flight_order: [drone_1, drone_3, drone_2, drone_0]
+  mocap:
+    bind_address: 0.0.0.0
+    bind_port: 1511
+    max_rate_hz: 120.0
+    ring_rigid_body_id: 8
+  vehicles:
+    drone_0:
+      physical_quad: 1
+      body_id: 11
+      magnet_id: 21
+      ftdi_serial: FTF0AR84
+      serial_port: /dev/QUAD1
+      magnet_channel: 6
+      props_off_verified: true
+    drone_1:
+      physical_quad: 2
+      body_id: 12
+      magnet_id: 22
+      ftdi_serial: FTF0AROT
+      serial_port: /dev/QUAD2
+      magnet_channel: 6
+      props_off_verified: true
+    drone_2:
+      physical_quad: 3
+      body_id: 13
+      magnet_id: 23
+      ftdi_serial: FTF09W4A
+      serial_port: /dev/QUAD3
+      magnet_channel: 6
+      props_off_verified: true
+    drone_3:
+      physical_quad: 4
+      body_id: 14
+      magnet_id: 24
+      ftdi_serial: FTF09R63
+      serial_port: /dev/QUAD4
+      magnet_channel: 6
+      props_off_verified: true
+  geometry:
+    ring_inner_diameter_m: 0.385
+    ring_outer_diameter_m: 0.510
+    ring_plate_diameter_m: 0.060
+    tether_length_m: 0.5575
+    tether_anchor_body: [0.0, 0.0, -0.04]
+    ring_marker_translation_m: [0.0, 0.0, 0.0]
+    ring_marker_quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+  attachment_detector:
+    magnet_contact_translation_m: [0.0, 0.0, -0.0225]
+    magnet_contact_quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+    magnet_off_counts_as_loss: false
+  gate_profiles:
+    freshness:
+      mocap_timeout_s: 0.50
+      telemetry_timeout_s: 0.50
+      ring_timeout_s: 0.50
+      status_timeout_s: 1.25
+      link_statistics_timeout_s: 0.75
+      cooperative_shared_start_skew_s: 0.05
+    ground:
+      speed_mps: 0.05
+      dwell_s: 1.0
+    airborne:
+      position_tolerance_m: 0.05
+      speed_mps: 0.08
+      swing_deg: 5.0
+      takeoff_swing_deg: 5.0
+      dwell_s: 0.75
+    quiet_miss:
+      wait_s: 10.0
+      improvement_m: 0.005
+      relative_speed_mps: 0.03
+    c1f2_physical_recheck:
+      max_lift_drift_m: 0.15
+      speed_mps: 0.08
+      acceleration_mps2: 0.50
+      dwell_s: 0.30
+    tip_alignment:
+      gain_per_s: 0.8
+      filter_tau_s: 0.5
+      max_rate_mps: 0.025
+      max_offset_m: 0.08
+      min_normal_m: 0.08
+      pre_low_normal_m: 0.10
+      capture_xy_m: 0.025
+      capture_dwell_s: 0.5
+      low_xy_m: 0.025
+      low_dwell_s: 0.3
+      max_relative_speed_mps: 0.08
+    progressive_attachment:
+      contact_dwell_s: 0.30
+      proof_dwell_s: 0.50
+      proof_angle_deg: 15.0
+      proof_angle_tolerance_deg: 2.0
+      proof_duration_s: 6.25
+      proof_speed_mps: 0.048
+      release_dwell_s: 0.25
+      release_speed_mps: 0.03
+      loss_xy_m: 0.045
+      loss_normal_m: 0.045
+      loss_dwell_s: 0.12
+    attachment_search:
+      contact_overtravel_m: 0.020
+      max_contact_correction_m: 0.030
+      contact_correction_rate_mps: 0.010
+      capture_normal_m: 0.015
+      candidate_xy_m: 0.025
+      proof_xy_m: 0.040
+      candidate_normal_m: 0.015
+      proof_normal_m: 0.015
+      proof_relative_speed_mps: 0.030
+      proof_max_contact_drift_m: 0.040

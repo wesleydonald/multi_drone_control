@@ -1,0 +1,383 @@
+"""
+payload_betaflight_comm.py
+--------------------------
+Betaflight inner-loop interface for drones nested inside the lift_system model.
+
+Differences from betaflight_communication.py:
+  - Pose topic:  /model/{parent_model}/model/{drone_name}/pose  (nested path)
+  - Motor topic: /{parent_model}/{drone_name}/gazebo/command/motor_speed
+  - Both are parameterised so we can reuse this node for different worlds.
+
+Parameters (ROS):
+  drone_id      int   0-3
+  drone_name    str   x3_drone0  (model name inside parent)
+  parent_model  str   lift_system
+  rates_d_val   float 100.0
+  rates_f_val   float 100.0
+  rates_g_val   float 0.5
+  rate_source   str   'imu' (the IMU gyro, default since 2026-09-28) | 'pose' (difference
+                      the gz poses)
+  imu_topic     str   /drone_{drone_id}/imu (sensor_msgs/Imu), used when rate_source is imu
+  thrust_map    str   'linear' (default: thrust 4 mc max^2 u) | 'rig' (the rig's affine law with
+                      pack voltage, rig_thrust.py; V from /drone_{drone_id}/sim/pack_v)
+  thrust_offset float 0.185  the rig law's per-drone a_i (thrust_map rig)
+  pack_v0       float 24.4   voltage used until the first pack_v sample (thrust_map rig)
+  motor_constant float 0.62e-6  the world's rotor motorConstant (thrust_map rig)
+"""
+
+import collections
+import math
+import os
+import numpy as np
+
+from simulation_communication.rate_pid import RatePid, gyro_sample, integrate_active
+from simulation_communication import rig_thrust
+import rclpy
+from rclpy.node import Node
+from actuator_msgs.msg import Actuators
+from geometry_msgs.msg import PoseArray
+from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32, String
+from interfaces.msg import ELRSCommand
+from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
+
+
+def due(queue, now, delay):
+    """Pop the entries of a command queue [(t_arrival, ...)] whose delay has passed at now; the latest, or None."""
+    last = None
+    while queue and queue[0][0] <= now - delay:
+        last = queue.popleft()
+    return last
+
+
+def _env_float(name):
+    return float(os.environ.get(name, '0.0'))
+
+
+class PayloadBetaflightComm(Node):
+    def __init__(self):
+        super().__init__('payload_betaflight_comm')
+
+        self.declare_parameter('drone_id', 0)
+        self.declare_parameter('drone_name', 'x3_drone0')
+        self.declare_parameter('parent_model', 'lift_system')
+        self.declare_parameter('rates_d_val', 100.0)
+        self.declare_parameter('rates_f_val', 100.0)
+        self.declare_parameter('rates_g_val', 0.5)
+
+        self.drone_id = self.get_parameter('drone_id').value
+        drone_name = self.get_parameter('drone_name').value
+        parent = self.get_parameter('parent_model').value
+        self.rates_d = self.get_parameter('rates_d_val').value
+        self.rates_f = self.get_parameter('rates_f_val').value
+        self.rates_g = self.get_parameter('rates_g_val').value
+
+        pose_topic = f'/model/{parent}/model/{drone_name}/pose'
+        # Motor topic uses only the drone model name (not the nested hierarchy path).
+        # Verified with: gz topic --list | grep motor_speed
+        motor_topic = f'/{drone_name}/gazebo/command/motor_speed'
+
+        self.get_logger().info(
+            f'[BF{self.drone_id}] pose  = {pose_topic}')
+        self.get_logger().info(
+            f'[BF{self.drone_id}] motor = {motor_topic}')
+
+        # 'imu' runs the rate loop on the gyro, as a real Betaflight does; the pose path
+        # differences unstamped poses, so bunched samples under load become rate spikes (G4).
+        # imu needs the world's Imu system (no gyro sample -> no motor command).
+        self.rate_source = str(self.declare_parameter('rate_source', 'imu').value)
+        if self.rate_source not in ('pose', 'imu'):
+            raise ValueError(f"rate_source must be 'pose' or 'imu', got {self.rate_source!r}")
+        imu_topic = str(self.declare_parameter(
+            'imu_topic', f'/drone_{self.drone_id}/imu').value)
+        self._imu_t_prev = None
+        self._imu_n = 0
+        self._imu_time_base = None
+        self._warned_no_imu = False
+        if self.rate_source == 'imu':
+            self.get_logger().info(f'[BF{self.drone_id}] rate  = gyro {imu_topic}')
+            self.create_subscription(Imu, imu_topic, self._imu_cb, 10)
+        else:
+            self.create_subscription(PoseArray, pose_topic, self._pose_cb, 10)
+        self.create_subscription(
+            ELRSCommand, f'/drone_{self.drone_id}/ELRSCommand', self._cmd_cb, 10)
+        self.motor_pub = self.create_publisher(Actuators, motor_topic, 10)
+        # the rig's /drone_<i>/fc_arm_state, as the twin's FC would report it ('armed [sim]' / 'disarmed [sim]', on a
+        # change and at 1 Hz): the fleet manager's fc_disarm_land reads it (card 2026-10-11_quad4_tilt_cut; off)
+        self._fc_state_pub = None
+        self._fc_armed = None
+        self._fc_said_t = 0.0
+        if bool(self.declare_parameter('publish_fc_arm_state', False).value):
+            self._fc_state_pub = self.create_publisher(String, f'/drone_{self.drone_id}/fc_arm_state', 10)
+
+        self.set_point = None
+        self.last_pose = None
+        self.last_orientation = None
+        self.last_time = None
+        self._last_stamp_t = None
+        self._win_t0, self._win_n, self._period = None, 0, None
+
+        self._pid = RatePid(
+            kp=float(self.declare_parameter('rate_kp', 0.5).value),
+            ki=float(self.declare_parameter(
+                'rate_ki', float(os.environ.get('SIM_RATE_KI', '5.0'))).value),
+            kd=float(self.declare_parameter('rate_kd', 0.0).value),
+            i_limit=float(self.declare_parameter('rate_i_limit', 200.0).value))
+        self.thrust_map = str(self.declare_parameter('thrust_map', 'linear').value)
+        if self.thrust_map not in rig_thrust.THRUST_MAPS:
+            raise ValueError(f"thrust_map must be one of {rig_thrust.THRUST_MAPS}, "
+                             f"got {self.thrust_map!r}")
+        self.thrust_offset = float(self.declare_parameter(
+            'thrust_offset', rig_thrust.A_DEFAULT).value)
+        self.motor_constant = float(self.declare_parameter(
+            'motor_constant', rig_thrust.MOTOR_CONSTANT).value)
+        self.pack_v = float(self.declare_parameter('pack_v0', 24.4).value)
+        self._got_pack_v = False
+        self._warned_no_pack = False
+        if self.thrust_map == 'rig':
+            self.create_subscription(
+                Float32, f'/drone_{self.drone_id}/sim/pack_v', self._pack_v_cb, 10)
+            self.get_logger().info(
+                f'[BF{self.drone_id}] thrust = rig law, a_i {self.thrust_offset:.3f}, '
+                f'V from /drone_{self.drone_id}/sim/pack_v ({self.pack_v:.1f} V until then)')
+        # Under the rig law nothing lifts below the ~0.19 offset, so the I-term waits longer.
+        self._i_min_u = float(self.declare_parameter(
+            'rate_i_min_u', 0.35 if self.thrust_map == 'rig' else 0.09).value)
+        self.add_on_set_parameters_callback(self._on_rate_params)
+        self._active = False
+        # > 0: each command takes effect this long after it arrives, standing in for the rig's
+        # radio, Betaflight filtering and motor lag (default from SIM_CMD_DELAY_S; 0 = off)
+        self._cmd_delay = float(self.declare_parameter('cmd_delay_s', _env_float('SIM_CMD_DELAY_S')).value)
+        # sim time (s) from which the delays apply (default from SIM_CMD_DELAY_FROM_S; 0 = from the start): the drones
+        # flipped in the takeoff creep with the delay on from the start (R1100, 7 Oct)
+        self._cmd_delay_from = float(self.declare_parameter(
+            'cmd_delay_from_s', _env_float('SIM_CMD_DELAY_FROM_S')).value)
+        # extra delay on the throttle / on the three rates over cmd_delay_s (SIM_CMD_DELAY_THR_S / _ATT_S): the rig's
+        # throttle reaches lift later than the twin's while its rates answer sooner (card 2026-10-23_pair_mode_timing)
+        self._d_thr = self._cmd_delay + float(self.declare_parameter(
+            'cmd_delay_thr_s', _env_float('SIM_CMD_DELAY_THR_S')).value)
+        self._d_att = self._cmd_delay + float(self.declare_parameter(
+            'cmd_delay_att_s', _env_float('SIM_CMD_DELAY_ATT_S')).value)
+        self._att_queue, self._thr_queue = collections.deque(), collections.deque()
+        self._att, self._thr = None, None
+        if self._d_thr > 0.0 or self._d_att > 0.0:
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] command delay thr {self._d_thr:.3f} s att {self._d_att:.3f} s '
+                f'from t {self._cmd_delay_from:.1f} s')
+
+    # ------------------------------------------------------------------
+    def _on_rate_params(self, params):
+        """rate_kp / rate_ki settable live (M2 hand-over: his join flies the old loop, the
+        I-term comes on just before our takeover); the integral restarts from zero."""
+        from rcl_interfaces.msg import SetParametersResult
+        for prm in params:
+            if prm.name == 'rate_ki':
+                self._pid.ki = float(prm.value)
+                self._pid.integral[:] = 0.0
+                self.get_logger().info(f'rate_ki -> {self._pid.ki}')
+            elif prm.name == 'rate_kp':
+                self._pid.kp = float(prm.value)
+                self.get_logger().info(f'rate_kp -> {self._pid.kp}')
+        return SetParametersResult(successful=True)
+
+    def _pack_v_cb(self, msg: Float32):
+        self.pack_v = float(msg.data)
+        self._got_pack_v = True
+
+    def _betaflight_rates(self, x):
+        x = max(-1.0, min(1.0, x))
+        ax = math.sqrt(x * x + 1e-6)
+        sgn = x / ax
+        h = ax * (ax ** 5 * self.rates_g + ax * (1.0 - self.rates_g))
+        j = self.rates_d * ax + (self.rates_f - self.rates_d) * h
+        return sgn * j
+
+    @staticmethod
+    def _normalize_quat(x, y, z, w):
+        if w < 0:
+            return -x, -y, -z, -w
+        return x, y, z, w
+
+    # ------------------------------------------------------------------
+    def _pose_dt(self, msg):
+        """dt between this pose sample and the previous one, for the body-rate difference.
+
+        The ROS clock is /clock, throttled to 100 Hz since 2026-09-23, while poses arrive
+        at 500 Hz: differencing against it gave dt = 0 for four of five pairs (skipped)
+        and a rate ~5x too low on the fifth. Cables damped the tethered drones; a free
+        drone tipped at 1.4 Hz under every outer controller (R0522-R0534; R0535 flew with
+        the clock unthrottled). The bridged PoseArray carries no stamp (R0536), so the
+        sample period is estimated from the clock over a window and every sample gets it.
+        Returns None until the first period estimate exists."""
+        st = msg.header.stamp
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            t = st.sec + st.nanosec * 1e-9
+            dt = (t - self._last_stamp_t) if self._last_stamp_t is not None else None
+            self._last_stamp_t = t
+            return dt if (dt is not None and dt > 0.0) else None
+        if self._win_t0 is None:
+            self._win_t0, self._win_n = now, 0
+        self._win_n += 1
+        if now - self._win_t0 >= 0.25 and self._win_n >= 2:
+            self._period = (now - self._win_t0) / self._win_n
+            self._win_t0, self._win_n = now, 0
+        return self._period
+
+    def _pose_cb(self, msg: PoseArray):
+        if not msg.poses:
+            return
+        pos = msg.poses[-1].position
+        ori = msg.poses[-1].orientation
+        ori.x, ori.y, ori.z, ori.w = self._normalize_quat(ori.x, ori.y, ori.z, ori.w)
+
+        dt = self._pose_dt(msg)
+
+        if self.last_pose is None or dt is None:
+            self.last_pose = pos
+            self.last_orientation = ori
+            return
+
+        q1 = [self.last_orientation.x, self.last_orientation.y,
+              self.last_orientation.z, self.last_orientation.w]
+        q2 = [ori.x, ori.y, ori.z, ori.w]
+        q_rel = quaternion_multiply(q2, quaternion_inverse(q1))
+        ang_vel = 2 * np.array([q_rel[0], q_rel[1], q_rel[2]]) / dt
+        R = quaternion_matrix(q1)[:3, :3]
+        ang_vel_body = R.T @ ang_vel
+        ang_vel_body_deg = np.degrees(ang_vel_body)
+
+        self.last_pose, self.last_orientation = pos, ori
+        self._apply_due_cmds()
+
+        if self.set_point is not None:
+            speeds = self._compute_motor_speeds(ang_vel_body_deg, dt)
+            msg_out = Actuators()
+            msg_out.header.stamp = self.get_clock().now().to_msg()
+            msg_out.velocity = speeds.tolist()
+            self.motor_pub.publish(msg_out)
+
+    def _apply_due_cmds(self):
+        """Apply the queued commands whose delay has passed (sim time), each channel group on its own delay."""
+        if not (self._att_queue or self._thr_queue):
+            return
+        now = self.get_clock().now().nanoseconds * 1e-9
+        a = due(self._att_queue, now, self._d_att)
+        if a is not None:
+            self._att = a[1]
+        t = due(self._thr_queue, now, self._d_thr)
+        if t is not None:
+            _, self._thr, self._active = t
+        self._compose_set_point()
+
+    def _compose_set_point(self):
+        if self._att is not None and self._thr is not None:
+            self.set_point = [self._att[0], self._att[1], self._thr, self._att[2]]
+
+    def _route_cmd(self, now, att, throttle, active):
+        """A new command: each channel group straight into effect, or queued once its delay is on."""
+        late = now >= self._cmd_delay_from
+        if self._d_att > 0.0 and late:
+            self._att_queue.append((now, att))
+        else:
+            self._att = att
+        if self._d_thr > 0.0 and late:
+            self._thr_queue.append((now, throttle, active))
+        else:
+            self._thr, self._active = throttle, active
+        self._compose_set_point()
+
+    def _imu_cb(self, msg: Imu):
+        """One rate-loop step per gyro sample, dt from the sensor stamps (sim time).
+
+        Axes: gz gives angular_velocity in the sensor frame, which sits on base_link at
+        identity, i.e. body FLU (the same IMU reads +9.81 on z at rest). The pose path's
+        R^T * world rate is that frame too, so the axes map one to one, no sign flips."""
+        st = msg.header.stamp
+        if int(st.sec) > 0 or int(st.nanosec) > 0:
+            t, base = st.sec + st.nanosec * 1e-9, 'IMU header stamps'
+        else:
+            t, base = self.get_clock().now().nanoseconds * 1e-9, 'node clock (IMU stamps are zero)'
+        if base != self._imu_time_base:
+            self._imu_time_base = base
+            self.get_logger().info(f'[BF{self.drone_id}] gyro dt from {base}')
+        w = msg.angular_velocity
+        dt, ang_vel_deg, self._imu_t_prev = gyro_sample(t, self._imu_t_prev, (w.x, w.y, w.z))
+        self._imu_n += 1
+        self._apply_due_cmds()
+        if dt is None or self.set_point is None:
+            return
+        speeds = self._compute_motor_speeds(ang_vel_deg, dt)
+        msg_out = Actuators()
+        msg_out.header.stamp = self.get_clock().now().to_msg()
+        msg_out.velocity = speeds.tolist()
+        self.motor_pub.publish(msg_out)
+
+    def _compute_motor_speeds(self, ang_vel_deg, dt):
+        error = np.array([self.set_point[0], self.set_point[1], self.set_point[3]]) - ang_vel_deg
+        offset = self._pid.step(error, dt, self._active)
+        throttle = self.set_point[2]
+
+        speeds = np.array([
+            throttle - offset[0] + offset[1] + offset[2],
+            throttle - offset[0] - offset[1] - offset[2],
+            throttle + offset[0] + offset[1] - offset[2],
+            throttle + offset[0] - offset[1] + offset[2],
+        ])
+        return np.clip(speeds, 0, 4631)
+
+    # ------------------------------------------------------------------
+    def _cmd_cb(self, msg: ELRSCommand):
+        if self._fc_state_pub is not None:
+            now = self.get_clock().now().nanoseconds * 1e-9
+            if bool(msg.armed) != self._fc_armed or now - self._fc_said_t >= 1.0:
+                self._fc_armed, self._fc_said_t = bool(msg.armed), now
+                self._fc_state_pub.publish(String(data=f'{"armed" if msg.armed else "disarmed"} [sim]'))
+        roll_rate = self._betaflight_rates(msg.channel_0)
+        pitch_rate = self._betaflight_rates(msg.channel_1)
+        yaw_rate = self._betaflight_rates(-msg.channel_3)
+        # Linear command -> THRUST (2026-09-24, Wesley's word). Gazebo rotor thrust is
+        # motor-speed squared, so a speed proportional to the command gave a = 88.6 u^2
+        # and one fixed linear gain matched a single operating point (hover height moved
+        # with mass; free drones could not follow the creep arc, R0466/R0468). sqrt(u)
+        # makes a = 88.6 u at every throttle, which is what the rig's Betaflight gives.
+        # This is the node every OCP launch runs per drone (bringup/graph_carry.py, sim_mpc).
+        u = max(0.0, min(1.0, (msg.channel_2 + 1) / 2))
+        if self.thrust_map == 'rig':
+            throttle = rig_thrust.rotor_speed(
+                rig_thrust.rig_thrust(u, self.pack_v, self.thrust_offset), self.motor_constant)
+        else:
+            throttle = math.sqrt(u) * 4631
+
+        if msg.armed and throttle < 0.05 * 4631:
+            throttle = 0.05 * 4631
+
+        active = integrate_active(msg.armed, u, self._i_min_u)
+        self._route_cmd(self.get_clock().now().nanoseconds * 1e-9, (roll_rate, pitch_rate, yaw_rate), throttle, active)
+        if (self.rate_source == 'imu' and msg.armed and self._imu_n == 0
+                and not self._warned_no_imu):
+            self._warned_no_imu = True
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] armed with rate_source imu but no gyro sample yet: '
+                'no motor command is sent until one arrives (is the IMU bridged?)')
+        if (self.thrust_map == 'rig' and msg.armed and not self._got_pack_v
+                and not self._warned_no_pack):
+            self._warned_no_pack = True
+            self.get_logger().warn(
+                f'[BF{self.drone_id}] armed on the rig thrust law with no pack voltage: flying a '
+                f'constant {self.pack_v:.1f} V (give the RViz launch sim_thrust_map:=rig too)')
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = PayloadBetaflightComm()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

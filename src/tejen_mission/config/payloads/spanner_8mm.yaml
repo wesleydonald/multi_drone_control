@@ -1,0 +1,40 @@
+online_join_planner:
+  ros__parameters:
+    # Example V5A carried-payload profile for an approximately 100 x 20 x 6 mm
+    # 8 mm spanner.  V5A uses these fields only for passive collision diagnostics
+    # and RViz.  The pickup/contact fields are reserved for the opt-in V5B patch.
+    payload_name: "8mm_spanner"
+    payload_collision_enabled: true
+
+    payload_collision_size_x: 0.100
+    payload_collision_size_y: 0.020
+    payload_collision_size_z: 0.006
+    payload_collision_margin: 0.050
+
+    # The supplied pickup-object pose is assumed to be the geometric centre.
+    payload_pose_reference: "centre"
+    payload_geometry_origin_from_pose_x: 0.000
+    payload_geometry_origin_from_pose_y: 0.000
+    payload_geometry_origin_from_pose_z: 0.000
+    payload_assume_level: true
+    payload_pose_timeout_s: 0.500
+
+    # Stored in the shared profile now, but not used to change flight in V5A.
+    # This example chooses a point 25 mm along the handle and on the top face.
+    payload_pickup_point_x: 0.025
+    payload_pickup_point_y: 0.000
+    payload_pickup_point_z: 0.003
+
+    # Vector from the tracked magnet marker to the physical contact face.
+    magnet_marker_to_contact_face_x: 0.000
+    magnet_marker_to_contact_face_y: 0.000
+    magnet_marker_to_contact_face_z: -0.030
+
+    # V5B2 geometry-aware pickup activation.  This remains opt-in so applying
+    # the patch preserves the exact V5B1/legacy flight behaviour by default.
+    use_geometry_aware_pickup: false
+
+    pickup_contact_gap: 0.000
+    pickup_overtravel: 0.002
+    pickup_max_overtravel: 0.005
+    support_surface_z: 0.000

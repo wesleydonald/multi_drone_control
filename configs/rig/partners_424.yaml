@@ -1,0 +1,30 @@
+# 4 -> 2 -> 4 (the contract of 13 Nov): the two partners, read by real_control_launch.py / sim_control_launch.py
+# mode:=attach partners_file:=<this file> (bringup/graph_attach.py). The pair QUAD1/QUAD2 (drone_0/1) carries on plates 0/6
+# (num_drones:=2 attach_azimuths_deg:=0,180); the partners are the drones after them, drone 2 = QUAD3, drone 3 = QUAD4.
+# Each record: drone, plate (clockwise from the ring's +x, 30 deg each), tip_body (the magnet marker's Motive body),
+# weld_point_z (the tip marker's height above the ring-origin plane with the face on the plate), attach_x_offset and
+# attach_y_offset (the weld point in the ring frame; it must sit on the plate), attach_cable_len (the rod, as the
+# scripts' Q = L - 0.04), weld_radius (the contact radius, K), proof_taut_len (the taut body-to-tip minus 0.003, P).
+# Every field must be present; null = still to be measured: the rig refuses it, the twin takes the launch's value
+# (plate 9's point turned onto the plate). With this file typed, no record value or tip body may be typed as well.
+# His launch arguments: partner_args for drone 3's instance (/tejen, as today), partner_args_d2 for drone 2's
+# (/tejen_d2); a plate:= there must be the record's. Optional: set_detach (default true; only with two or more partners).
+partners:
+  - drone: 3                 # QUAD4, plate 9 (+y), its funnel; body 24 as redefined 4 Nov; rig_nr8.sh / rig_nrtf.sh of 13 Nov
+    plate: 9
+    tip_body: 24
+    weld_point_z: 0.0491     # W
+    attach_x_offset: 0.0     # X
+    attach_y_offset: 0.2293  # Y
+    attach_cable_len: 0.994  # Q = L - 0.04, L = 1.034
+    weld_radius: 0.025       # K
+    proof_taut_len: 1.031    # P = L - 0.003
+  - drone: 2                 # QUAD3, plate 3 (-y), in a supervisor funnel; body 23 redefined as 24 (16 Nov 09:05: 23 / 24
+    plate: 3                 # read 28.4 / 28.7 mm with both faces on the floor)
+    tip_body: 23
+    weld_point_z: 0.0467     # W, measured 16 Nov 09:12 (payload_geometry.py, the face in plate 3's funnel)
+    attach_x_offset: 0.0020  # X
+    attach_y_offset: -0.2233 # Y (radius 0.2233, plate 3)
+    attach_cable_len: 0.994  # Q = L - 0.04, L = 1.0340 (16 Nov 09:14, the magnet hanging free, sd 0.2 mm)
+    weld_radius: 0.025       # K (as QUAD4's)
+    proof_taut_len: 1.031    # P = L - 0.003

@@ -1,0 +1,101 @@
+# Sim defaults (sim_control_launch.py): the rig twin (the *_rig worlds), i.e. real.yaml's
+# geometry, masses and affine thrust map on the sagging-pack plant.
+# 1 m cables from 22 Oct (Wesley): the *_L100 worlds (carry: two/three/four_rigid_ground_rig_L100, the T, the M1
+# layout four_rigid_ground_rig_3915_L100); a 0.55 m world flies with cable_len:=0.55 typed, as its configs do.
+# The twin keeps its own drone mass (0.55: the model's airframe, rod and magnet); the rig's is real.yaml's.
+# The base is the carry (mode:=mpc); each `modes:` entry lists only what that mode changes.
+# legacy:=true reads sim_legacy.yaml instead (the worlds in simulation_assets/old_worlds/);
+# mode:=network flies the twin too (modes.network). mode:=attach flies the twin attach worlds (8 Oct):
+# three_rigid_ground_rig_attach_L100.sdf (QUAD4 free on the floor), _attach_welded_L100.sdf (welded on plate 9),
+# the pickup and push variants; the 0.55 m family without the suffix.
+fleet_geometry:
+  num_drones: 3
+  cable_len: 1.0
+  drone_mass: 0.55
+  attach_radius: 0.225
+  attach_z: 0.02
+  pivot_offset_z: -0.04
+  rod_tol_frac: 0.25
+  rod_spread_m: 0.08
+takeoff:
+  ff_cap_force: 0.75
+  lift_ramp_vel: 0.1
+  z_taut_gate: 0.9
+  payload_rest_z: 0.02
+height_hold:
+  z_i_gate: 0.25
+landing:
+  land_rearm_touchdown: true   # twin default (Wesley 17 Oct); the rig's too since 5 Nov (real.yaml)
+watchdogs:
+  # the trackers' 60 deg ring-tilt envelope (a fleet disarm); false only on world C, where the ring's tilt is free
+  # (Wesley 23 Oct, card 2026-10-23_quan_exact; twin only, the rig keeps it)
+  payload_tilt_envelope: true
+trajectory:
+  traj_speed: 0.4
+rod_in_plan:
+  # the rod's weight in the plan and references that balance it (card 2026-10-31_rod_in_plan; Wesley 31 Oct: on in
+  # simulation once it is ready, real flights refuse it). Flipped on 4 Nov ~22:20 and back off ~22:50 (Wesley: the
+  # twin's links, not the plan, are wrong: the magnet sits on the link's side of the ring joint and the rod is heavier
+  # than the rig's cable). true flies a sim config of a detach, carry or attach mode with the rod below and int_k_xy 0
+  # unless chosen (bringup.real_mode); --check refuses a world whose rods differ. SIL and the network mode keep it off.
+  plan_rod_level: false
+  rod_level_mass: 0.040        # rod 0.002 + magnet 0.038 (tools/make_carry_worlds.py, 4 Nov), every world but the _rod1g one
+  rod_level_com_frac: 0.025    # the CoM 0.025 x cable_len from the ring end (the magnet at the plate)
+thrust_map:
+  thrust_ratio: 35.2
+  takeoff_thrust_ratio: 0.0
+  thrust_offset: 0.185
+  thrust_offset_v_slope: 0.022
+  throttle_max: 0.8
+  kt_trim: false
+fleet_resize:
+  reconfig_mode: 'ocp'
+network:
+  auto_network_handover: false
+weld_gate:
+  weld_vel_filter_s: 0.1      # the twin's weld gate on a 0.1 s filtered speed (Wesley 4 Nov ~22:20; R3458, R3475 vs R3485-R3488)
+contact_traj:
+  # twin only (Wesley 11 Nov, Te-Jen's figure-eight demonstration): true lets partner_contact fly load_traj fig_8.
+  # The take-back clears hover and the circle only (TB16), so a take-back on the figure-eight is not cleared.
+  contact_sim_fig8: false
+sim_interface:
+  sil: false
+  sim_thrust_map: 'rig'
+  sim_thrust_offset: 0.185
+  sim_pack_v0: 23.8
+
+modes:
+  mpc: {}
+  free_hover: {}
+  dissipative:
+    num_drones: 4
+  network:
+    # the paper's method, our port (card 2026-10-23_paper_method_compare; values Wesley 22 Oct, push answer 23):
+    # our OCP creeps and lifts, the network flies the rest on the trackers' velocity loop. Twin only.
+    num_drones: 4
+    plan_rod_level: false        # the port's arms keep their creep and lift
+    reconfig_mode: 'network'
+    auto_network_handover: true
+    control_mode: 'velocity_after_handover'
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    diss_elev_deg: 60.0          # = cable_elev_deg: the hand-over keeps the rods where the OCP held them
+    net_horizon_preview: false   # the velocity loop reads node 0 only; the preview costs ~45 ms a tick
+    net_twin_geometry: false     # approved on, off until the card's critic
+    handover_blend_s: 0.0        # the port as flown: no feedforward blend at the hand-over
+  attach:
+    num_drones: 3
+    # the M1 rig layout (real.yaml modes.attach): carriers on plates 3/11/7 (angles typed clockwise, 30 x plate),
+    # the weld on plate 9 at +y 0.225
+    attach_azimuths_deg: '90,330,210'
+    attach_x_offset: 0.0
+    attach_y_offset: 0.225
+    enable_approach_mpc: false
+    control_mode: 'velocity_after_handover'
+    vel_ki: 0.0
+    diss_ki_load: 1.0
+    # twin only, our own approach (card 2026-10-23_catch_offset): aim and weld point moved off the slot along the rim
+    # (chord, clockwise +) and radially (out +); the fold-in at the measured catch point or at the slot
+    catch_offset_t: 0.0
+    catch_offset_r: 0.0
+    attach_point_source: 'measured'

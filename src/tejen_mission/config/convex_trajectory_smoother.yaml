@@ -1,0 +1,26 @@
+online_join_planner:
+  ros__parameters:
+    # M2A restart: passive static 3-D A* -> convex corridor -> degree-7 Bernstein
+    # minimum-snap smoother. NMPC still receives the nominal mission reference.
+    visual_trajectory_enabled: true
+
+    # Planning/validation geometry.
+    visual_trajectory_clearance_margin_m: 0.05
+    visual_trajectory_validation_headroom_ratio: 1.10
+
+    # Dynamic limits and deterministic retiming.
+    visual_trajectory_max_speed_mps: 1.0
+    visual_trajectory_max_acceleration_mps2: 1.5
+    visual_trajectory_baseline_nominal_speed_mps: 0.50
+    visual_trajectory_minimum_segment_time_s: 0.18
+    visual_trajectory_maximum_segment_time_s: 6.0
+    visual_trajectory_time_stretch_safety_factor: 1.05
+
+    # Measured-state acceleration estimate and terminal target state.
+    visual_trajectory_acceleration_filter_tau_s: 0.15
+    visual_trajectory_use_target_acceleration: false
+
+    # Active OSQP limits. The historical parameter names are retained only to
+    # avoid breaking existing CLI/config overrides during the cleanup increment.
+    visual_trajectory_direct_bezier_solver_iterations: 3000
+    visual_trajectory_direct_bezier_solver_time_s: 0.75

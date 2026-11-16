@@ -1,0 +1,68 @@
+dynamic_planner_active_commissioning:
+  ros__parameters:
+    # The inspected SimClean stack has no /clock publisher.
+    use_sim_time: false
+
+    state_topic: /motion_capture_state
+    pendulum_topic: /pendulum_swing_state
+    command_topic: /drone_command
+    reference_topic: /join_planner/reference
+    diagnostics_topic: /dynamic_planner/c1e_status
+    marker_topic: /dynamic_planner/markers
+    csv_path: /tmp/r6_3c1e_active.csv
+    trace_csv_path: /tmp/r6_3c1e_reference_trace.csv
+    replan_csv_path: /tmp/r6_3c1e_replans.csv
+    frame_id: map
+    vehicle_id: drone_0
+    commissioning_label: R6.3C.1e
+
+    state_timeout_s: 0.25
+    pendulum_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    marker_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    initial_splice_timing_s: 0.16
+    # C.1e obstacle regression: 2.5 was QP-infeasible; 3.0 passed without
+    # relaxing jerk, separator margin, or working-set limits.
+    spline_time_factor: 3.0
+
+    # Execution-aware Octopus cutoff. Keep searching for the best complete
+    # candidate until one 30 Hz reference tick before the future splice, then
+    # leave that tick for QP refinement, continuous safety checks, and commit.
+    # The independent Octopus 2.0 s wall-time limit remains a hard backstop.
+    enable_octopus_useful_deadline: true
+    octopus_post_search_reserve_s: 0.03333333333333333
+
+    hover_z_m: 1.20
+    takeoff_duration_s: 4.0
+    settle_dwell_s: 1.0
+    settle_position_tolerance_m: 0.10
+    settle_speed_tolerance_mps: 0.10
+    settle_accel_tolerance_mps2: 0.50
+    settle_swing_tolerance_rad: 0.08726646259971647   # 5 deg
+    settle_swing_rate_tolerance_radps: 0.20
+
+    goal_dx_m: 1.0
+    goal_dy_m: 0.0
+    goal_dz_m: 0.0
+
+    # C.1e geometric operating envelope. The settle gate above remains 5 deg.
+    max_swing_angle_rad: 0.2617993877991494           # 15 deg
+    swing_warning_rad: 0.17453292519943295             # >10 deg: warning region
+    swing_claim_invalid_rad: 0.2617993877991494        # >15 deg: run cannot support claim
+
+    # Canonical physical obstacle definition. scripts/generate_c1e_world.py
+    # consumes these exact fields to generate the Gazebo collision model.
+    static_scene_enabled: true
+    require_scene_witness: true
+    obstacle_name: c1e_commissioning_obstacle
+    obstacle_center_x_m: 0.50
+    obstacle_center_y_m: 0.06
+    obstacle_center_z_m: 0.68
+    obstacle_half_x_m: 0.12
+    obstacle_half_y_m: 0.25
+    obstacle_half_z_m: 0.10
+    obstacle_yaw_rad: 0.3490658503988659               # 20 deg
+
+    measured_trace_capacity: 900

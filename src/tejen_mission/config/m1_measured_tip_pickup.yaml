@@ -1,0 +1,34 @@
+# Opt-in tuning only: no hardware calibration or attachment thresholds here.
+# Loaded alongside irl_commissioning.yaml; unused when mode remains legacy.
+online_join_planner:
+  ros__parameters:
+    pickup_alignment_gain_per_s: 0.8
+    pickup_alignment_filter_tau_s: 0.5
+    pickup_alignment_max_rate_mps: 0.025
+    pickup_alignment_max_offset_m: 0.08
+    pickup_alignment_min_normal_m: 0.08
+    pickup_alignment_pre_low_normal_m: 0.10
+    pickup_alignment_capture_xy_m: 0.025
+    pickup_alignment_capture_dwell_s: 0.5
+    pickup_alignment_low_xy_m: 0.025
+    pickup_alignment_low_dwell_s: 0.3
+    pickup_alignment_max_relative_speed_mps: 0.07
+    pickup_alignment_high_xy_m: 0.05
+    pickup_candidate_max_clearance_m: 0.005
+    pickup_retry_enabled: true
+    pickup_retry_wait_s: 10.0
+    pickup_retry_progress_m: 0.005
+    pickup_retry_release_dwell_s: 0.20
+    pickup_retry_rise_speed_mps: 0.05
+    pickup_retry_max_rise_m: 0.20
+    pickup_retry_clearance_m: 0.08
+    pickup_retry_separation_dwell_s: 0.12
+    pickup_retry_max_attempts: 5
+    pickup_proof_enabled: true
+    pickup_proof_minimum_body_rise_m: 0.06
+    pickup_proof_minimum_object_rise_m: 0.02
+    pickup_proof_maximum_contact_drift_m: 0.015
+    pickup_proof_relative_speed_mps: 0.03
+    pickup_proof_proof_dwell_s: 0.50
+    pickup_proof_loss_contact_drift_m: 0.045
+    pickup_proof_loss_dwell_s: 0.12

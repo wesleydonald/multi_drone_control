@@ -1,0 +1,452 @@
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32
+from sensor_msgs.msg import Joy  # Import Joy message type
+import csv  # Import the csv module
+import serial
+import time
+import argparse
+import json
+import math
+from enum import IntEnum
+import numpy as np
+from datetime import datetime
+
+from interfaces.msg import MotionCaptureState, ELRSCommand, Telemetry  # Import the Telemetry message
+from std_msgs.msg import Bool
+
+from drone_communication.arm_switch import ArmSwitch
+from drone_communication.serial_lock import open_exclusive
+
+CRSF_SYNC = 0xC8
+
+class PacketsTypes(IntEnum):
+    GPS = 0x02
+    VARIO = 0x07
+    BATTERY_SENSOR = 0x08
+    BARO_ALT = 0x09
+    HEARTBEAT = 0x0B
+    VIDEO_TRANSMITTER = 0x0F
+    LINK_STATISTICS = 0x14
+    RC_CHANNELS_PACKED = 0x16
+    ATTITUDE = 0x1E
+    FLIGHT_MODE = 0x21
+    DEVICE_INFO = 0x29
+    CONFIG_READ = 0x2C
+    CONFIG_WRITE = 0x2D
+    RADIO_ID = 0x3A
+
+def radio_health(node, now) -> dict:
+    """The radio_health record of an ELRS interface (node: its attributes), at wall time now."""
+    def age(t):
+        return None if t is None else round(now - t, 2)
+    recent = [t for t in node.cmd_times if t >= now - 5.0]
+    node.cmd_times[:] = recent
+    gaps = [b - a for a, b in zip(recent, recent[1:])]
+    roll, pitch = node.attitude if node.attitude is not None else (None, None)
+    tilt = (None if roll is None else
+            round(math.degrees(math.acos(max(-1.0, min(1.0, math.cos(roll) * math.cos(pitch))))), 1))
+    return {'port': node.serial_port, 'connected': node.ser is not None, 'reconnects': node.reconnects,
+            'reconnect_age_s': age(node.reconnect_t),
+            'cmd_rate_hz': round(len([t for t in recent if t >= now - 1.0]), 1),
+            'cmd_max_gap_s': round(max(gaps), 3) if gaps else None,
+            'rssi_dbm': node.link.get('rssi_dbm'), 'lq': node.link.get('lq'), 'link_age_s': age(node.link.get('t')),
+            'voltage': round(float(node.battery_voltage), 2) if node.battery_t is not None else None,
+            'voltage_age_s': age(node.battery_t), 'mode': node.mode, 'mode_age_s': age(node.mode_t),
+            'fc_tilt_deg': tilt, 'fc_roll_deg': None if roll is None else round(math.degrees(roll), 1),
+            'fc_pitch_deg': None if pitch is None else round(math.degrees(pitch), 1),
+            'attitude_age_s': age(node.attitude_t), 'fc_arm_state': node.fc_arm_state}
+
+
+def crc8_dvb_s2(crc, a) -> int:
+  crc = crc ^ a
+  for ii in range(8):
+    if crc & 0x80:
+      crc = (crc << 1) ^ 0xD5
+    else:
+      crc = crc << 1
+  return crc & 0xFF
+
+def crc8_data(data) -> int:
+    crc = 0
+    for a in data:
+        crc = crc8_dvb_s2(crc, a)
+    return crc
+
+def crsf_validate_frame(frame) -> bool:
+    return crc8_data(frame[2:-1]) == frame[-1]
+
+def signed_byte(b):
+    return b - 256 if b >= 128 else b
+
+
+
+
+def packCrsfToBytes(channels) -> bytes:
+    # channels is in CRSF format! (0-1984)
+    # Values are packed little-endianish such that bits BA987654321 -> 87654321, 00000BA9
+    # 11 bits per channel x 16 channels = 22 bytes
+    if len(channels) != 16:
+        raise ValueError('CRSF must have 16 channels')
+    result = bytearray()
+    destShift = 0
+    newVal = 0
+    for ch in channels:
+        # Put the low bits in any remaining dest capacity
+        newVal |= (ch << destShift) & 0xff
+        result.append(newVal)
+
+        # Shift the high bits down and place them into the next dest byte
+        srcBitsLeft = 11 - 8 + destShift
+        newVal = ch >> (11 - srcBitsLeft)
+        # When there's at least a full byte remaining, consume that as well
+        if srcBitsLeft >= 8:
+            result.append(newVal & 0xff)
+            newVal >>= 8
+            srcBitsLeft -= 8
+        destShift = srcBitsLeft
+
+    return result
+
+def channelsCrsfToChannelsPacket(channels) -> bytes:
+    result = bytearray([CRSF_SYNC, 24, PacketsTypes.RC_CHANNELS_PACKED]) # 24 is packet length
+    result += packCrsfToBytes(channels)
+    result.append(crc8_data(result[2:]))
+    return result
+
+
+
+import serial.tools.list_ports  # Import to list available serial ports
+
+def magnet_packet_index(channel):
+    """CRSF packet slot for ELRSCommand.channel_<channel>: channels 0-3 map 1:1, packet[4]
+    is the arm switch, so channel k >= 4 lands in packet[k + 1] (channel_10 -> packet[11])."""
+    channel = int(channel)
+    if not 0 <= channel <= 10:
+        raise ValueError(f'magnet channel {channel} outside 0..10')
+    return channel if channel <= 3 else channel + 1
+
+
+def apply_magnet(packet, channel, value, idle, rng):
+    """Overwrite one aux slot with a latched magnet value in [-1, 1]. Returns packet."""
+    packet[magnet_packet_index(channel)] = idle + int(max(-1.0, min(1.0, float(value))) * rng)
+    return packet
+
+
+class ELRSInterface(Node):
+    def __init__(self):
+        super().__init__('elrs_interface')
+        dt = 1 / 100
+        self.timer = self.create_timer(dt, self.publish_message)
+        self.telemetry_timer = self.create_timer(0.1, self.publish_telemetry)  # Timer for 10Hz publishing
+        self.get_logger().info('ELRS Interface Node has started.')
+
+        # Explicit serial device for this drone's ELRS TX (e.g. /dev/ttyUSB0). With
+        # two drones each instance MUST bind a distinct device — otherwise both grab
+        # the first /dev/ttyUSB*. Empty string keeps the old auto-detect behaviour.
+        self.declare_parameter('serial_port', '')
+        self.serial_port = self.get_parameter('serial_port').value
+        self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
+
+        self.ser = None
+        self.connect_serial()  # Initialize serial connection
+
+        self.input = bytearray()
+
+        self.idle = 993 # may be 993 for ardupilot (this is strange)
+        self.range = 820
+        self.armed = False
+        self.packet = np.full(16, self.idle, dtype=np.uint16)
+        self.packet[4] = self.idle - self.range
+
+        # arm confirmed against the FC's flight-mode telemetry (arm_switch.py)
+        self.arm_switch = ArmSwitch()
+        self.mode_t = None
+        self.fc_arm_state = 'disarmed'
+        self.fc_state_pub = self.create_publisher(String, 'fc_arm_state', 10)
+        self.fc_armed_pub = self.create_publisher(Bool, 'fc_armed', 10)
+
+        self.battery_voltage = 0.0
+        self.battery_mah_used = 0
+        self.rssi = 0
+        self.mode = "UNKNOWN"
+        # telemetry lines on the console only on request (they were ~20 % of the 14 Oct T2 flood); the same values go
+        # out once a second on radio_health for the console and the bag
+        self.print_telemetry = bool(self.declare_parameter('print_telemetry', False).value)
+        self.link = {}
+        self.battery_t = None
+        self.attitude = None
+        self.attitude_t = None
+        self.reconnects = 0
+        self.reconnect_t = None
+        self.cmd_times = []
+        self.health_pub = self.create_publisher(String, 'radio_health', 10)
+        self.health_timer = self.create_timer(1.0, self.publish_health)
+
+        self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry', 10)  # Telemetry publisher
+        # the FC's own attitude from CRSF telemetry ([roll, pitch, yaw] rad), next to mocap's: the tilt cut's
+        # rig evidence (card 2026-10-11_quad4_tilt_cut, critic round 1 M1)
+        self.fc_attitude_pub = self.create_publisher(Float32MultiArray, 'fc_attitude', 10)
+
+        # Per-drone electromagnet on a Betaflight aux mode. `magnet` (String ON|OFF, relative
+        # -> /drone_<i>/magnet) latches the aux value into every packet sent, including the
+        # idle packet after a command timeout, so a tether magnet cannot drop because the
+        # tracker went quiet. magnet_initial '' = pass the commanded channel through
+        # untouched (the historical behaviour); 'ON' holds tethers from boot.
+        self.magnet_channel = int(self.declare_parameter('magnet_channel', 6).value)
+        self.magnet_on_value = float(self.declare_parameter('magnet_on_value', 1.0).value)
+        self.magnet_off_value = float(self.declare_parameter('magnet_off_value', -1.0).value)
+        magnet_packet_index(self.magnet_channel)          # validate early
+        self.magnet_value = None
+        initial = str(self.declare_parameter('magnet_initial', '').value).strip().upper()
+        if initial in ('ON', 'OFF'):
+            self.magnet_value = self.magnet_on_value if initial == 'ON' else self.magnet_off_value
+            self.get_logger().info(f'magnet {initial} from boot (channel_{self.magnet_channel})')
+        self.create_subscription(String, 'magnet', self.magnet_callback, 10)
+
+
+        from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            depth=1
+        )
+        self.subscription_floats = self.create_subscription(
+            ELRSCommand, 'ELRSCommand', self.controller_commands_callback, qos_profile
+        )
+
+        self.last_message_time = time.time()  # Initialize the last message timestamp
+
+        self.last_elrs_command_time_published = time.time()  # Initialize the last command timestamp
+
+    def connect_serial(self):
+        last_said = 0.0
+        while self.ser is None:
+            # the first failure explains itself, then one reminder every 10 s (it retries at 1 Hz)
+            say = time.time() - last_said >= 10.0
+            try:
+                # Explicit device if the serial_port param is set; else auto-detect
+                # the first /dev/ttyUSB* (single-drone fallback, unchanged).
+                if self.serial_port:
+                    self.ser = open_exclusive(self.serial_port)
+                    self.get_logger().info(f'Serial port MULTI {self.serial_port} connected.')
+                    return
+                ports = serial.tools.list_ports.comports()
+                for port in ports:
+                    if '/dev/ttyUSB' in port.device:  # Check for USB serial devices
+                        self.ser = open_exclusive(port.device)
+                        self.get_logger().info(f'Serial port SINGLE {port.device} connected.')
+                        return
+                if say:
+                    last_said = time.time()
+                    self.get_logger().warn('No /dev/ttyUSB* radio found. Plug in the TX module; retrying.')
+                time.sleep(1)  # Wait before retrying
+            except serial.SerialException as e:
+                if say:
+                    last_said = time.time()
+                    self.get_logger().error(
+                        f'Radio {self.serial_port or "/dev/ttyUSB*"} not available ({e}). This drone gets '
+                        f'no commands until it connects: plug in / reseat its TX module, check '
+                        f'ls -l /dev/QUAD*; "busy" means another radio node holds it (T1 still up, or a '
+                        f'second stack). Retrying every second.')
+                time.sleep(1)  # Wait before retrying
+
+    def magnet_callback(self, msg):
+        state = msg.data.strip().upper()
+        if state not in ('ON', 'OFF'):
+            self.get_logger().warn(f"magnet: ignoring '{msg.data}' (want ON or OFF)")
+            return
+        value = self.magnet_on_value if state == 'ON' else self.magnet_off_value
+        changed = value != self.magnet_value
+        self.magnet_value = value
+        if changed:     # the magnet manager re-sends its state at 2 Hz
+            self.get_logger().info(f'magnet {state}: channel_{self.magnet_channel} = {value:+.1f}')
+
+    def controller_commands_callback(self, msg):
+        self.last_message_time = time.time()  # Update the timestamp of the most recent message
+        self.cmd_times.append(self.last_message_time)
+        self.armed = bool(msg.armed)  # Ensure msg.armed is explicitly converted to a boolean
+
+        self.packet[0] = self.idle + int(max(-1.0, min(1.0, msg.channel_0)) * self.range)
+        self.packet[1] = self.idle + int(max(-1.0, min(1.0, msg.channel_1)) * self.range)
+        self.packet[2] = self.idle + int(max(-1.0, min(1.0, msg.channel_2)) * self.range)
+        #self.packet[2] = self.idle - self.range + int(max(0.0, min(1.0, msg.channel_2)) * 2 * self.range) #betaflight throttle
+        self.packet[3] = self.idle + int(max(-1.0, min(1.0, msg.channel_3)) * self.range)
+        self.packet[5] = self.idle + int(max(-1.0, min(1.0, msg.channel_4)) * self.range)
+        self.packet[6] = self.idle + int(max(-1.0, min(1.0, msg.channel_5)) * self.range)
+        self.packet[7] = self.idle + int(max(-1.0, min(1.0, msg.channel_6)) * self.range)
+        self.packet[8] = self.idle + int(max(-1.0, min(1.0, msg.channel_7)) * self.range)
+        self.packet[9] = self.idle + int(max(-1.0, min(1.0, msg.channel_8)) * self.range)
+        self.packet[10] = self.idle + int(max(-1.0, min(1.0, msg.channel_9)) * self.range)
+        self.packet[11] = self.idle + int(max(-1.0, min(1.0, msg.channel_10)) * self.range)
+
+        # packet[4] (the arm switch) is set every tick in publish_message by the arm switch
+
+    def _tprint(self, ptype, text, force=False):
+        """Telemetry to the console at most once a second per frame type (every frame was 94 lines/s over four
+        radios on the loaded rig laptop, 14 Oct); force prints a change at once (the flight mode)."""
+        last = getattr(self, '_tprint_t', None)
+        if last is None:
+            last = self._tprint_t = {}
+        now = time.time()
+        if not getattr(self, 'print_telemetry', True):
+            return
+        if force or now - last.get(ptype, 0.0) >= 1.0:
+            last[ptype] = now
+            print(text)
+
+    def handleCrsfPacket(self, ptype, data):
+        if ptype == PacketsTypes.RADIO_ID and data[5] == 0x10:
+            #print(f"OTX sync")
+            pass
+        elif ptype == PacketsTypes.LINK_STATISTICS:
+            rssi1 = signed_byte(data[3])
+            rssi2 = signed_byte(data[4])
+            lq = data[5]
+            snr = signed_byte(data[6])
+            antenna = data[7]
+            mode = data[8]
+            power = data[9]
+            # telemetry strength
+            downlink_rssi = signed_byte(data[10])
+            downlink_lq = data[11]
+            downlink_snr = signed_byte(data[12])
+            self._tprint(ptype, f"RSSI={rssi1}/{rssi2}dBm LQ={lq:03} mode={mode} ant={antenna} snr={snr} power={power} drssi={downlink_rssi} dlq={downlink_lq} dsnr={downlink_snr}")
+            self.rssi = signed_byte(data[3])  # Update RSSI
+            self.link = {'rssi_dbm': max(rssi1, rssi2), 'lq': lq, 'downlink_lq': downlink_lq, 't': time.time()}
+        elif ptype == PacketsTypes.ATTITUDE:
+            pitch = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10000.0
+            roll = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10000.0
+            yaw = int.from_bytes(data[7:9], byteorder='big', signed=True) / 10000.0
+            self._tprint(ptype, f"Attitude: Pitch={pitch:0.2f} Roll={roll:0.2f} Yaw={yaw:0.2f} (rad)")
+            self.fc_attitude_pub.publish(Float32MultiArray(data=[float(roll), float(pitch), float(yaw)]))
+            self.attitude, self.attitude_t = (roll, pitch), time.time()
+        elif ptype == PacketsTypes.FLIGHT_MODE:
+            packet = ''.join(map(chr, data[3:-2]))
+            self._tprint(ptype, f"Flight Mode: {packet}", force=(packet != self.mode))
+            self.mode = ''.join(map(chr, data[3:-2]))  # Update mode
+            self.mode_t = time.time()
+        elif ptype == PacketsTypes.BATTERY_SENSOR:
+            vbat = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
+            curr = int.from_bytes(data[5:7], byteorder='big', signed=True) / 10.0
+            mah = data[7] << 16 | data[8] << 8 | data[9]
+            pct = data[10]
+            self._tprint(ptype, f"Battery: {vbat:0.2f}V {curr:0.1f}A {mah}mAh {pct}%")
+            self.battery_voltage = vbat  # Update battery voltage
+            self.battery_t = time.time()
+            self.battery_mah_used = mah  # Update battery mAh used
+        elif ptype == PacketsTypes.BARO_ALT:
+            print(f"BaroAlt: ")
+        elif ptype == PacketsTypes.DEVICE_INFO:
+            packet = ' '.join(map(hex, data))
+            print(f"Device Info: {packet}")
+        elif data[2] == PacketsTypes.GPS:
+            lat = int.from_bytes(data[3:7], byteorder='big', signed=True) / 1e7
+            lon = int.from_bytes(data[7:11], byteorder='big', signed=True) / 1e7
+            gspd = int.from_bytes(data[11:13], byteorder='big', signed=True) / 36.0
+            hdg =  int.from_bytes(data[13:15], byteorder='big', signed=True) / 100.0
+            alt = int.from_bytes(data[15:17], byteorder='big', signed=True) - 1000
+            sats = data[17]
+            print(f"GPS: Pos={lat} {lon} GSpd={gspd:0.1f}m/s Hdg={hdg:0.1f} Alt={alt}m Sats={sats}")
+        elif ptype == PacketsTypes.VARIO:
+            vspd = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
+            print(f"VSpd: {vspd:0.1f}m/s")
+        elif ptype == PacketsTypes.RC_CHANNELS_PACKED:
+            pass
+        else:
+            packet = ' '.join(map(hex, data))
+            print(f"Unknown 0x{ptype:02x}: {packet}")
+
+    def _update_arm_switch(self):
+        high, state = self.arm_switch.update(self.armed, time.time(), self.mode, self.mode_t)
+        self.packet[4] = self.idle + self.range if high else self.idle - self.range
+        if state != self.fc_arm_state:
+            self.fc_arm_state = state
+            # one call site per severity: rclpy raises if a call site changes severity (it killed the radio on a refused arm)
+            msg = f'arm ({self.serial_port or "radio"}): {state}'
+            if state.startswith('failed'):
+                self.get_logger().error(msg)
+            else:
+                self.get_logger().info(msg)
+            self.fc_state_pub.publish(String(data=f'{state} [{self.serial_port}]'))
+            self.fc_armed_pub.publish(Bool(data=state == 'armed'))
+
+    def publish_telemetry(self):
+        # Publish telemetry data at 10Hz
+        telemetry_msg = Telemetry()
+        telemetry_msg.battery_voltage = self.battery_voltage
+        telemetry_msg.battery_mah_used = self.battery_mah_used
+        telemetry_msg.rssi = self.rssi
+        telemetry_msg.mode = self.mode
+        self.telemetry_publisher.publish(telemetry_msg)
+        # re-publish the arm state at 10 Hz so a late subscriber (the manager) sees it
+        self.fc_state_pub.publish(String(data=f'{self.fc_arm_state} [{self.serial_port}]'))
+        self.fc_armed_pub.publish(Bool(data=self.fc_arm_state == 'armed'))
+
+    def publish_health(self):
+        """Once a second: everything the console needs from this radio (std_msgs/String, JSON)."""
+        self.health_pub.publish(String(data=json.dumps(radio_health(self, time.time()))))
+
+    def publish_message(self):
+        # Check if no message has been received for 0.1 seconds
+        if time.time() - self.last_message_time > 0.5:
+            if self.armed:  # Only log and disarm if currently armed
+                self.get_logger().warn("No message received for 0.1 seconds. Disarming motors.")
+
+            # print(" -------------------------- THIS TRIGGERED --------------------------")
+            self.armed = False
+            self.packet = np.full(16, self.idle, dtype=np.uint16)
+
+        try:
+            self._update_arm_switch()
+            # read whatever telemetry is waiting, then ALWAYS send the channel frame
+            # (an elif here skipped the frame on every tick that had telemetry bytes)
+            if self.ser and self.ser.in_waiting > 0:
+                self.input.extend(self.ser.read(self.ser.in_waiting))
+            if self.ser:
+                if self.magnet_value is not None:
+                    apply_magnet(self.packet, self.magnet_channel, self.magnet_value,
+                                 self.idle, self.range)
+                self.ser.write(channelsCrsfToChannelsPacket(self.packet))
+
+            while len(self.input) > 2:
+                expected_len = self.input[1] + 2
+                if expected_len > 64 or expected_len < 4:
+                    self.input = bytearray()
+                elif len(self.input) >= expected_len:
+                    single = self.input[:expected_len]
+                    self.input = self.input[expected_len:]
+
+                    if not crsf_validate_frame(single):
+                        packet = ' '.join(map(hex, single))
+                        print(f"crc error: {packet}")
+                    else:
+                        self.handleCrsfPacket(single[2], single)
+                else:
+                    break
+        except (serial.SerialException, OSError):
+            self.get_logger().error('Serial connection lost. Attempting to reconnect...')
+            try:
+                if self.ser is not None:
+                    self.ser.close()
+            except (serial.SerialException, OSError):
+                pass
+            self.ser = None
+            self.reconnects += 1
+            self.reconnect_t = time.time()
+            self.connect_serial()
+        
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ELRSInterface()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

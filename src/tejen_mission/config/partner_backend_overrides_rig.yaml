@@ -1,0 +1,18 @@
+# multi_drone_control combined M1 on the rig (partner_mission.launch.py real:=true): his backend around our
+# three real carriers, with the real pickup object. The sim file's carrier columns (R0629: the rod swept into
+# carrier 0) plus his IRL values (irl_commissioning.yaml, dynamic_planner_transfer_backend): the 60 g puck's
+# collision box, its centre 39 mm below the magnet marker, and his 15 deg IRL swing envelope.
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    cooperative_body_half_x_m: 0.15
+    cooperative_body_half_y_m: 0.15
+    cooperative_body_half_z_m: 0.30
+    max_swing_angle_rad: 0.2617993877991494
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.043
+    payload_half_y_m: 0.043
+    payload_half_z_m: 0.011
+    payload_center_from_magnet_x_m: 0.000
+    payload_center_from_magnet_y_m: 0.000
+    payload_center_from_magnet_z_m: -0.039

@@ -1,0 +1,7 @@
+controller:
+  ros__parameters:
+    # Preserve the exact C1D/C1E commissioning controller settings that have
+    # already flown successfully. This file is for the direct `ros2 run` path.
+    use_external_reference: true
+    external_reference_timeout_s: 0.15
+    enable_thrust_ratio_ukf: true

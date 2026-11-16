@@ -1,0 +1,19 @@
+# attach_m1_1m_m2a_orbit_reattach_det15.yaml for the figure-eight (Wesley and Te-Jen 12 Nov, the 13 Nov trials, rig_fm9h8.sh): 12
+# laps (40.6 s each at 0.75 m and 0.125 m/s; the path held while QUAD4 re-attaches does not count) so the drop and the
+# re-attach fall inside the path. Otherwise as the circle's file. A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+traj_hold_s: 5.0
+attach_pause: true
+attach_pause_at: reattach
+drop_tilt_deg: 55.0
+detach_detect_m: 0.15
+traj_laps: 0   # the figure-eight without end (Wesley and Te-Jen 15 Nov); was 12 passes, each from rest to rest, so the ring stopped at every pass end

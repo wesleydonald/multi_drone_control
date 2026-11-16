@@ -1,0 +1,373 @@
+"""The rig side of the graphs M1 and M2 fly (real_control_launch.py mode:=attach | m2).
+
+Wesley 2026-09-28: the real M1/M2 launches are the sim attach and dissipative graphs
+(real_control_launch.py mode:=attach | m2), not re-synced copies, so the rig flies the parameters the
+sim claim flew. What changes on the rig is here, shared by both launches:
+
+  * kT is the airframe's measured number, typed; 'auto' (the sim plant's gain) is refused.
+    takeoff_thrust_ratio 'auto' (the sim's stand pop) becomes 0 = thrust_ratio, the
+    ground takeoff every real launch flies.
+  * the watchdogs are the node defaults, which are the rig values (pose 0.25 s, reference
+    staleness 1.0 s); the sim launches loosen them for Gazebo under load. A tighter typed
+    value is kept, a looser one is refused.
+  * payload_rest_z 0.0275 (the ring's centre of mass resting on the floor, 22 Oct; 0.05 until
+    then) and z_taut_gate 0.9 (decisions.md 2026-09-25: 0.99 sim / 0.9 real) replace
+    the sim defaults; a typed value is kept.
+  * the creep floor start and the OCP resize (decisions.md 2026-09-28, Q7): start_taut
+    false, handover_elev_deg 45, handover_settle_s 1.0 (2.0 until 2026-10-03), creep_vel 0.2,
+    reconfig_mode ocp replace the sim defaults; a typed value is kept.
+  * the rig thrust map and geometry of bringup/config/real.yaml reach the trackers and the
+    planner (map_and_geometry; Wesley 2026-10-03), as in the rig carry.
+  * "typed" is an argument set before the launch file's declarations ran (the command
+    line, or an including launch), recorded by record_typed_args; a typed value equal to
+    the sim default is kept too.
+  * the rig I/O is real_io_launch.py: the mocap node, one elrs_interface per drone on
+    /dev/QUAD<i+1> (drone i = quad i+1 = Motive body 11+i), fleet_viz from mocap, RViz.
+  * one magnet path per drone (ladder P10): the radio's String latch /drone_<i>/magnet,
+    defined from boot by magnet_initial (ON or OFF, never '' = whatever the forwarded
+    stream carries). Tethers: the dissipative node (detach_magnet: ON at ARM, OFF at their
+    detach). The newcomer: the magnet manager (ON for the capture, OFF on release). No
+    mux merges a magnet channel, so a forwarded stream's channel 6 is passed untouched
+    and the latch overwrites it in every packet.
+"""
+import os
+import re
+
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch.utilities import perform_substitutions
+
+RIG_WATCHDOGS = {'pose_timeout_s': 0.25, 'safety_ref_timeout_s': 1.0}
+RIG_DEFAULTS = {'payload_rest_z': 0.0275, 'z_taut_gate': 0.9,
+                'start_taut': 'false', 'handover_elev_deg': 60.0, 'handover_settle_s': 1.0,
+                'creep_vel': 0.2, 'reconfig_mode': 'ocp'}   # handover 60 as everywhere (Wesley 7-8 Oct)
+_TYPED_KEY = 'real_mode_typed_args'
+
+
+def record_typed_args(context):
+    """Note what was typed (an OpaqueFunction placed before the launch file's declarations)."""
+    context.launch_configurations[_TYPED_KEY] = ','.join(
+        sorted(k for k in context.launch_configurations if k != _TYPED_KEY))
+    return []
+
+
+def truthy(context, name):
+    """Return whether a launch argument reads as true."""
+    return LaunchConfiguration(name).perform(context).strip().lower() in ('1', 'true', 'yes')
+
+
+def declared_defaults(context, declarations):
+    """{name: default string} of a launch file's DeclareLaunchArgument list."""
+    return {a.name: perform_substitutions(context, a.default_value)
+            for a in declarations if a.default_value is not None}
+
+
+def rig_thrust_ratio(thrust_ratio, takeoff_thrust_ratio):
+    """(kT, takeoff kT, note) for the rig: a typed positive number, never 'auto'."""
+    spec = str(thrust_ratio).strip()
+    try:
+        kt = float(spec)
+    except ValueError:
+        kt = float('nan')
+    if not kt > 0.0:
+        raise RuntimeError(
+            f"the rig needs thrust_ratio typed as the airframe's measured kT "
+            f"(e.g. thrust_ratio:=24.0), got {spec!r}: 'auto' is the sim plant's gain")
+    tspec = str(takeoff_thrust_ratio).strip().lower()
+    kt_to = 0.0 if tspec == 'auto' else float(tspec)
+    return kt, kt_to, f'kT typed {kt:.2f} (rig); takeoff ' + (
+        f'{kt_to:.2f}' if kt_to > 0.0 else '= kT (ground takeoff)')
+
+
+def apply_rig_values(context, sim_defaults):
+    """Put the rig values into the launch configuration in place of the sim defaults.
+
+    Every node parameter reads these through LaunchConfiguration, so the node graph is the
+    sim one with only these numbers changed. Returns a log line.
+    """
+    if _TYPED_KEY not in context.launch_configurations:
+        raise RuntimeError('real_mode: the launch file must run record_typed_args before '
+                           'its DeclareLaunchArgument list')
+    typed = set(context.launch_configurations[_TYPED_KEY].split(','))
+    # a params_file value is chosen as deliberately as a typed one: the rig default must not replace it
+    pf = context.launch_configurations.get('params_file', '').strip()
+    if pf:
+        from bringup.profiles import _load, flatten
+        typed |= set(flatten(_load(pf)))
+    notes = []
+    for name, rig in {**RIG_WATCHDOGS, **RIG_DEFAULTS}.items():
+        if name not in sim_defaults:
+            continue
+        value = context.launch_configurations[name] if name in typed else rig
+        if isinstance(rig, float):
+            value = float(value)
+        if name in RIG_WATCHDOGS and value > rig:
+            raise RuntimeError(
+                f'rig: {name}:={value:g} is looser than the rig watchdog ({rig:g} s); '
+                f'the loose values are for Gazebo under CPU load. Drop it or type <= {rig:g}.')
+        context.launch_configurations[name] = str(value)
+        notes.append(f'{name} {value:g}' if isinstance(value, float) else f'{name} {value}')
+    return '[launch] REAL: ' + ', '.join(notes)
+
+
+# knobs the rig carry passes and the sim graphs did not (Wesley 2026-10-03: every rig mode)
+MAP_TRACKER = ('thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref', 'throttle_max')
+MAP_PLANNER = ('attach_radius', 'pretension_s', 'ff_cap_release_s', 'rod_tol_frac',
+               'rod_spread_m', 'z_i_gate')
+# planner knobs passed only when set ('' = the node default), so a default launch is unchanged
+PLANNER_OPTIONAL = {'land_unwind': 'bool', 'dist_est': 'str', 'dist_tau': 'float',
+                    'dist_rod_mass': 'float', 'dist_rod_com': 'float',
+                    'rod_mass': 'float', 'rod_com': 'float',
+                    'offset_free': 'str', 'of_tau': 'float', 'of_window': 'float',
+                    'pin_cable_rates': 'bool', 'plan_w_pos_scale': 'float', 'plan_w_s_scale': 'float',
+                    'plan_w_r_scale': 'float', 'plan_rate_ff': 'bool', 'plan_ref_lag_s': 'float',
+                    'plan_sqp_iters': 'int', 'plan_fast_refs': 'bool', 'plan_res_every': 'int',
+                    'load_ixx': 'float', 'load_izz': 'float', 'land_rearm_touchdown': 'bool',
+                    'land_descend_to_stall': 'bool',
+                    'carriers_down_alone': 'bool',
+                    'int_mode': 'str', 'int_k_xy': 'float', 'int_k_z': 'float',
+                    'int_settle_s': 'float', 'land_ff_ramp': 'bool',
+                    'traj_hold_s': 'float', 'detach_step_out_m': 'float',
+                    'cable_elev_deg': 'float', 'detach_unload_s': 'float',
+                    'detach_unload_t': 'float', 'detach_unload_tilt_deg': 'float',
+                    'detach_unload_wait_s': 'float', 'detach_post_blend_s': 'float',
+                    'detach_detect_m': 'float', 'departed_land': 'bool', 'departed_ground_idle': 'bool',
+                    'drop_on_loss': 'bool', 'drop_takes_back': 'bool', 'drop_gap_deg': 'float',
+                    'tip_detect_m': 'float', 'fig8_size': 'float', 'pos_limit_m': 'float',
+                    'rejoin_departed': 'bool', 'rejoin_task': 'bool', 'traj_laps': 'int', 'traj_lap_hold_s': 'float',
+                    'resize_delay_s': 'float', 'relay_task': 'bool', 'rod_len_reread': 'bool', 'attach_datum_shift': 'bool',
+                    'plan_rod_level': 'bool', 'partner_release_around': 'bool', 'partner_release_around_r': 'float',
+                    'attach_pause': 'bool', 'attach_pause_ramp_s': 'float', 'attach_pause_at': 'str', 'partner_rod_add_m': 'float', 'foldin_cap': 'str',
+                    'ring_low_land_m': 'float', 'ring_low_land_s': 'float',
+                    'take_back_avoid_pickup_m': 'float', 'attach_pause_through_landing': 'bool'}
+# the trackers' thrust map, which the disturbance estimate reads delivered thrust through
+DIST_MAP = ('thrust_ratio', 'thrust_offset', 'thrust_offset_v_slope', 'thrust_v_ref')
+
+
+def planner_prefix():
+    """The load planner's launch prefix: `taskset -c <MDC_PLANNER_CPUS>` when that is set (the rig laptop's P-cores;
+    the planner ran 2.6x slower on its E-cores, card 2026-10-23_scalability), else None (the default prefix)."""
+    cpus = os.environ.get('MDC_PLANNER_CPUS', '').strip()
+    if not cpus:
+        return None
+    if not re.fullmatch(r'\d+(-\d+)?(,\d+(-\d+)?)*', cpus):
+        raise RuntimeError(f'MDC_PLANNER_CPUS={cpus!r}: a taskset CPU list, e.g. 0-7')
+    return f'taskset -c {cpus}'
+
+
+def planner_options(context, rejoin=False):
+    """Return [{knob: value}] of the set PLANNER_OPTIONAL knobs, or [].
+
+    Appended to a planner's parameters list. With dist_est set, the trackers' thrust map goes
+    along (a numeric thrust_ratio is required). int_mode auto (the default since 5 Oct) flies
+    model wherever model is allowed and reference elsewhere; a fleet that attaches or detaches
+    keeps the learned ring force through the resize (8 Oct). rejoin: this graph bridges each
+    tether's gz joint for rejoin_departed (the twin's mode:=dissipative only), else it is refused.
+    """
+    opts = {}
+    for k, kind in PLANNER_OPTIONAL.items():
+        v = LaunchConfiguration(k).perform(context).strip()
+        if v:
+            opts[k] = (truthy(context, k) if kind == 'bool' else float(v) if kind == 'float'
+                       else int(v) if kind == 'int' else v.lower())
+    if opts.get('carriers_down_alone') and not opts.get('land_descend_to_stall'):
+        # under the reference stopped at z 0 the stall comes with the rig's carriers still 0.15-0.23 m up (RIG-1105-k1d)
+        raise RuntimeError('carriers_down_alone needs land_descend_to_stall: true (card 2026-11-05_carriers_down_alone); '
+                           'the rig has both on by default since 5 Nov, so a params_file that turns '
+                           'land_descend_to_stall off sets carriers_down_alone: false too')
+    if opts.get('rejoin_departed') and not rejoin:
+        raise RuntimeError("rejoin_departed flies only the twin's mode:=dissipative: it re-welds each tether's gz "
+                           'joint (/drone_i/attach), which this launch does not bridge (code design B)')
+    if opts.get('rejoin_departed') and (opts.get('departed_land') is not False
+                                        or LaunchConfiguration('reconfig_mode').perform(context).strip() != 'ocp'):
+        # the planner refuses these at construction; here the launch says why before any node starts
+        raise RuntimeError('rejoin_departed needs departed_land:=false (a staged carrier holds, it does not land) and '
+                           'reconfig_mode:=ocp (card 2026-10-23_rejoin_departed)')
+    # card 2026-10-23_scalability cases 6 and 7: twin only
+    if opts.get('rejoin_task') and not (rejoin and opts.get('rejoin_departed')):
+        raise RuntimeError("rejoin_task flies only with rejoin_departed, in the twin's mode:=dissipative (a task flies a "
+                           'staged carrier)')
+    if opts.get('relay_task') and not (rejoin and opts.get('rejoin_task')):
+        raise RuntimeError("relay_task flies only with rejoin_task, in the twin's mode:=dissipative (card "
+                           '2026-10-30_x4_endurance_relay)')
+    if opts.pop('plan_rod_level', False):
+        if context.launch_configurations.get('real', 'false') == 'true':
+            raise RuntimeError('plan_rod_level flies only in the twin (card 2026-10-31_rod_in_plan)')
+        from bringup.profiles import chosen_knobs, rod_model
+        level, mass, com = rod_model(context.launch_configurations)
+        if level and mass <= 0.0:
+            # the planner refuses this at construction; here the launch says why before any node starts
+            raise RuntimeError('plan_rod_level needs rod_mass and rod_com (card 2026-10-31_rod_in_plan)')
+        if level:
+            opts.update(plan_rod_level=True, rod_mass=mass, rod_com=com)
+            # the rod carries what the sideways integral learned (Wesley 31 Oct, 4 Nov): 0 unless this launch chose it
+            if 'int_k_xy' not in chosen_knobs(context.launch_configurations):
+                opts['int_k_xy'] = 0.0
+    # the rig's figure-eight with his re-attach (Wesley 12 Nov, the 13 Nov trials): laps only with contact_rig_fig8 typed
+    lc = context.launch_configurations
+    rig_fig8 = 'contact_rig_fig8' in lc.get(_TYPED_KEY, '').split(',') and \
+        lc.get('contact_rig_fig8', '').strip().lower() in ('1', 'true', 'yes') and lc.get('load_traj', '') == 'fig_8'
+    if opts.get('traj_laps', 1) != 1 and lc.get('real', 'false') == 'true' and not rig_fig8:
+        raise RuntimeError('traj_laps flies only in the twin (card 2026-10-23_scalability, case 7)')
+    if opts.get('foldin_cap', 'off') not in ('off', 'level'):
+        raise RuntimeError(f"foldin_cap {opts['foldin_cap']!r}: 'off' or 'level' ('weld' was deleted 5 Nov, card "
+                           '2026-11-05_quad4_foldin_weld_cap)')
+    if opts.get('foldin_cap', 'off') != 'off' and context.launch_configurations.get('real', 'false') == 'true':
+        raise RuntimeError('foldin_cap flies only in the twin (card 2026-11-05_quad4_foldin_weld_cap)')
+    if opts.get('traj_lap_hold_s', 0.0) > 0.0 and not (
+            rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
+        raise RuntimeError("traj_lap_hold_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (it holds "
+                           'the clock through the resize hold)')
+    if opts.get('resize_delay_s', 0.0) != 0.0 and not (
+            rejoin and LaunchConfiguration('reconfig_mode').perform(context).strip() == 'ocp'):
+        raise RuntimeError("resize_delay_s flies only in the twin's mode:=dissipative with reconfig_mode:=ocp (X1's "
+                           'late and no-resize arms, card 2026-10-30_x1_release_ablation)')
+    if opts.get('offset_free') == 'on' and truthy(context, 'kt_trim'):
+        raise RuntimeError('offset_free on with kt_trim on: two adaptive loops on one vertical residual')
+    if opts.get('int_mode') in ('model', 'auto'):
+        z_ki = LaunchConfiguration('z_ki').perform(context).strip()
+        dist = opts.get('dist_est', '')
+        why = ('kt_trim on (two adaptive loops on one vertical residual)'
+               if truthy(context, 'kt_trim')
+               else 'z_ki 0 (it is the gain)' if not z_ki or float(z_ki) <= 0.0
+               else 'offset_free on' if opts.get('offset_free') == 'on'
+               else 'dist_est ' + dist if dist in ('ring', 'full') else '')
+        if why and opts['int_mode'] == 'model':
+            raise RuntimeError(f'int_mode model refused with {why} (card 2026-10-04_z_int_model)')
+        opts['int_mode'] = 'reference' if why else 'model'
+    if opts.get('dist_est', 'off') != 'off':
+        for k in DIST_MAP:
+            v = LaunchConfiguration(k).perform(context).strip()
+            try:
+                opts[k] = float(v)
+            except ValueError:
+                raise RuntimeError(f'dist_est needs a numeric {k} (the trackers\' map), got {v!r}')
+    return [opts] if opts else []
+
+
+def position_limit(context):
+    """{'pos_limit_m': m} for the fleet manager and the trackers when the position limit is set (Wesley 22 Oct; '' = off
+    until the critic, card 2026-10-22_position_limit), else {}; the planners take it through PLANNER_OPTIONAL."""
+    v = str(context.launch_configurations.get('pos_limit_m', '')).strip()
+    return {'pos_limit_m': float(v)} if v and float(v) > 0.0 else {}
+
+
+# the trackers' half of drop and land (card 2026-10-08_drop_and_land): passed only when set
+TRACKER_DROP = {'drop_on_loss': 'bool', 'drop_tilt_deg': 'float', 'drop_samples': 'int',
+                'drop_glitch_step_deg': 'float'}
+# ...and the LAND knob the trackers read too (card 2026-11-05_carriers_down_alone), passed only when set
+TRACKER_LAND = {'carriers_down_alone': 'bool', 'carriers_down_band_m': 'float'}
+
+
+def tracker_drop_options(context):
+    """{knob: value} of the set TRACKER_DROP and TRACKER_LAND knobs, for a detach or attach graph's trackers."""
+    from launch.substitutions import LaunchConfiguration
+    out = {}
+    for k, kind in {**TRACKER_DROP, **TRACKER_LAND}.items():
+        v = LaunchConfiguration(k).perform(context).strip()
+        if v:
+            out[k] = (truthy(context, k) if kind == 'bool' else int(float(v)) if kind == 'int'
+                      else float(v))
+    if not 0.03 <= out.get('carriers_down_band_m', 0.15) <= 0.20:
+        # the drop when a released carrier's idle cuts its throttle (the tracker refuses it too)
+        raise RuntimeError(f"carriers_down_band_m {out['carriers_down_band_m']:g}: 0.03 up to 0.20 m "
+                           '(card 2026-11-05_carriers_down_alone)')
+    return out
+
+
+def payload_envelope_options(context):
+    """{max_payload_tilt_deg: 180} when the twin's payload_tilt_envelope is false (world C: the ring's tilt is free),
+    else {} (the trackers' 60 deg). The rig's profile has no such knob."""
+    v = str(context.launch_configurations.get('payload_tilt_envelope', 'true')).strip().lower()
+    return {} if v in ('1', 'true', 'yes', '') else {'max_payload_tilt_deg': 180.0}
+
+
+def map_and_geometry(context, n, real):
+    """(tracker, sim plant, planner) parameters of the thrust-map and geometry knobs.
+
+    Rig: every value of the profile (the rig carry's map, pivot, pretension, cap release,
+    rod trust band, solve budget). Sim: only the knobs that are set ('' = not passed, the
+    node's default), so a rig-twin rehearsal can type them and nothing else changes."""
+    def get(k):
+        return LaunchConfiguration(k).perform(context).strip()
+    tracker = {k: float(get(k)) for k in MAP_TRACKER if get(k)}
+    planner = {k: float(get(k)) for k in MAP_PLANNER if get(k)}
+    if get('pivot_offset_z'):
+        planner['pivot_offset'] = [0.0, 0.0, float(get('pivot_offset_z'))]
+    if real:
+        planner['solve_budget_s'] = float(get('solve_budget_s'))
+        return tracker, {}, planner
+    plant = {}
+    if get('sim_thrust_map'):
+        offsets = [float(x) for x in get('sim_thrust_offset').split(',') if x.strip()] or [0.185]
+        if len(offsets) not in (1, n):
+            raise RuntimeError(f'sim_thrust_offset needs one value or {n}, got {len(offsets)}')
+        plant = {'thrust_map': get('sim_thrust_map'),
+                 'thrust_offset': [offsets[min(i, len(offsets) - 1)] for i in range(n)],
+                 'pack_v0': float(get('sim_pack_v0') or 24.4)}
+        # 'auto' is the linear x3 plant's gain; a rig plant needs the rig's measured map typed in
+        if get('sim_thrust_map').lower() == 'rig' and (
+                get('thrust_ratio').lower() == 'auto' or tracker.get('thrust_offset', 0.0) <= 0.0):
+            raise RuntimeError('sim_thrust_map:=rig needs an explicit thrust_ratio and thrust_offset '
+                               '> 0 (the rig launch values: 35.2, 0.185)')
+    return tracker, plant, planner
+
+
+def rig_magnet_latches(context, defaults):
+    """Return each drone's radio latch at boot (ON or OFF).
+
+    Its role default (defaults[i]) unless drone<i>_magnet_initial is typed. '' is refused:
+    it would leave the magnet to whatever channel 6 the forwarded stream carries until the
+    first latch command.
+    """
+    out = []
+    for i, role in enumerate(defaults):
+        typed = context.launch_configurations.get(f'drone{i}_magnet_initial')
+        value = str(role if typed is None else typed).strip().upper()
+        if value not in ('ON', 'OFF'):
+            raise RuntimeError(
+                f'rig: drone {i} magnet latch at boot must be ON or OFF, got '
+                f'{value!r} (drone{i}_magnet_initial / magnet_initial / attach_magnet_initial)')
+        out.append(value)
+    return out
+
+
+def rig_io(launch_dir, n_radio, magnet_initial, attach=False, detach=False, extra_bodies=None,
+           magnet_topic_overrides=None, tip_bodies=None, n_partners=1):
+    """real_io_launch.py for drones 0..n_radio-1, scoped so its arguments do not leak.
+
+    magnet_initial: one value per drone for its radio latch (rig_magnet_latches).
+    Each drone's serial port is the launch argument drone<i>_serial (default
+    /dev/QUAD<i+1>). extra_bodies: the mocap node's extra Motive bodies ('<id>:/<topic>,...';
+    None = whatever mocap_extra_bodies says). magnet_topic_overrides: '<i>:/<topic>[,...]' moves drone i's radio
+    latch to a private topic and hides its RViz MAGNET row (None = none). tip_bodies: more magnet tip bodies,
+    '<id>:/<topic>,...', each a PoseStamped like the one tip on /magnet_tip_pose (None = none). n_partners: the
+    last radios that attach mode hands to the partner's controller (they keep the ema velocity filter).
+    """
+    actions = []
+    args = {'num_drones': str(n_radio),
+            'rviz': LaunchConfiguration('rviz'),
+            'magnet_channel': LaunchConfiguration('magnet_channel'),
+            'attach': 'true' if attach else 'false',
+            'detach': 'true' if (attach or detach) else 'false'}
+    if extra_bodies is not None:
+        args['mocap_extra_bodies'] = extra_bodies
+    if attach:
+        # the slope filter on the carriers only: the partners (the last radios) feed his controller, which keeps ema
+        args['mocap_vel_drones'] = ','.join(str(i) for i in range(n_radio - n_partners))
+    if magnet_topic_overrides is not None:
+        args['magnet_topic_overrides'] = magnet_topic_overrides
+    if tip_bodies is not None:
+        args['mocap_tip_bodies'] = tip_bodies
+    for i in range(n_radio):
+        name = f'drone{i}_serial'
+        actions.append(DeclareLaunchArgument(
+            name, default_value=f'/dev/QUAD{i + 1}',
+            description=f'drone {i} ELRS TX serial device (drone i = quad i+1)'))
+        args[name] = LaunchConfiguration(name)
+        args[f'drone{i}_magnet_initial'] = magnet_initial[i]
+    actions.append(GroupAction([IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'real_io_launch.py')),
+        launch_arguments=list(args.items()))], scoped=True, forwarding=True))
+    return actions

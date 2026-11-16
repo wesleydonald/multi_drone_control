@@ -1,0 +1,16 @@
+online_join_planner:
+  ros__parameters:
+    # R6.3C.1F.1: mission -> C++ transfer backend shadow plumbing only.
+    # The existing Python VirtualTransferGenerator still owns the reference that
+    # is published to /join_planner/reference.  C++ has zero controller authority.
+    c1f1_shadow_transfer_enabled: true
+
+    c1f1_shadow_target_topic: /dynamic_planner/transfer_target
+    c1f1_shadow_enable_topic: /dynamic_planner/transfer_enable
+    c1f1_shadow_reference_topic: /dynamic_planner/transfer_reference
+    c1f1_shadow_status_topic: /dynamic_planner/transfer_status
+
+    # Diagnostic thresholds only.  The backend itself retains its C1F.0 state
+    # freshness and stationary-activation safety gates.
+    c1f1_shadow_reference_timeout_s: 0.20
+    c1f1_shadow_target_drift_warn_m: 0.02

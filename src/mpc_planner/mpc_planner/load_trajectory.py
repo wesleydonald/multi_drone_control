@@ -1,0 +1,354 @@
+"""
+load_trajectory.py
+------------------
+The lateral LOAD reference trajectory, factored out of the planner node. Once the
+lift tops out the whole taut formation is translated along this path, so the load
+follows it. A LoadTrajectory is a pure function of trajectory time t and the four
+shape params (kind, speed, distance, radius) -- it holds no node/solver state (the
+trajectory CLOCK traj_t stays in the node) so it is testable in isolation.
+
+Supported kinds: 'hover' (no motion), 'line_x' (sinusoidal shuttle along +x),
+'circle', 'fig_8' (Gerono lemniscate, one lap at constant path speed between ORBIT_RAMP_S
+spin-up and wind-down), 'spin' (circle + one full load yaw), 'orbit' (the same circle flown
+continuously at constant speed until LAND, after a smooth ORBIT_RAMP_S spin-up: the ring keeps
+moving through a partner drone's whole mission), 'line_spin' (out along +x by distance and back
+while the load turns once at a constant yaw rate, through the turnaround). All start and end at
+rest through smootherstep profiles -- no velocity/accel step that a non-fed-forward payload would
+take as a pendulum kick.
+
+`radius` is the circle's, spin's and orbit's radius and the figure-8's size (x +-size, y +-size/2).
+The planner's fig8_size sets the figure-8 alone since 22 Oct (traj_radius sized both before):
+path_radius / from_params resolve it, for the planner and every tool that rebuilds a flight's path.
+
+`laps` (traj_laps, twin only; card 2026-10-23_scalability case 7): a lapped kind (LAPPED) flies its lap this many
+times, each from rest at the start point back to it, before it completes; each lap is the one-lap path at the lap's
+own time, line_spin and spin adding a full turn per lap. 1 (the default) is the single lap, unchanged.
+0 is the figure-8 without end (Wesley and Te-Jen 15 Nov: the moving-ring drop-off's figure-8 should run on like the
+circle's orbit): one spin-up, then constant path speed round the closed curve for good; it never completes.
+"""
+import numpy as np
+
+
+ORBIT_RAMP_S = 4.0     # s, smootherstep spin-up of an 'orbit' to its constant speed
+KINDS = ('hover', 'line_x', 'line_spin', 'circle', 'spin', 'orbit', 'fig_8')
+YAWING = ('spin', 'line_spin')
+LAPPED = ('circle', 'spin', 'fig_8', 'line_spin')    # the kinds that fly a lap from rest to rest and complete
+
+
+def path_radius(kind, traj_radius, fig8_size=None):
+    """The radius a `kind` trajectory flies: fig8_size for the figure-8 when it is set (> 0), else traj_radius
+    (None, '' or 0: a params.json from before 22 Oct, or the legacy profile)."""
+    try:
+        size = float(fig8_size)
+    except (TypeError, ValueError):
+        size = 0.0
+    return size if kind == 'fig_8' and size > 0.0 else float(traj_radius)
+
+
+class LoadTrajectory:
+    def __init__(self, kind, speed, distance, radius, laps=1):
+        self.kind = str(kind)
+        self.speed = float(speed)            # m/s peak lateral speed
+        self.distance = float(distance)      # m (line_x)
+        self.radius = float(radius)          # m (circle / fig_8 / spin)
+        n = float(laps)
+        if n != int(n) or n < 0 or (n > 1 and self.kind not in LAPPED) or (n == 0 and self.kind != 'fig_8'):
+            raise ValueError(f'traj_laps {laps!r}: a whole number >= 1, above 1 only for {", ".join(LAPPED)}, '
+                             f'0 (endless) only for fig_8')
+        self.laps = int(n)
+        self.endless = self.laps == 0
+        self._lap_T = None
+
+    @classmethod
+    def from_params(cls, prm, kind='hover', speed=0.1, distance=1.0, radius=0.5):
+        """The trajectory a planner flew, from its parameters (params.json, or a manifest's launch args). A missing
+        or empty value takes the default given here, not a falsy one (distance 0 is a value)."""
+        def get(k, default):
+            v = prm.get(k)
+            return default if v is None or v == '' else v
+        kind = str(get('load_traj', kind))
+        return cls(kind, float(get('traj_speed', speed)), float(get('traj_distance', distance)),
+                   path_radius(kind, get('traj_radius', radius), prm.get('fig8_size')), laps=get('traj_laps', 1))
+
+    def lap_s(self):
+        """One lap's duration (s) of a lapped kind, else None (the endless figure-8: its first pass, spin-up included)."""
+        if self._lap_T is None and self.kind in LAPPED:
+            if self.endless:
+                a, v = max(self.radius, 1e-6), max(self.speed, 1e-6)
+                L = float(self._fig8_table()[1][-1])
+                self._lap_T = min(ORBIT_RAMP_S, L / v) + L / v
+            else:
+                self._lap_T = float(self._circle_theta(0.0)[3] if self.kind in ('circle', 'spin') else
+                                    self._line_spin(0.0)[4] if self.kind == 'line_spin' else self._fig8_theta(0.0)[3])
+        return self._lap_T
+
+    def _lap(self, t):
+        """(lap index, the lap's own time) at path time t; past the last lap's end, its index and t on from its
+        start. One lap: (0, t)."""
+        if self.laps <= 1:                     # one lap, or the endless figure-8 (one clock, no laps)
+            return 0, t
+        T = self.lap_s()
+        k = min(int(t // T), self.laps - 1)
+        return k, t - k * T
+
+    @staticmethod
+    def _eased_sweep(t, T):
+        """Smootherstep angle sweep. theta goes 0 -> 2*pi over duration T via
+        6u^5-15u^4+10u^3, whose 1st AND 2nd derivatives vanish at both ends, so the
+        maneuver spins up from rest and winds down to rest (no velocity step /
+        pendulum kick at either end). Peak d(theta)/dt = 2*pi/T * 1.875 at u=0.5.
+        Returns (theta, dtheta/dt, d2theta/dt2)."""
+        u = min(max(t / T, 0.0), 1.0)
+        s   = u * u * u * (u * (6.0 * u - 15.0) + 10.0)   # 6u^5-15u^4+10u^3
+        ds  = 30.0 * u * u * (u - 1.0) * (u - 1.0)        # 30u^2(u-1)^2
+        dds = 60.0 * u * (2.0 * u - 1.0) * (u - 1.0)      # 60u(2u-1)(u-1)
+        two_pi = 2.0 * np.pi
+        return two_pi * s, two_pi * ds / T, two_pi * dds / (T * T)
+
+    def _circle_theta(self, t):
+        """Eased circle/spin angle (see _eased_sweep). Duration is stretched so the
+        PEAK tangential speed equals speed (peak speed = r * dtheta_max).
+        Returns (theta, dtheta/dt, d2theta/dt2, T)."""
+        r = max(self.radius, 1e-6)
+        T = 1.875 * 2.0 * np.pi * r / max(self.speed, 1e-6)
+        th, dth, ddth = self._eased_sweep(t, T)
+        return th, dth, ddth, T
+
+    def _orbit_theta(self, t):
+        """Continuous circle: angular speed w = speed/r reached through a smootherstep
+        ramp over ORBIT_RAMP_S (dtheta = w*s(u)), constant after. theta is the exact
+        integral, so position, velocity and acceleration are all continuous.
+        Returns (theta, dtheta/dt, d2theta/dt2)."""
+        r = max(self.radius, 1e-6)
+        w = max(self.speed, 1e-6) / r
+        Tr = ORBIT_RAMP_S
+        if t < Tr:
+            u = max(t / Tr, 0.0)
+            s = u * u * u * (u * (6.0 * u - 15.0) + 10.0)
+            ds = 30.0 * u * u * (u - 1.0) * (u - 1.0)
+            th = w * Tr * (u ** 6 - 3.0 * u ** 5 + 2.5 * u ** 4)
+            return th, w * s, w * ds / Tr
+        return w * (0.5 * Tr + (t - Tr)), w, 0.0
+
+    def _line_spin(self, t):
+        """'line_spin' path: two smootherstep legs, out to +distance and back, each 1.875*d/v long
+        so the peak speed is speed; at rest at the start, the turnaround and the end.
+        Returns (x, vx, ax, arc, T): arc is the path length travelled so far (the yaw clock)."""
+        d = max(self.distance, 1e-6)
+        Tl = 1.875 * d / max(self.speed, 1e-6)
+        tc = min(max(t, 0.0), 2.0 * Tl)
+        back = tc > Tl
+        u = (tc - Tl if back else tc) / Tl
+        s = u * u * u * (u * (6.0 * u - 15.0) + 10.0)
+        ds = 30.0 * u * u * (u - 1.0) * (u - 1.0) / Tl
+        dds = 60.0 * u * (2.0 * u - 1.0) * (u - 1.0) / (Tl * Tl)
+        if back:
+            return d * (1.0 - s), -d * ds, -d * dds, d * (1.0 + s), 2.0 * Tl
+        return d * s, d * ds, d * dds, d * s, 2.0 * Tl
+
+    def _line_spin_yaw(self, t):
+        """'line_spin' yaw: one full turn over the trip at a constant rate, reached and left through
+        smootherstep rate ramps of ORBIT_RAMP_S (as 'orbit'), so the spin carries on through the
+        turnaround (Wesley 22 Oct; until then one radian per radius travelled, the rate through zero
+        there). The turn is held after the trip. Returns (yaw, yaw_rate)."""
+        T = self._line_spin(0.0)[4]
+        Tr = min(ORBIT_RAMP_S, 0.5 * T)
+        w = 2.0 * np.pi / (T - Tr)
+
+        def ramp(tt):                           # turned yaw and rate of the spin-up
+            u = min(max(tt / Tr, 0.0), 1.0)
+            return w * Tr * (u ** 6 - 3.0 * u ** 5 + 2.5 * u ** 4), w * u * u * u * (u * (6.0 * u - 15.0) + 10.0)
+        tc = min(max(t, 0.0), T)
+        if tc < Tr:
+            return ramp(tc)
+        if tc > T - Tr:
+            y, dy = ramp(T - tc)
+            return 2.0 * np.pi - y, dy
+        return w * (0.5 * Tr + (tc - Tr)), w
+
+    def _fig8_table(self):
+        """Arc length along the lemniscate against theta, built once: the lap is timed
+        by distance, since theta's own path speed runs 1 : 1.41 lobe tip to centre."""
+        if getattr(self, '_f8', None) is None:
+            a = max(self.radius, 1e-6)
+            th = np.linspace(0.0, 2.0 * np.pi, 20001)
+            g = a * np.sqrt(np.cos(th) ** 2 + np.cos(2.0 * th) ** 2)
+            s = np.concatenate([[0.0], np.cumsum(0.5 * (g[1:] + g[:-1]) * np.diff(th))])
+            self._f8 = (th, s)
+        return self._f8
+
+    def _fig8_theta(self, t):
+        """Figure-eight angle at constant path speed: a smootherstep spin-up over
+        ORBIT_RAMP_S (as 'orbit'), speed along the path, and the mirrored wind-down into
+        the start point. (Until 7 Oct one eased sweep over the whole lap: 0.03 m/s near
+        the ends, speed only at the centre crossing.) Returns (theta, dtheta/dt,
+        d2theta/dt2, T)."""
+        a = max(self.radius, 1e-6)
+        v = max(self.speed, 1e-6)
+        th_tab, s_tab = self._fig8_table()
+        L = float(s_tab[-1])
+        Tr = min(ORBIT_RAMP_S, L / v)          # the two ramps cover v*Tr of the lap
+        T = Tr + L / v
+
+        def ramp(tt):                           # distance, speed, accel of the spin-up
+            u = min(max(tt / Tr, 0.0), 1.0)
+            return (v * Tr * (u ** 6 - 3.0 * u ** 5 + 2.5 * u ** 4),
+                    v * u * u * u * (u * (6.0 * u - 15.0) + 10.0),
+                    v * 30.0 * u * u * (u - 1.0) * (u - 1.0) / Tr)
+        if self.laps == 0:                      # endless: the spin-up, then the closed curve at v for good
+            tc = max(t, 0.0)
+            if tc < Tr:
+                s, ds, dds = ramp(tc)
+            else:
+                s, ds, dds = 0.5 * v * Tr + v * (tc - Tr), v, 0.0
+            k = np.floor(s / L)
+            th = float(np.interp(s - k * L, s_tab, th_tab)) + 2.0 * np.pi * k
+            g = a * np.sqrt(np.cos(th) ** 2 + np.cos(2.0 * th) ** 2)
+            dg = a * a * (-np.cos(th) * np.sin(th) - 2.0 * np.cos(2.0 * th) * np.sin(2.0 * th)) / g
+            dth = ds / g
+            return th, dth, (dds - dg * dth * dth) / g, float('inf')
+        tc = min(max(t, 0.0), T)
+        if tc < Tr:
+            s, ds, dds = ramp(tc)
+        elif tc > T - Tr:
+            s, ds, dds = ramp(T - tc)
+            s, dds = L - s, -dds
+        else:
+            s, ds, dds = 0.5 * v * Tr + v * (tc - Tr), v, 0.0
+        th = float(np.interp(s, s_tab, th_tab))
+        g = a * np.sqrt(np.cos(th) ** 2 + np.cos(2.0 * th) ** 2)        # |d path / d theta|
+        dg = a * a * (-np.cos(th) * np.sin(th) - 2.0 * np.cos(2.0 * th) * np.sin(2.0 * th)) / g
+        dth = ds / g
+        return th, dth, (dds - dg * dth * dth) / g, T
+
+    def complete(self, traj_t):
+        """True once the lateral trajectory has finished, so the descent can begin.
+        'hover' and 'line_x' never self-complete (hold / shuttle indefinitely, end
+        the run with LAND); circle/spin/fig_8 finish after one eased sweep, line_spin
+        after its out-and-back (each after its last lap, with laps)."""
+        if self.kind == 'line_x':
+            # Shuttles continuously - like 'hover' it never self-completes, so
+            # there is no auto-descent. End the run with a LAND command.
+            return False
+        if self.kind in ('circle', 'spin'):
+            # eased-circle duration (see _circle_theta); T is independent of t.
+            return traj_t >= self.laps * self._circle_theta(0.0)[3]
+        if self.kind == 'line_spin':
+            return traj_t >= self.laps * self._line_spin(0.0)[4]
+        if self.kind == 'fig_8':
+            return not self.endless and traj_t >= self.laps * self._fig8_theta(0.0)[3]
+        return False
+
+    def offset_at(self, t):
+        """Lateral (x, y) offset + velocity of the LOAD reference at absolute
+        trajectory time t. The whole taut formation is translated by this, so the
+        load follows it. Returns (dx, dy, vx, vy); zero at/before t=0."""
+        # At t=0 the velocity terms are not zero (vx = speed*cos(0)), so the
+        # drones were handed a full-speed reference at startup while the position
+        # reference sat still. Hold at zero until the trajectory starts.
+        if t <= 0.0:
+            return 0.0, 0.0, 0.0, 0.0
+        _, t = self._lap(t)
+        if self.kind == 'line_x':
+            # Shuttle along +x, 0 -> distance -> 0, repeating until LAND.
+            # Sinusoidal rather than a triangle wave: constant speed reverses
+            # velocity instantly at each end, and with lateral accel not fed
+            # forward the payload takes that step as a pendulum kick. The
+            # half-cosine has continuous velocity and accel and starts from rest.
+            # w gives peak speed speed; period = pi*distance/speed.
+            d = max(self.distance, 1e-6)
+            w = 2.0 * self.speed / d
+            dx = 0.5 * d * (1.0 - np.cos(w * t))
+            vx = 0.5 * d * w * np.sin(w * t)
+            return dx, 0.0, vx, 0.0
+        if self.kind == 'line_spin':
+            x, vx, _, _, _ = self._line_spin(t)
+            return x, 0.0, vx, 0.0
+        if self.kind == 'orbit':
+            r = max(self.radius, 1e-6)
+            th, dth, _ = self._orbit_theta(t)
+            return (r * np.sin(th), r * (1.0 - np.cos(th)),
+                    r * np.cos(th) * dth, r * np.sin(th) * dth)
+        if self.kind in ('circle', 'spin'):
+            # 'spin' has the SAME circular load path as 'circle'; it additionally
+            # yaws the load (formation rotates about the payload, see yaw_at).
+            r = max(self.radius, 1e-6)
+            th, dth, _, T = self._circle_theta(t)
+            if t >= T:
+                # completed one revolution -> back at the start point, hold there.
+                return 0.0, 0.0, 0.0, 0.0
+            dx = r * np.sin(th)                        # starts at (0,0), heads +x
+            dy = r * (1.0 - np.cos(th))               # then curves +y
+            vx = r * np.cos(th) * dth
+            vy = r * np.sin(th) * dth
+            return dx, dy, vx, vy
+        if self.kind == 'fig_8':
+            # Gerono lemniscate through the origin: x = a*sin(th), y = a/2*sin(2th),
+            # th swept 0 -> 2*pi (eased). Traces the right lobe then the left,
+            # crossing the start point at th=pi; starts and ends at rest at (0,0).
+            a = max(self.radius, 1e-6)
+            th, dth, _, T = self._fig8_theta(t)
+            if t >= T:
+                return 0.0, 0.0, 0.0, 0.0
+            dx = a * np.sin(th)
+            dy = 0.5 * a * np.sin(2.0 * th)
+            vx = a * np.cos(th) * dth
+            vy = a * np.cos(2.0 * th) * dth
+            return dx, dy, vx, vy
+        return 0.0, 0.0, 0.0, 0.0
+
+    def accel_at(self, t):
+        """Lateral (ax, ay) ACCELERATION of the LOAD reference at trajectory time t.
+        Used for the flatness-based cable references. Analytic 2nd derivative of the
+        offsets above; zero at/before t=0."""
+        if t <= 0.0:
+            return 0.0, 0.0
+        _, t = self._lap(t)
+        if self.kind == 'line_x':
+            d = max(self.distance, 1e-6)
+            w = 2.0 * self.speed / d
+            return 0.5 * d * w * w * np.cos(w * t), 0.0
+        if self.kind == 'line_spin':
+            return self._line_spin(t)[2], 0.0
+        if self.kind == 'orbit':
+            r = max(self.radius, 1e-6)
+            th, dth, ddth = self._orbit_theta(t)
+            return (r * (-np.sin(th) * dth * dth + np.cos(th) * ddth),
+                    r * (np.cos(th) * dth * dth + np.sin(th) * ddth))
+        if self.kind in ('circle', 'spin'):
+            r = max(self.radius, 1e-6)
+            th, dth, ddth, T = self._circle_theta(t)
+            if t >= T:
+                return 0.0, 0.0
+            ax = r * (-np.sin(th) * dth * dth + np.cos(th) * ddth)
+            ay = r * (np.cos(th) * dth * dth + np.sin(th) * ddth)
+            return ax, ay
+        if self.kind == 'fig_8':
+            a = max(self.radius, 1e-6)
+            th, dth, ddth, T = self._fig8_theta(t)
+            if t >= T:
+                return 0.0, 0.0
+            # dx = a sin th; dy = a/2 sin 2th
+            ax = a * (-np.sin(th) * dth * dth + np.cos(th) * ddth)
+            ay = a * (-2.0 * np.sin(2.0 * th) * dth * dth + np.cos(2.0 * th) * ddth)
+            return ax, ay
+        return 0.0, 0.0
+
+    def yaw_at(self, t):
+        """Load YAW angle + rate at trajectory time t. Nonzero only for 'spin' and
+        'line_spin'. 'spin': the load rotates one full turn about its vertical axis,
+        synchronised with the circular path (same eased sweep), so the drone formation
+        orbits the payload while the payload also circles. 'line_spin': one full turn
+        (counter-clockwise) at a constant rate over the trip (_line_spin_yaw), held after it
+        rather than snapped back to level. Zero (level) for every other trajectory.
+        With laps, each lap turns once more on from the turns before it. Returns (yaw, yaw_rate)."""
+        if t <= 0.0 or self.kind not in YAWING:
+            return 0.0, 0.0
+        k, t = self._lap(t)
+        if self.kind == 'line_spin':
+            yaw, rate = self._line_spin_yaw(t)
+            return (yaw + 2.0 * np.pi * k, rate) if k else (yaw, rate)
+        th, dth, _, T = self._circle_theta(t)
+        if t >= T:
+            return 0.0, 0.0                            # closed a full turn, hold level
+        return (th + 2.0 * np.pi * k, dth) if k else (th, dth)

@@ -1,0 +1,636 @@
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Pose, Twist
+from std_msgs.msg import Header
+from interfaces.msg import MotionCaptureState  # Import the new message type
+from geometry_msgs.msg import Twist, PoseArray, Pose, PoseStamped, TransformStamped
+from tf2_ros import TransformBroadcaster
+from tf_transformations import quaternion_multiply, quaternion_inverse, quaternion_matrix
+import socket
+from dataclasses import dataclass
+from typing import Tuple, Optional
+import sys
+import time
+import numpy as np
+from collections import deque  # Import deque for the rolling average filter
+import os
+from drone_communication.velocity_filter import VelocityFilter
+from drone_communication.frozen_pose import FrozenPoseFilter
+import csv
+import scipy.signal  # Import scipy.signal for Butterworth filter
+import re
+
+# ═════════════════════════════════════════════════════════════════════════════
+# REAL-WORLD CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+# Map each MoCap rigid-body ID to a drone_id. This node publishes each body to
+# /drone_<drone_id>/motion_capture_state (the topic the MPC controllers read).
+RIGID_BODY_TO_DRONE = {11: 0, 12: 1, 13: 2, 14: 3}
+
+# Rigid body on the ATTACH drone's magnet tip, published as PoseStamped on
+# /magnet_tip_pose for the magnet manager (weld trigger, tip-based weld capture).
+# None until the rig has one; the attach drone itself is a RIGID_BODY_TO_DRONE entry.
+MAGNET_TIP_RIGID_BODY_ID = None
+# Rigid-body ID routed to /payload/motion_capture_state instead of a drone (the
+# cable-suspended load; set to None if there is no payload body).
+PAYLOAD_RIGID_BODY_ID = 8
+# LOCAL address:port to LISTEN on -- this is a bind(), so the host must be an
+# address THIS machine actually owns (a specific NIC IP, or 0.0.0.0 for all of
+# them). It is NOT the mocap server's address; pointing it at the server gives
+# OSError errno 99 "Cannot assign requested address". 0.0.0.0 survives DHCP
+# changes and works whichever NIC the mocap arrives on.
+MOCAP_UDP_HOST = "0.0.0.0"
+MOCAP_UDP_PORT = 1511
+# Per-rigid-body publish ceiling (Hz). The mocap streams far faster than the
+# controllers need (measured ~475 Hz/body), and every message costs a Python
+# callback in EVERY subscriber -- each controller takes its own pose plus the
+# payload, so an unthrottled stream saturates their executor and starves the
+# 50 Hz control_loop (ELRSCommand stops, arming services time out). Decimation
+# happens BEFORE parsing, so the velocity finite-difference dt widens to match
+# and the twist stays consistent. 0 disables throttling.
+MOCAP_MAX_PUBLISH_HZ = 120.0
+# Per-packet angular-velocity print. At full mocap rate across all bodies this
+# is >1000 lines/s into the launch's stdout pipe, which throttles the receive
+# loop itself. Leave False unless debugging the parser.
+MOCAP_DEBUG_PRINT = False
+# TF: broadcast each drone as map -> drone_<id> so RViz can show it live. Match
+# the controllers' visualization frame ("map") so paths + drones share one frame.
+MOCAP_WORLD_FRAME = "map"
+# ═════════════════════════════════════════════════════════════════════════════
+
+def parse_extra_bodies(spec, what='extra_bodies'):
+    """'6:/pickup/motion_capture_state[,id:topic...]' -> {6: '/pickup/motion_capture_state'}; '' -> {}.
+    Extra rigid bodies (the combined M1 stack's pickup ball) go out as MotionCaptureState on their topic."""
+    out = {}
+    for item in str(spec or '').replace(' ', '').split(','):
+        if not item:
+            continue
+        rb, sep, topic = item.partition(':')
+        if not sep or not rb.lstrip('-').isdigit() or not topic.startswith('/'):
+            raise ValueError(f"{what} entry {item!r}: want <body id>:/<topic>")
+        if int(rb) in out:
+            raise ValueError(f'{what}: body {rb} listed twice')
+        out[int(rb)] = topic
+    return out
+
+
+def parse_tip_bodies(spec):
+    """'23:/drone_2/magnet_tip_pose[,id:topic...]' -> {23: '/drone_2/magnet_tip_pose'}; '' -> {}. More magnet tip
+    bodies (the 4 -> 2 -> 4 partners), each a PoseStamped on its own topic as magnet_tip_body_id's /magnet_tip_pose."""
+    out = parse_extra_bodies(spec, 'tip_bodies')
+    if len(set(out.values())) != len(out):
+        raise ValueError(f'tip_bodies {spec!r}: two bodies on one topic')
+    return out
+
+
+@dataclass
+class ObjectData:
+    id: str
+    position: Tuple[float, float, float]
+    rotation: Tuple[float, float, float, float]
+    velocity: Tuple[float, float, float]
+    angular_velocity: Tuple[float, float, float]
+
+class ParseData():
+    
+    def __init__(self):
+        self.last_pose = np.array([0, 0, 0])
+        self.last_orientation = np.array([0, 0, 0, 1])
+        self.last_time = time.time()
+        # linear velocity filter (card 2026-10-14_tracker_timing): None keeps the alpha 0.2 path below; the node
+        # sets it on the carrier bodies only (MDC_MOCAP_VEL_FILTER, MDC_MOCAP_VEL_DRONES)
+        self.vel_filter = None
+        self._reseed = False
+
+        '''self.last_pen_pose = np.array([0, 0, 0])
+        self.last_pen_orientation = np.array([0, 0, 0, 1])
+        self.last_pen_time = time.time()'''
+        # Rolling average buffers for position, orientation, velocity, and angular velocity
+
+        self.velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+        self.angular_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Rolling average buffers for velocitykpz, kiz, kdz = 15.0, 10.0, 10.0 
+        self.rolling_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Low-pass filter buffers for velocity
+        self.low_pass_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Butterworth filter buffers for velocity
+        self.butter_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Rolling average buffers for angular velocity
+        self.rolling_angular_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Low-pass filter buffers for angular velocity
+        self.low_pass_angular_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Butterworth filter buffers for angular velocity
+        self.butter_angular_velocity_buffers = {
+            'x': deque(maxlen=8),
+            'y': deque(maxlen=8),
+            'z': deque(maxlen=8)
+        }
+
+        # Low-pass filter parameters
+        self.alpha = 0.2  # Smoothing factor (0 < alpha <= 1)
+
+
+        # Butterworth filter parameters
+        self.butter_cutoff = 0.1  # Cutoff frequency (normalized, 0 < butter_cutoff < 0.5)
+        self.butter_order = 2    # Order of the Butterworth filter
+
+
+        # Precompute Butterworth filter coefficients
+        self.butter_b, self.butter_a = scipy.signal.butter(
+            self.butter_order, self.butter_cutoff, btype='low', analog=False
+        )
+
+        # Initialize filtered values for velocity and angular velocity
+        self.filtered_velocity = np.array([0.0, 0.0, 0.0])
+        self.filtered_angular_velocity = np.array([0.0, 0.0, 0.0])
+       
+
+
+    '''def clean_message(self, message: str) -> str:
+        message = message.replace('-(', '|').replace(')-', '|')
+        message = message.replace('(', '').replace(')', '')
+        message = message.strip()
+        message = message.replace('||', '|')
+        return message'''
+    
+    def normalize_quaternion_positive_w(self, x, y, z, w):
+        """Normalize quaternion and ensure w is positive."""
+        print(f"Normalizing quaternion: {x}, {y}, {z}, {w}")
+        if w < 0:
+            print(f"Quaternion w is negative, negating all components.")
+            return -x, -y, -z, -w
+        print(f"Quaternion w is positive, no change needed.")
+        return x, y, z, w
+
+    def apply_rolling_average(self, buffers, *values):
+        """Apply a rolling average filter to the given components."""
+        for key, value in zip(buffers.keys(), values):
+            buffers[key].append(value)
+
+        averages = tuple(sum(buffers[key]) / len(buffers[key]) for key in buffers.keys())
+        return averages
+
+    def apply_low_pass_filter(self, buffers, *values):
+        """Apply a low-pass filter to the given components."""
+        filtered_values = []
+        for key, value in zip(buffers.keys(), values):
+            if len(buffers[key]) == 0:
+                # Initialize the buffer with the first value
+                buffers[key].append(value)
+            else:
+                # Apply low-pass filter
+                filtered_value = self.alpha * value + (1 - self.alpha) * buffers[key][-1]
+                buffers[key].append(filtered_value)
+            filtered_values.append(buffers[key][-1])
+        return tuple(filtered_values)
+
+    def apply_butterworth_filter(self, buffers, *values):
+        """Apply a Butterworth filter to the given components."""
+        filtered_values = []
+        for key, value in zip(buffers.keys(), values):
+            buffers[key].append(value)
+            if len(buffers[key]) < len(self.butter_b):
+                # Not enough data to apply the filter yet
+                filtered_values.append(value)
+            else:
+                # Apply the Butterworth filter
+                filtered_value = scipy.signal.lfilter(
+                    self.butter_b, self.butter_a, list(buffers[key])
+                )[-1]
+                filtered_values.append(filtered_value)
+        return tuple(filtered_values)
+
+    def reseed(self):
+        """The next packet only restarts the velocity estimate and is not published: poses were withheld
+        (frozen_pose.py), and a difference taken across that gap would read the whole jump as one frame's speed."""
+        self._reseed = True
+
+    def parse_packet(self, data: str) -> Optional[ObjectData]:
+        try:
+            if not data or '|' not in data:
+                print("Invalid data format, skipping packet.")
+                return None
+
+            parts = [p.strip() for p in data.split('|') if p.strip()]
+            if len(parts) != 3:
+                print("Invalid parts length.")
+                return None
+
+            obj_id, pos_str, rot_str = parts
+
+            
+            # Parse position
+            pos_parts = [p.strip() for p in pos_str.split(',')]
+            if len(pos_parts) != 3:
+                print("Invalid position format.")
+                return None
+            r_x, r_y, r_z = map(float, pos_parts)
+            
+            # Apply rolling average filter to position
+            #x, y, z = self.apply_rolling_average(self.position_buffers, x, y, z)
+            
+            # Parse orientation
+            rot_parts = [p.strip() for p in rot_str.split(',')]
+            if len(rot_parts) != 4:
+                print("Invalid rotation format.")
+                return None
+            r_qx, r_qy, r_qz, r_qw = map(float, rot_parts)
+            
+            # Apply rolling average filter to orientation
+            #qx, qy, qz, qw = self.apply_rolling_average(self.orientation_buffers, qx, qy, qz, qw)
+
+            current_time = time.time()
+            if self._reseed:
+                self._reseed = False
+                self.last_pose = np.array([r_x, r_y, r_z])
+                self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
+                self.last_time = current_time
+                for buffers in (self.low_pass_velocity_buffers, self.low_pass_angular_velocity_buffers):
+                    for buf in buffers.values():
+                        buf.clear()
+                if self.vel_filter is not None:
+                    self.vel_filter.reset()
+                return None
+            dt = current_time - self.last_time
+            self.last_time = current_time
+            
+
+            if dt <= 0:
+                self.last_pose = np.array([r_x, r_y, r_z])
+                self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
+                self.last_time = current_time
+                return None
+
+            # Calculate linear velocity in the world frame
+            dx, dy, dz = r_x - self.last_pose[0], r_y - self.last_pose[1], r_z - self.last_pose[2]
+            linear_velocity_world = np.array([dx / dt, dy / dt, dz / dt])
+
+
+            # Apply low-pass filter to velocity
+            if self.vel_filter is None:
+                low_pass_vx, low_pass_vy, low_pass_vz = self.apply_low_pass_filter(
+                    self.low_pass_velocity_buffers, *linear_velocity_world
+                )
+            else:
+                v = self.vel_filter.update(current_time, (r_x, r_y, r_z))
+                low_pass_vx, low_pass_vy, low_pass_vz = linear_velocity_world if v is None else v
+
+
+            # Calculate angular velocity
+            q1 = self.last_orientation
+            q2 = np.array([r_qx, r_qy,r_qz, r_qw])
+            q_relative = quaternion_multiply(q2, quaternion_inverse(q1))  # Relative rotation
+            angular_velocity = 2 * np.array([q_relative[0], q_relative[1], q_relative[2]]) / dt  # Angular velocity
+            rotation_matrix = quaternion_matrix(q2)[:3, :3]  # Extract 3x3 rotation part
+
+            # Transform velocity from world frame to body frame
+            angular_velocity_body = np.dot(rotation_matrix.T, angular_velocity)
+
+        
+            low_pass_wx, low_pass_wy, low_pass_wz = self.apply_low_pass_filter(
+                self.low_pass_angular_velocity_buffers, *angular_velocity_body
+            )
+
+
+            # Update last pose, orientation, and time
+            self.last_pose = np.array([r_x, r_y, r_z])
+            self.last_orientation = np.array([r_qx, r_qy, r_qz, r_qw])
+
+
+            # body rates go out at full precision: rounding them to 0.1 rad/s (5.7 deg/s) fed the
+            # trackers' x0 a quantised rate on every rig flight to 8 Oct (Tejen found it in his copy, 4b34d768)
+
+            # Format with constant width, including sign and padding. Gated:
+            # at full mocap rate this alone throttles the receive loop.
+            if MOCAP_DEBUG_PRINT:
+                deg_wx = np.degrees(low_pass_wx)
+                deg_wy = np.degrees(low_pass_wy)
+                deg_wz = np.degrees(low_pass_wz)
+                print(
+                    f"Angular velocity (body frame): "
+                    f"wx={low_pass_wx:+08.4f} rad/s ({deg_wx:+08.2f}°/s), "
+                    f"wy={low_pass_wy:+08.4f} rad/s ({deg_wy:+08.2f}°/s), "
+                    f"wz={low_pass_wz:+08.4f} rad/s ({deg_wz:+08.2f}°/s)"
+                )
+
+
+
+
+            
+            return ObjectData(
+                id=obj_id,
+                position=(r_x, r_y, r_z),
+                rotation=(r_qw, r_qx, r_qy, r_qz),
+                velocity=(low_pass_vx, low_pass_vy, low_pass_vz),  # Use Butterworth-filtered velocity
+                angular_velocity=(low_pass_wx, low_pass_wy, low_pass_wz)  # Use Butterworth-filtered angular velocity
+            )
+        except Exception:
+            return None
+        
+    
+
+class MotionCapturePublisher(Node):
+    def __init__(self):
+        super().__init__('udp_to_pose_node')
+        # Motive rigid-body ids as parameters so a different project can be typed at the
+        # rig (defaults = the constants above; -1 = no such body). drone i = drone_body_ids[i].
+        ids = [int(v) for v in self.declare_parameter(
+            'drone_body_ids', list(RIGID_BODY_TO_DRONE.keys())).value]
+        self.body_to_drone = {rb: i for i, rb in enumerate(ids)}
+        payload = int(self.declare_parameter(
+            'payload_body_id', -1 if PAYLOAD_RIGID_BODY_ID is None else PAYLOAD_RIGID_BODY_ID).value)
+        tip = int(self.declare_parameter(
+            'magnet_tip_body_id',
+            -1 if MAGNET_TIP_RIGID_BODY_ID is None else MAGNET_TIP_RIGID_BODY_ID).value)
+        self.payload_body_id = None if payload < 0 else payload
+        self.magnet_tip_body_id = None if tip < 0 else tip
+        # extra bodies, each to its own topic ('' = none, the default)
+        self.extra_bodies = parse_extra_bodies(self.declare_parameter('extra_bodies', '').value)
+        # the drones the velocity filter below covers ([] = every drone; attach mode leaves its newcomer out)
+        self.vel_filter_drones = list(self.declare_parameter('vel_filter_drones', [-1]).value)
+        # map -> drone_<id> on every drone frame; the rig's RViz uses fleet_viz's drone_<i>_mocap frames instead, so
+        # real_io_launch turns it off (14 Oct load cut: ~360 TF messages/s from the node every pose passes through)
+        self.publish_drone_tf = bool(self.declare_parameter('publish_drone_tf', True).value)
+        # more magnet tips, each a PoseStamped on its own topic ('' = none, the default)
+        self.tip_bodies = parse_tip_bodies(self.declare_parameter('tip_bodies', '').value)
+        taken = set(self.body_to_drone) | {self.payload_body_id, self.magnet_tip_body_id}
+        clash = sorted(set(self.extra_bodies) & taken)
+        if clash:
+            raise ValueError(f'extra_bodies {clash} already routed (drone, payload or magnet tip)')
+        clash = sorted(set(self.tip_bodies) & (taken | set(self.extra_bodies)))
+        if clash:
+            raise ValueError(f'tip_bodies {clash} already routed (drone, payload, magnet tip or extra body)')
+        if self.magnet_tip_body_id is not None and '/magnet_tip_pose' in self.tip_bodies.values():
+            raise ValueError('tip_bodies: /magnet_tip_pose is magnet_tip_body_id\'s topic')
+        self.get_logger().info(
+            f'MoCap bodies: drones {self.body_to_drone} (id -> drone), payload '
+            f'{self.payload_body_id}, magnet tip {self.magnet_tip_body_id}'
+            + (f', more tips {self.tip_bodies}' if self.tip_bodies else '')
+            + (f', extra {self.extra_bodies}' if self.extra_bodies else ''))
+
+        # ROS2 Publishers: one per drone, keyed by drone_id, publishing to
+        # /drone_<drone_id>/motion_capture_state (see RIGID_BODY_TO_DRONE above).
+        self.drone_publishers = {
+            drone_id: self.create_publisher(
+                MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', 10)
+            for drone_id in self.body_to_drone.values()}
+        self.pose_publisher = self.create_publisher(PoseStamped, '/rviz_pose', 10)
+        self.magnet_tip_publisher = self.create_publisher(PoseStamped, '/magnet_tip_pose', 10)
+        self.magnet_tip_parser = ParseData()
+        self.payload_publisher = self.create_publisher(
+            MotionCaptureState, '/payload/motion_capture_state', 10)
+        self.extra_publishers = {rb: self.create_publisher(MotionCaptureState, topic, 10)
+                                 for rb, topic in self.extra_bodies.items()}
+        self.tip_publishers = {rb: self.create_publisher(PoseStamped, topic, 10)
+                               for rb, topic in self.tip_bodies.items()}
+        # TF broadcaster so RViz can render each drone live (map -> drone_<id>).
+        self.tf_broadcaster = TransformBroadcaster(self)
+        # UDP Setup
+        self.HOST = MOCAP_UDP_HOST
+        self.PORT = MOCAP_UDP_PORT
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.HOST, self.PORT))
+        
+        self.get_logger().info(f'Listening for UDP on {self.HOST}:{self.PORT}')
+
+        
+
+    def clean_message(self, message: str) -> str:
+        message = message.replace('-(', '|').replace(')-', '|')
+        message = message.replace('(', '').replace(')', '')
+        message = message.strip()
+        message = message.replace('||', '|')
+        return message
+    
+    def create_motion_capture_state_msg(self, obj_data: ObjectData) -> MotionCaptureState:
+        msg = MotionCaptureState()
+        
+        # Set header
+        msg.header = Header()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = obj_data.id
+        
+        # Set pose
+        msg.pose = Pose()
+        msg.pose.position.x = obj_data.position[0]
+        msg.pose.position.y = obj_data.position[1]
+        msg.pose.position.z = obj_data.position[2]
+        msg.pose.orientation.w = obj_data.rotation[0]
+        msg.pose.orientation.x = obj_data.rotation[1]
+        msg.pose.orientation.y = obj_data.rotation[2]
+        msg.pose.orientation.z = obj_data.rotation[3]
+        
+        # Set twist (velocity)
+        msg.twist = Twist()
+        msg.twist.linear.x = obj_data.velocity[0]
+        msg.twist.linear.y = obj_data.velocity[1]
+        msg.twist.linear.z = obj_data.velocity[2]
+        msg.twist.angular.x = obj_data.angular_velocity[0]
+        msg.twist.angular.y = obj_data.angular_velocity[1]
+        msg.twist.angular.z = obj_data.angular_velocity[2]
+        
+        return msg
+
+
+    def create_pose_stamped_msg(self, obj_data: ObjectData) -> PoseStamped:
+        msg = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg.pose = self.create_motion_capture_state_msg(obj_data).pose
+        return msg
+
+    def broadcast_drone_tf(self, drone_id, obj_data):
+        """Broadcast map -> drone_<id> from the MoCap pose so RViz shows it live."""
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = MOCAP_WORLD_FRAME
+        t.child_frame_id = f'drone_{drone_id}'
+        t.transform.translation.x = float(obj_data.position[0])
+        t.transform.translation.y = float(obj_data.position[1])
+        t.transform.translation.z = float(obj_data.position[2])
+        t.transform.rotation.w = float(obj_data.rotation[0])
+        t.transform.rotation.x = float(obj_data.rotation[1])
+        t.transform.rotation.y = float(obj_data.rotation[2])
+        t.transform.rotation.z = float(obj_data.rotation[3])
+        self.tf_broadcaster.sendTransform(t)
+
+    def run(self):
+        # A SEPARATE parser per rigid body: ParseData holds per-object velocity
+        # filter state, so sharing one across drones would corrupt their twists.
+        self.payloadParseData = ParseData()
+        self.drone_parsers = {drone_id: ParseData()
+                              for drone_id in self.body_to_drone.values()}
+        extra_parsers = {rb: ParseData() for rb in self.extra_bodies}
+        tip_parsers = {rb: ParseData() for rb in self.tip_bodies}
+        # card 2026-10-14_tracker_timing: another velocity filter on the carrier drones only (the ring, tip, ball and
+        # QUAD4 feed his stack, our planner and the cable estimate, and keep the old filter). slope is the default
+        # since Wesley's decision of 28 Oct (hE1/hS1); MDC_MOCAP_VEL_FILTER=ema flies the old filter
+        mode = os.environ.get('MDC_MOCAP_VEL_FILTER', 'slope').strip()
+        if mode != 'ema':
+            typed = os.environ.get('MDC_MOCAP_VEL_DRONES', '').strip()
+            if typed:
+                drones = [int(v) for v in typed.split(',') if v.strip()]
+            elif self.vel_filter_drones and self.vel_filter_drones != [-1]:
+                drones = [int(v) for v in self.vel_filter_drones]
+            else:
+                drones = sorted(self.drone_parsers)
+            frames = int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4'))
+            for d in drones:
+                if d in self.drone_parsers:
+                    self.drone_parsers[d].vel_filter = VelocityFilter(mode, frames=frames)
+            self.get_logger().warn(f'velocity filter {mode} ({frames} frames) on drones {drones}; the rest ema')
+        # the ring's own filter (card 2026-10-22_velocity_filter, the ring arm; critic before the rig): off = ema
+        ring_mode = os.environ.get('MDC_MOCAP_VEL_RING', 'ema').strip()
+        if ring_mode != 'ema':
+            self.payloadParseData.vel_filter = VelocityFilter(ring_mode, frames=int(os.environ.get('MDC_MOCAP_VEL_FRAMES', '4')))
+            self.get_logger().warn(f'velocity filter {ring_mode} on the ring')
+        # a quad whose pose text stops changing is lost, not still (card 2026-11-11_frozen_pose_guard; RIG-1111-fm9c_6):
+        # its poses are withheld so the pose watchdogs see the loss. The quads only: the ring, the magnet marker and
+        # the object do freeze at rest or under a quad, and their readers must keep getting them (the card's critic, F1).
+        frozen = FrozenPoseFilter(float(os.environ.get('MDC_MOCAP_FROZEN_S', '0') or 0.0))
+        if frozen.window_s > 0.0:
+            self.get_logger().warn(f'frozen-pose guard: a quad sending one pose for more than {frozen.window_s:.2f} s '
+                                   f'is withheld until its pose changes')
+        # Per-rigid-body publish throttle. Keyed by rb_id; the decimation happens
+        # before parse_packet so the velocity dt widens with the actual spacing.
+        min_period = (1.0 / MOCAP_MAX_PUBLISH_HZ) if MOCAP_MAX_PUBLISH_HZ > 0 else 0.0
+        last_pub = {}
+        try:
+            while rclpy.ok():
+                data, _ = self.sock.recvfrom(255)
+                # A bad packet must skip, never leave this loop: every pose would go
+                # stale and the pose watchdog would disarm the fleet.
+                try:
+                    message = data.decode().strip()
+                except UnicodeDecodeError:
+                    continue
+
+                data = self.clean_message(message)
+                try:
+                    if not data or '|' not in data:
+                        print("Invalid data format, skipping packet.")
+                        continue
+
+                    parts = [p.strip() for p in data.split('|') if p.strip()]
+                    if len(parts) != 3:
+                        print("Invalid parts length.")
+                        continue
+
+                    obj_id, pos_str, rot_str = parts
+                except Exception:
+                    print("Error")
+                    continue
+
+                # Route by rigid-body ID: extract the integer id from obj_id and
+                # look it up in RIGID_BODY_TO_DRONE (payload id handled first).
+                m = re.search(r'-?\d+', obj_id)
+                rb_id = int(m.group()) if m else None
+
+                if rb_id in self.body_to_drone:
+                    live = frozen.allow(rb_id, (pos_str, rot_str), time.time())
+                    for body, what, held_s in frozen.events:
+                        quad = self.body_to_drone[body]
+                        if what == 'frozen':
+                            self.get_logger().error(
+                                f'MOCAP FROZEN: QUAD{quad + 1} (body {body}) has sent one pose for {held_s:.2f} s, so '
+                                f'motion capture has lost it: its poses are withheld until they change')
+                        else:
+                            self.drone_parsers[quad].reseed()
+                            self.get_logger().warn(f'mocap live again: QUAD{quad + 1} (body {body}), after '
+                                                   f'{held_s:.2f} s on one pose')
+                    frozen.events.clear()
+                    if not live:
+                        continue
+
+                # Throttle per body: the stream runs far faster than any
+                # subscriber needs, and every extra message is a callback in
+                # each controller (own pose + payload), which starves their
+                # 50 Hz control loop.
+                if min_period > 0.0 and rb_id is not None:
+                    now_t = time.time()
+                    if now_t - last_pub.get(rb_id, 0.0) < min_period:
+                        continue
+                    last_pub[rb_id] = now_t
+
+                if rb_id is not None and rb_id == self.payload_body_id:
+                    obj_data = self.payloadParseData.parse_packet(data)
+                    if obj_data is not None:
+                        self.payload_publisher.publish(
+                            self.create_motion_capture_state_msg(obj_data))
+                elif rb_id is not None and rb_id == self.magnet_tip_body_id:
+                    obj_data = self.magnet_tip_parser.parse_packet(data)
+                    if obj_data is not None:
+                        self.magnet_tip_publisher.publish(self.create_pose_stamped_msg(obj_data))
+                elif rb_id in self.body_to_drone:
+                    drone_id = self.body_to_drone[rb_id]
+                    obj_data = self.drone_parsers[drone_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.drone_publishers[drone_id].publish(
+                            self.create_motion_capture_state_msg(obj_data))
+                        if self.publish_drone_tf:
+                            self.broadcast_drone_tf(drone_id, obj_data)
+                elif rb_id in tip_parsers:
+                    obj_data = tip_parsers[rb_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.tip_publishers[rb_id].publish(self.create_pose_stamped_msg(obj_data))
+                elif rb_id in extra_parsers:
+                    obj_data = extra_parsers[rb_id].parse_packet(data)
+                    if obj_data is not None:
+                        self.extra_publishers[rb_id].publish(
+                            self.create_motion_capture_state_msg(obj_data))
+                # else: unknown rigid body -> ignore
+
+                
+        except KeyboardInterrupt:
+            self.get_logger().info('Shutting down...')
+        finally:
+            self.sock.close()
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MotionCapturePublisher()
+    
+    try:
+        node.run()
+    except Exception as e:
+        node.get_logger().error(f'Error: {str(e)}')
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

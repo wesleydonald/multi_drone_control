@@ -1,0 +1,236 @@
+"""
+utility_objects/callback_manager.py
+────────────────────────────────────
+Per-drone scoped callbacks.  All topics and services are namespaced
+under /drone_<id>/ so the central controller can target each drone individually
+"""
+
+import rclpy
+import time
+import threading
+import numpy as np
+import os
+import signal
+
+from rclpy.clock import Clock, ClockType
+from std_msgs.msg import String, Bool
+from interfaces.msg import MotionCaptureState, Telemetry, ELRSCommand
+from interfaces.srv import SetArming
+
+
+class CallbackManagerMulti:
+    def __init__(self, node, drone_id: int = 0, USE_MOTION_CAPTURE: bool = True):
+        self.node = node
+        self.drone_id = drone_id
+        self.use_motion_capture = USE_MOTION_CAPTURE
+
+        # Wall clock for pose-timeout watchdog (independent of sim time)
+        self._wall_clock = Clock(clock_type=ClockType.SYSTEM_TIME)
+
+        # ── Publishers ────────────────────────────────────────────────────
+        self.cmd_publisher_ = self.node.create_publisher(ELRSCommand, f'/drone_{drone_id}/ELRSCommand', 1)
+
+        self.arming_state_publisher_ = self.node.create_publisher(Bool, f'/drone_{drone_id}/arming_state_feedback', 5)
+
+        # ── Subscriptions ─────────────────────────────────────────────────
+        self.pose_subscription_ = self.node.create_subscription(
+            MotionCaptureState, f'/drone_{drone_id}/motion_capture_state', self.pose_callback, 5)
+
+        self.telemetry_subscription_ = self.node.create_subscription(
+            Telemetry, f'/drone_{drone_id}/telemetry',
+            self.telemetry_callback, 5)
+
+        # Per-drone command topic (fleet manager writes here)
+        self.command_subscription_ = self.node.create_subscription(
+            String,
+            f'/drone_{drone_id}/command',
+            self.command_callback, 5)
+
+        # ── Services ──────────────────────────────────────────────────────
+        # Scoped per drone so the fleet manager can arm/disarm individually
+        self.arming_service_ = self.node.create_service(
+            SetArming,
+            f'/drone_{drone_id}/arming_service',
+            self.handle_arming_service)
+
+        # ── Internal state ────────────────────────────────────────────────
+        self.motion_capture_pose = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Pose callback
+    # ─────────────────────────────────────────────────────────────────────
+
+    def pose_callback(self, msg: MotionCaptureState):
+        p, o = msg.pose.position, msg.pose.orientation
+        lv, av = msg.twist.linear, msg.twist.angular
+
+        arr = np.round(np.array([
+            p.x, p.y, p.z,
+            o.w, o.x, o.y, o.z,
+            lv.x, lv.y, lv.z,
+            av.x, av.y, av.z
+        ]), 3)
+
+        self.motion_capture_pose = arr
+
+        if self.use_motion_capture:
+            self.node.current_pose = arr
+            # Update wall-clock timestamp for pose-timeout watchdog
+            # the node's watchdog clock (tracker: wall on the rig, sim in the twin)
+            self.node.last_pose_update_time = getattr(self.node, '_safety_clock', self._wall_clock).now()
+
+            if hasattr(self.node, "ukf_update_from_current_pose"):
+                self.node.ukf_update_from_current_pose()
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Arming service handler
+    # ─────────────────────────────────────────────────────────────────────
+
+    def handle_arming_service(self, request, response):
+        if request.arm:
+            # Optional pre-arm interlock (finding F3). A node may define
+            # `safety_preflight_block()` returning a reason string to refuse arming,
+            # or None to allow it. Nodes that do not define it are unaffected, so
+            # this changes nothing for any existing controller.
+            block = None
+            hook = getattr(self.node, 'safety_preflight_block', None)
+            if callable(hook):
+                try:
+                    block = hook()
+                except Exception as e:                  # never let a check wedge arming
+                    self.node.get_logger().warn(
+                        f"[Drone {self.drone_id}] preflight check errored: {e}")
+            if block:
+                response.success = False
+                response.message = f"Drone {self.drone_id}: arming blocked — {block}"
+                self.node.get_logger().error(
+                    f"[Drone {self.drone_id}] ARMING BLOCKED: {block}")
+                self.publish_arming_state()
+                return response
+
+            if self.node.current_pose is not None:
+                self.node.armed = True
+                response.success = True
+                response.message = f"Drone {self.drone_id} armed successfully"
+                self.node.get_logger().info(
+                    f"[Drone {self.drone_id}] Armed via service.")
+            else:
+                response.success = False
+                response.message = f"Drone {self.drone_id}: cannot arm — no pose data"
+                self.node.get_logger().warn(
+                    f"[Drone {self.drone_id}] Arming failed: no pose data.")
+        else:
+            # a disarm before any TAKEOFF (a refused ARM) keeps the controller up for the next
+            # ARM; after a flight it shuts down as before
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
+            # a drone disarmed alone at its rest while the fleet still flies keeps its process up (one-shot):
+            # a tracker exiting mid-flight stalled the graph ~0.5 s and two carriers timed out on pose (R1378)
+            keep = bool(getattr(self.node, 'keep_alive_on_disarm', False))
+            self.node.keep_alive_on_disarm = False
+            if flown:
+                self.node.has_flown = True          # so the fleet's disarm after LANDED still closes it
+            self.node.armed = False
+            self.node.takeoff_requested = False
+            self.node.shutdown_requested = flown and not keep
+            response.success = True
+            response.message = (f"Drone {self.drone_id} disarmed alone — controller stays up" if flown and keep
+                                else f"Drone {self.drone_id} disarmed — shutting down controller" if flown
+                                else f"Drone {self.drone_id} disarmed before takeoff — ready to ARM again")
+            self.node.get_logger().info(
+                f"[Drone {self.drone_id}] Disarmed via service — "
+                + ("staying up (disarmed alone; the fleet still flies)." if flown and keep
+                   else "initiating shutdown." if flown else "staying up for the next ARM."))
+
+        self.publish_arming_state()
+        return response
+
+    # ─────────────────────────────────────────────────────────────────────
+    # String command callback
+    # ─────────────────────────────────────────────────────────────────────
+
+    def command_callback(self, msg: String):
+        command = msg.data.strip().upper()
+
+        if command == "ARM":
+            if self.node.current_pose is not None:
+                self.node.armed = True
+                self.node.get_logger().info(
+                    f"[Drone {self.drone_id}] Armed via command topic.")
+                self.publish_arming_state()
+            else:
+                self.node.get_logger().warn(
+                    f"[Drone {self.drone_id}] Cannot arm: no pose data.")
+
+        elif command == "DISARM":
+            flown = bool(self.node.takeoff_requested) or bool(getattr(self.node, 'has_flown', False))
+            self.node.armed = False
+            self.node.takeoff_requested = False
+            self.node.shutdown_requested = flown
+            self.node.get_logger().info(
+                f"[Drone {self.drone_id}] Disarmed via command topic.")
+            self.publish_arming_state()
+
+        elif command == "TAKEOFF":
+            if self.node.armed:
+                self.node.takeoff_requested = True
+                self.node.has_flown = True
+                self.node.get_logger().info(
+                    f"[Drone {self.drone_id}] Takeoff requested.")
+            else:
+                self.node.get_logger().warn(
+                    f"[Drone {self.drone_id}] Cannot takeoff: not armed.")
+
+        else:
+            self.node.get_logger().warn(
+                f"[Drone {self.drone_id}] Unknown command: '{command}'")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Helpers
+    # ─────────────────────────────────────────────────────────────────────
+
+    def publish_arming_state(self):
+        msg = Bool()
+        msg.data = self.node.armed
+        self.arming_state_publisher_.publish(msg)
+
+    def telemetry_callback(self, msg: Telemetry):
+        self.node.battery_voltage = msg.battery_voltage
+
+    def request_shutdown(self):
+        if getattr(self, '_shutdown_said', False):
+            return
+        self._shutdown_said = True
+        self.node.get_logger().info(
+            f"[Drone {self.drone_id}] Shutdown requested — closing controller.")
+
+        def shutdown_thread():
+            time.sleep(0.1)
+            self.node.on_close()
+            try:
+                self.node.destroy_node()
+            except Exception:
+                pass
+            try:
+                rclpy.shutdown()
+            except Exception:
+                pass
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        thread = threading.Thread(target=shutdown_thread, daemon=True)
+        thread.start()
+
+    def safety_disarm(self, msg: ELRSCommand):
+        self.node.armed = False
+        self.node.takeoff_requested = False
+        self.node.get_logger().warn(
+            f"[Drone {self.drone_id}] Safety disarm triggered.")
+        self.cmd_publisher_.publish(msg)
+        self.publish_arming_state()
+
+    def disarm(self, msg: ELRSCommand):
+        self.node.armed = False
+        self.node.takeoff_requested = False
+        self.node.get_logger().warn(
+            f"[Drone {self.drone_id}] Disarm triggered.")
+        self.cmd_publisher_.publish(msg)
+        self.publish_arming_state()

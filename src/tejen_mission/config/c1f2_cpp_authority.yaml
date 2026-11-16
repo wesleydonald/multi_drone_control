@@ -1,0 +1,20 @@
+online_join_planner:
+  ros__parameters:
+    # R6.3C.1F.2 simulation authority integration.
+    # online_join_planner remains the only /join_planner/reference publisher.
+    # During TRANSIT_TO_DROP_POINT it selects the fresh 61-sample C++ reference
+    # after a stage-0 p/v/a continuity gate passes.
+    c1f1_shadow_transfer_enabled: true
+    c1f2_cpp_authority_enabled: true
+
+    c1f1_shadow_target_topic: /dynamic_planner/transfer_target
+    c1f1_shadow_enable_topic: /dynamic_planner/transfer_enable
+    c1f1_shadow_reference_topic: /dynamic_planner/transfer_reference
+    c1f1_shadow_status_topic: /dynamic_planner/transfer_status
+    c1f1_shadow_reference_timeout_s: 0.20
+
+    # Commissioning handoff gate. These are reference-to-reference tolerances,
+    # not physical tracking tolerances.
+    c1f2_handoff_position_tolerance_m: 0.05
+    c1f2_handoff_velocity_tolerance_mps: 0.20
+    c1f2_handoff_acceleration_tolerance_mps2: 0.50

@@ -1,0 +1,20 @@
+# 4 -> 2 -> 4 in hover (the 18 Nov sheet; Wesley 13 Nov): attach_m1_1m_m2a_drop55_det15.yaml (the M2A ring, the attach
+# switches, the 55 deg drop, the 15 cm loss check) plus the chain's rules of chain_pair_attach_1m.yaml (Wesley 27 Oct):
+# the gap rule with two survivors, so the pair 0/6 flies on after the set detach, and the height-only model integral.
+# Gate thresholds: Wesley's word. The partners' records are in partners_424.yaml. A launch reads one params file.
+newcomer_lifecycle: true
+newcomer_fault_land: true
+departed_ground_idle: true
+drop_takes_back: true
+drop_on_loss: true
+drop_gap_deg: 200.0
+min_survivors: 2
+drop_tilt_deg: 55.0
+int_k_xy: 0.0
+load_mass: 0.86
+load_ixx: 0.02733
+load_izz: 0.05452
+attach_radius: 0.225
+attach_z: 0.0175
+payload_rest_z: 0.0275
+detach_detect_m: 0.15

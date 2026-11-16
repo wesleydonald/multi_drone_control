@@ -1,0 +1,1165 @@
+#!/usr/bin/env python3
+"""
+tools/run_experiment.py — headless Gazebo experiment runner (THESIS_PLAN §9.1)
+
+One command runs a Gazebo experiment and writes a self-describing result directory.
+
+    ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml
+    ./tools/run_experiment.py configs/experiments/attach_ring_45_gz.yaml --repeats 5
+    ./tools/run_experiment.py <cfg> --gui        # watch it, for debugging only
+    ./tools/run_experiment.py <cfg> --record     # + an mp4 per camera, rendered after the run
+
+Requirements, each earned by a past failure (§9.1):
+
+  * HEADLESS (`gz sim -s -r`) so batches run overnight.
+  * SIM-TIME GATED, never wall-clock. Unequal sweep durations have invalidated
+    comparisons here before; see runner_node.py.
+  * CLEAN SLATE every run via tools/clean_slate.sh, and it must SUCCEED -- a leftover
+    planner publishing to the same tracker corrupts every number in the run and nothing
+    in the logs says so.
+  * MANIFEST + READ-BACK PARAMETER DUMP: what the nodes actually got, not what the YAML
+    asked for. Launch args have silently failed to plumb through, and a run that cannot
+    prove what it flew is not evidence.
+  * AUTO-METRICS on completion, so a finished run is already readable.
+  * FAILS LOUDLY on pose timeout, fleet abort, criteria violation, or a duration
+    mismatch >10% across repeats.
+
+Exit code is nonzero if any repeat fails or a criterion is violated.
+
+RELATIONSHIP TO tools/sil_bench.py: same result layout, same log schema, same metrics.
+That bench replaces Gazebo with a numpy plant to iterate in seconds; this one is the
+real simulator and is what a bench result must eventually be checked against.
+"""
+import argparse
+import contextlib
+import csv
+import math
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+
+from experiment.config import ExperimentConfig, params_file_path  # noqa: E402
+from run_dir import allocate, file_sha256, write_manifest  # noqa: E402
+
+
+# ── process management ───────────────────────────────────────────────────────
+
+def clean_slate(strict=True):
+    """Return the machine to a known-clean state, and REFUSE TO RUN if it will not go.
+
+    sil_bench.py can be relaxed about this because it owns its own plant and topics.
+    Here a stale bridge or planner from a previous Gazebo run is invisible and
+    corrupting, which is the failure clean_slate.sh was written for."""
+    script = os.path.join(REPO, 'tools', 'clean_slate.sh')
+    if not os.path.exists(script):
+        raise SystemExit('tools/clean_slate.sh is missing; refusing to run dirty.')
+    r = subprocess.run([script], cwd=REPO, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT)
+    out = r.stdout.decode(errors='replace')
+    if r.returncode != 0 and strict:
+        raise SystemExit(f'clean_slate.sh failed (exit {r.returncode}); the machine is '
+                         f'not clean, so the run would be corrupt:\n{out}')
+    return out
+
+
+def start_gazebo(cfg, log_path, gui=False, nice=10):
+    """`gz sim -s -r <world>` -- server only, running immediately.
+
+    `-s` (server, no GUI) is what makes a batch possible; `-r` starts the world
+    unpaused, without which /clock never advances and every sim-time deadline in the
+    runner waits forever."""
+    if shutil.which('gz') is None:
+        raise SystemExit('gz is not on PATH -- Gazebo is required for this runner.')
+    world = cfg.world
+    if not os.path.isabs(world):
+        world = os.path.join(REPO, 'simulation_assets', world)
+    if not os.path.exists(world):
+        raise SystemExit(f'world not found: {world}')
+    rec = getattr(cfg, 'record', None)
+    if rec:
+        # the world with the camera models and no Sensors system: nothing renders during the run
+        from experiment.record import write_recording_world
+        world = write_recording_world(world, os.path.join(
+            os.path.dirname(os.path.dirname(log_path)), 'record', os.path.basename(world)), rec)
+    cmd = ['gz', 'sim', '-r', '-v', '2', world] if gui else \
+          ['gz', 'sim', '-s', '-r', '-v', '2', world]
+    # Gazebo below the controllers in scheduling priority: a 12-core box sat at load
+    # ~25 during these runs and the dissipative node's planner tick stretched to
+    # 0.3-0.7 s WALL (never in SIL, which has no Gazebo), tripping the trackers'
+    # 1 s wall-clock reference watchdog (R0169, R0225). Slowing the physics costs
+    # only wall time; starving a controller costs the run.
+    if getattr(cfg, 'gz_record', False) or rec:
+        # a recording plays back at real speed in the GUI (`gz sim --playback <dir>`),
+        # so a headless ~0.25x run can be watched without waiting for it
+        path = os.path.join(os.path.dirname(os.path.dirname(log_path)), 'gz_record')
+        period = ['--record-period', f'{rec["period_s"]:g}'] if rec else []
+        cmd = cmd[:-1] + ['--record-path', path, *period, cmd[-1]]
+    if nice and not gui:
+        cmd = ['nice', '-n', str(int(nice))] + cmd
+    fh = open(log_path, 'w')
+    fh.write('$ ' + ' '.join(cmd) + '\n\n')
+    fh.flush()
+    # Gazebo resolves model:// against this.
+    env = dict(os.environ)
+    assets = os.path.join(REPO, 'simulation_assets')
+    env['GZ_SIM_RESOURCE_PATH'] = os.pathsep.join(
+        [assets, os.path.join(assets, 'models'),
+         env.get('GZ_SIM_RESOURCE_PATH', '')]).strip(os.pathsep)
+    p = subprocess.Popen(cmd, cwd=os.path.join(REPO, 'simulation_assets'),
+                         stdout=fh, stderr=subprocess.STDOUT,
+                         start_new_session=True, env=env)
+    return p, fh
+
+
+def start_launch_pkg(package, launch_file, argv, log_path, run_dir):
+    """A LAUNCH event's second launch (any package), logged beside the stack's."""
+    cmd = ['ros2', 'launch', package, launch_file, *argv]
+    fh = open(log_path, 'w')
+    fh.write('$ ' + ' '.join(cmd) + '\n\n')
+    fh.flush()
+    env = dict(os.environ)
+    env['MDC_RUN_DIR'] = run_dir
+    p = subprocess.Popen(cmd, cwd=launch_cwd(), stdout=fh, stderr=subprocess.STDOUT,
+                         start_new_session=True, env=env)
+    return p, fh
+
+
+def declared_launch_args(package, launch_file, _seen=None):
+    """Names a launch file declares, with those of the same-package launch files it includes.
+    Source-level, so it runs before anything is started. The control launches declare
+    theirs from bringup.profiles (launch_args.py)."""
+    import launch_args
+    if package == 'bringup' and launch_file in launch_args.CONTROL:
+        p = launch_args.profiles()
+        return set(p.kept(launch_args.CONTROL[launch_file])) | {'mode', 'params_file'}
+    _seen = set() if _seen is None else _seen
+    d = os.path.join(REPO, 'src', package, 'launch')
+    path = os.path.join(d, launch_file)
+    if path in _seen or not os.path.exists(path):
+        return set()
+    _seen.add(path)
+    text = open(path).read()
+    names = set(re.findall(r"DeclareLaunchArgument\(\s*['\"](\w+)['\"]", text))
+    included = included_launch_files(text)
+    for other in os.listdir(d):
+        if other != launch_file and other in included:
+            names |= declared_launch_args(package, other, _seen)
+    return names
+
+
+def included_launch_files(text):
+    """Basenames of the launch files a launch source really includes: string constants
+    inside a PythonLaunchDescriptionSource(...) call. A name in a comment or docstring
+    declares nothing."""
+    import ast
+    out = set()
+    for node in ast.walk(ast.parse(text)):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if (f.id if isinstance(f, ast.Name) else getattr(f, 'attr', None)) != 'PythonLaunchDescriptionSource':
+            continue
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                out.add(os.path.basename(sub.value))
+    return out
+
+
+def undeclared_launch_args(cfg):
+    """Config args the launch knows neither as an argument nor (control launches) as a
+    params_file knob. `ros2 launch` ignores an undeclared argument without a word, so the
+    run would fly the default the config meant to change."""
+    import launch_args
+    if cfg.launch_package == 'bringup' and cfg.launch_file in launch_args.CONTROL:
+        bad = [f'{cfg.launch_file}: {k}' for k in launch_args.unknown(cfg.launch_file, cfg.launch_args)]
+    else:
+        bad = []
+        names = declared_launch_args(cfg.launch_package, cfg.launch_file)
+        if names:
+            bad += [f'{cfg.launch_file}: {k}' for k in cfg.launch_args if k not in names]
+    names = declared_launch_args('bringup', cfg.io_launch_file)
+    if names:                            # launch not found here: start_launch reports it
+        bad += [f'{cfg.io_launch_file}: {a.split(":=")[0]}' for a in cfg.io_launch_argv()
+                if a.split(':=')[0] not in names]
+    return bad
+
+
+def launches_up(cfg, started):
+    """True once `started` LAUNCH-event launches cover every LAUNCH event of the config (a config with one: at once)."""
+    return started >= sum(1 for e in cfg.events if e.do == 'LAUNCH')
+
+
+def launch_cwd():
+    """Working directory of the launches: the planner generates its solver relative to it
+    (the solvers themselves follow MDC_ACADOS_ROOT), so parallel lab slots set MDC_LAUNCH_CWD to their own dir."""
+    return os.environ.get('MDC_LAUNCH_CWD') or REPO
+
+
+def rate_source(cfg):
+    """The sim Betaflight bridges' rate loop source a config flies: 'imu' (the default of
+    every launch since 2026-09-28) unless every rate_source it sets is 'pose'."""
+    told = [str(a['rate_source']) for a in (cfg.launch_args, cfg.io_launch_args)
+            if 'rate_source' in a]
+    return 'pose' if told and all(v == 'pose' for v in told) else 'imu'
+
+
+def require_imu_world(cfg, cfg_path):
+    """rate_source imu needs the world's Imu system: without it the gyros never publish,
+    the bridges send no motor command and the run sits on the floor until its timeout."""
+    try:
+        from simulation_communication.imu_world import require_imu_world as check
+    except ImportError:
+        sys.path.insert(0, os.path.join(REPO, 'src', 'simulation_communication'))
+        from simulation_communication.imu_world import require_imu_world as check
+    world = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
+    try:
+        check(world, why=f'{cfg_path}: rate_source imu')
+    except RuntimeError as err:
+        raise SystemExit(str(err))
+
+
+def gz_world_name(cfg):
+    import re
+    path = os.path.join(REPO, 'simulation_assets', cfg.world)
+    m = re.search(r'<world name="([^"]+)"', open(path).read())
+    return m.group(1) if m else 'quadcopter'
+
+
+def gz_pause(world, pause):
+    subprocess.run(['gz', 'service', '-s', f'/world/{world}/control',
+                    '--reqtype', 'gz.msgs.WorldControl', '--reptype', 'gz.msgs.Boolean',
+                    '--timeout', '5000', '--req', f'pause: {"true" if pause else "false"}'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+    print(f'    world {world} {"PAUSED" if pause else "resumed"}')
+
+
+def topic_flowing(topic, timeout=30):
+    try:
+        r = subprocess.run(['ros2', 'topic', 'echo', '--once', '--no-arr', topic],
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout)
+        ok = r.returncode == 0 and bool(r.stdout.strip())
+    except subprocess.TimeoutExpired:
+        ok = False
+    print(f'    {topic}: {"publishing" if ok else "SILENT"}')
+    return ok
+
+
+def wait_launch_settled(node, proc, timeout=240.0, quiet_s=20.0):
+    """Block (world paused) until the launch's node count has stopped growing for
+    quiet_s, i.e. its processes finished importing and building."""
+    import rclpy
+    t0, last_n, last_change = time.time(), -1, time.time()
+    while time.time() - t0 < timeout and proc.poll() is None:
+        rclpy.spin_once(node, timeout_sec=0.5)
+        n = len(node.get_node_names_and_namespaces())
+        if n != last_n:
+            last_n, last_change = n, time.time()
+        elif time.time() - last_change >= quiet_s:
+            break
+    print(f'    second launch settled: {last_n} nodes after {time.time() - t0:.0f}s wall')
+
+
+def start_launch(cfg, launch_file, argv, log_path, run_dir):
+    """Launch a REAL launch file, so it stays the single authority for every
+    controller parameter (same rule as the SIL bench)."""
+    if shutil.which('ros2') is None:
+        raise SystemExit(
+            'ros2 is not on PATH. Source the underlay AND this workspace:\n'
+            '    source ~/ros2_humble/install/setup.bash\n'
+            '    source install/setup.bash')
+    cmd = ['ros2', 'launch', cfg.launch_package, launch_file, *argv]
+    fh = open(log_path, 'w')
+    fh.write('$ ' + ' '.join(cmd) + '\n\n')
+    fh.flush()
+    env = dict(os.environ)
+    # Every node of this launch writes into ONE run directory (run_context.run_dir).
+    env['MDC_RUN_DIR'] = run_dir
+    p = subprocess.Popen(cmd, cwd=launch_cwd(), stdout=fh, stderr=subprocess.STDOUT,
+                         start_new_session=True, env=env)
+    return p, fh
+
+
+def wait_for_clock(timeout=30.0):
+    """Block until /clock has a publisher, i.e. the sim-interface launch's clock bridge
+    is actually up. Returns the seconds waited (or the timeout, having warned)."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            out = subprocess.check_output(['ros2', 'topic', 'info', '/clock'],
+                                          stderr=subprocess.DEVNULL,
+                                          timeout=10).decode()
+            for ln in out.splitlines():
+                if 'Publisher count' in ln and int(ln.split(':')[1]) > 0:
+                    return time.time() - t0
+        except Exception:
+            pass
+        time.sleep(0.5)
+    print(f'    !! /clock still has no publisher after {timeout:.0f}s — starting the '
+          f'control launch anyway; expect a startup timeout.')
+    return timeout
+
+
+def stop(proc, fh, name='process', sig=signal.SIGINT, grace=15):
+    if proc is not None and proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+            proc.wait(timeout=grace)
+        except Exception:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                pass
+    try:
+        if fh:
+            fh.close()
+    except Exception:
+        pass
+
+
+# ── parameter read-back ──────────────────────────────────────────────────────
+
+REQUIRED_NODE_RE = r'/(tracker_\d+|dissipative\w*|fleet_manager)$'
+
+
+def dump_params(run_dir, timeout=25, workers=8, only=None, skip=()):
+    """Ask every live node what it ACTUALLY has, and store it.
+
+    Not the launch file's declared defaults, and not the YAML: the values the running
+    nodes hold. `thrust_ratio:=20` once provably changed nothing while the launch
+    reported it fine, and only a read-back would have shown that.
+
+    RUN IN PARALLEL. `ros2 param dump` spawns a fresh Python interpreter and redoes
+    node discovery every call, ~5-7 s each, and this launch has ~30 nodes. Serially that
+    was several MINUTES of dead wall time per run -- the single largest cost in the
+    harness, larger than the simulation it was wrapping. The calls are independent and
+    read-only, so a thread pool collapses it to roughly one call's latency.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    out_dir = os.path.join(run_dir, 'params')
+    os.makedirs(out_dir, exist_ok=True)
+    try:
+        nodes = subprocess.check_output(['ros2', 'node', 'list'],
+                                        stderr=subprocess.DEVNULL,
+                                        timeout=timeout).decode().split()
+    except Exception as e:
+        with open(os.path.join(out_dir, 'READBACK_FAILED.txt'), 'w') as fh:
+            fh.write(f'ros2 node list failed: {e}\n')
+        return {'dumped': [], 'missing_required': ['<node list failed>'], 'n_nodes': 0}
+    if only is not None:
+        nodes = [n for n in nodes if re.search(only, n)]
+    if skip:
+        nodes = [n for n in nodes if not re.search(skip, n)]
+
+    def one(node):
+        try:
+            d = subprocess.check_output(['ros2', 'param', 'dump', node],
+                                        stderr=subprocess.DEVNULL,
+                                        timeout=timeout).decode()
+        except Exception:
+            return None
+        if not d.strip():
+            return None
+        with open(os.path.join(out_dir, node.strip('/').replace('/', '__') + '.yaml'),
+                  'w') as fh:
+            fh.write(d)
+        return node
+
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        got = set(x for x in ex.map(one, nodes) if x)
+    # Retry the stragglers serially. The busiest nodes are the ones that miss under
+    # concurrency -- the acados trackers are servicing a 50 Hz control loop -- and they
+    # are also the only ones whose parameters this file exists to prove.
+    missed = [n for n in nodes if n not in got]
+    for node in missed:
+        if one(node):
+            got.add(node)
+
+    # A read-back that quietly omits the CONTROLLERS is worse than none: it looks like
+    # evidence and is not. At 16 workers this dropped two trackers and the
+    # dissipative planner while happily capturing 36 bridges.
+    required = [n for n in nodes if re.search(REQUIRED_NODE_RE, n)]
+    absent = [n for n in required if n not in got]
+    label = 'param read-back' if only else 'param read-back (other nodes, after the run)'
+    print(f'    {label}: {len(got)}/{len(nodes)} nodes in '
+          f'{time.time() - t0:.1f}s' + (f' ({len(missed)} needed a retry)' if missed
+                                        else ''))
+    if absent:
+        print(f'    !! NO PARAMETER READ-BACK for {", ".join(absent)} — this run cannot '
+              f'prove what those nodes actually flew.')
+    return {'dumped': sorted(got), 'missing_required': absent,
+            'n_nodes': len(nodes)}
+
+
+# ── criteria ─────────────────────────────────────────────────────────────────
+
+def tethered_checks(c, teth):
+    """The tethered-hold criteria against metrics.tethered_run_metrics. A criterion whose
+    metric is missing FAILS: a hold that never reached its target, or a log without the
+    column, is not a pass."""
+    wanted = [k for k in ('max_planner_solve_fail', 'max_hold_z_err_m', 'max_heave_pp_m',
+                          'max_payload_vz_mps', 'min_carried_fraction', 'max_ref_age_frac',
+                          'max_hold_tilt_mean_deg', 'max_z_bias_abs') if getattr(c, k) is not None]
+    if not wanted:
+        return []
+    if not teth or 'error' in teth:
+        why = (teth or {}).get('error', 'no planner log in the run')
+        return [(f'tethered metrics ({k})', False, why) for k in wanted]
+    hold = teth.get('hold')
+    out = []
+    if hold is None and any(k in wanted for k in ('max_hold_z_err_m', 'max_heave_pp_m',
+                                                  'max_hold_tilt_mean_deg', 'max_z_bias_abs')):
+        out.append(('hold reached target', False, f'z_tgt never reached {teth.get("target_z")}'))
+    elif hold is not None and not hold.get('full'):
+        out.append(('hold window complete', False,
+                    f'hold {hold["hold_s"]:.1f} s < {c.hold_window_s:g} s window'))
+
+    def num(v):
+        return v if isinstance(v, (int, float)) and v == v else None
+    if c.max_planner_solve_fail is not None:
+        v = num((teth.get('solve_failures') or {}).get('n'))
+        out.append(('planner solve failures', v is not None and v <= c.max_planner_solve_fail,
+                    f'{v} (<={c.max_planner_solve_fail})'))
+    if c.max_hold_z_err_m is not None and hold is not None:
+        v = num(teth.get('hold_z_err_m'))
+        out.append(('hold |mean z - target|', v is not None and abs(v) <= c.max_hold_z_err_m,
+                    f'{v:+.3f} m (<={c.max_hold_z_err_m:.3f})' if v is not None else 'n/a'))
+    if c.max_heave_pp_m is not None and hold is not None:
+        hv = teth.get('heave') or {}
+        v = num(hv.get('pp_m'))
+        out.append(('hold heave p-p', v is not None and v <= c.max_heave_pp_m,
+                    (f'{v:.3f} m (<={c.max_heave_pp_m:.3f}), period {hv.get("period_s", math.nan):.1f} s'
+                     + (' [window < 3 periods]' if hv.get('short') else '')) if v is not None else 'n/a'))
+    if c.max_hold_tilt_mean_deg is not None and hold is not None:
+        v = num(teth.get('hold_tilt_mean_deg'))
+        out.append(('hold ring tilt mean', v is not None and v <= c.max_hold_tilt_mean_deg,
+                    f'{v:.2f} deg (<={c.max_hold_tilt_mean_deg:.2f})' if v is not None else 'n/a'))
+    if c.max_z_bias_abs is not None and hold is not None:
+        v = num(teth.get('hold_z_bias_max_abs'))
+        out.append(('hold |z_bias|', v is not None and v <= c.max_z_bias_abs,
+                    f'{v:.3f} m (<={c.max_z_bias_abs:.3f})' if v is not None else 'n/a'))
+    if c.max_payload_vz_mps is not None:
+        v = num(teth.get('max_payload_vz_mps'))
+        out.append(('ring |vz| hand-over to hold end', v is not None and v <= c.max_payload_vz_mps,
+                    f'{v:.3f} m/s (<={c.max_payload_vz_mps:.3f})' if v is not None else 'n/a'))
+    if c.max_ref_age_frac is not None:
+        v = num(teth.get('ref_age_frac'))
+        out.append(('airborne ref age > 0.3 s', v is not None and v <= c.max_ref_age_frac,
+                    f'{100 * v:.1f} % (<={100 * c.max_ref_age_frac:.1f} %)' if v is not None
+                    else 'n/a (no ref_age column)'))
+    if c.min_carried_fraction is not None:
+        cf = teth.get('carried_fraction') or {}
+        v = num(cf.get('hold_median', cf.get('airborne_median')))
+        out.append(('carried fraction (rod force / ring weight)',
+                    v is not None and v >= c.min_carried_fraction,
+                    f'{v:.3f} (>={c.min_carried_fraction:.3f}, {cf.get("law")} law)' if v is not None
+                    else f'n/a {cf.get("error", "")}'.strip()))
+    return out
+
+
+def evaluate(cfg, rows, t_weld, aborts, tethered=None, events=None):
+    """Apply cfg.criteria. Returns (ok, [(name, ok, detail)]). With criteria.report_only
+    every check is still listed but ok is True."""
+    c = cfg.criteria
+    if c is None:
+        return True, [('(no criteria — exploratory run)', True, '')]
+    ok, out = _evaluate(cfg, c, rows, t_weld, aborts)
+    out += tilt_cut_checks(cfg, c, rows, events or [])
+    out += tethered_checks(c, tethered)
+    ok = ok and all(o[1] for o in out)
+    if c.report_only:
+        return True, [(f'{n} (report only)', g, d) for n, g, d in out]
+    return ok, out
+
+
+MOCAP_TILT_MARGIN_S = 0.5      # s after a MOCAP_TILT's window still excluded (the emulator's last fake pose)
+ARMED_TILT_ROWS = 3            # consecutive run.csv rows (0.02 s) above the bar
+
+
+def tilt_cut_checks(cfg, c, rows, events):
+    """max_armed_tilt_deg and disarmed_after_landed_s (card 2026-10-11_quad4_tilt_cut). events: (t, name, arg)."""
+    out = []
+    if not rows or (c.max_armed_tilt_deg is None and c.disarmed_after_landed_s is None):
+        return out
+    from experiment.config import mocap_tilt_arg
+    t = np.array([r['t'] for r in rows], float)
+    if c.max_armed_tilt_deg is not None:
+        fake = {}
+        for te, name, arg in events:
+            if name == 'MOCAP_TILT':
+                d, _, secs, ramp = mocap_tilt_arg(arg)
+                fake.setdefault(d, []).append((float(te), float(te) + ramp + secs + MOCAP_TILT_MARGIN_S))
+        worst = None
+        for i in range(cfg.n_total):
+            tilt = np.array([r.get(f'd{i}_tilt_deg', math.nan) for r in rows], float)
+            armed = np.array([r.get(f'd{i}_armed', 0) for r in rows], float) > 0
+            over = armed & (tilt > c.max_armed_tilt_deg)
+            for a, b in fake.get(i, []):
+                over &= ~((t >= a) & (t <= b))
+            run = 0
+            for k in np.flatnonzero(over) if over.any() else []:
+                run = run + 1 if k > 0 and over[k - 1] else 1
+                if run >= ARMED_TILT_ROWS and worst is None:
+                    worst = (i, float(t[k]), float(tilt[k]))
+        out.append(('no armed drone over the tilt bar', worst is None,
+                    'none' if worst is None else
+                    f'drone {worst[0] + 1} armed at {worst[2]:.1f} deg at t={worst[1]:.1f}s '
+                    f'(>{c.max_armed_tilt_deg:.0f})'))
+    if c.disarmed_after_landed_s is not None:
+        landed = [float(te) for te, name, _ in events if name == 'LANDED']
+        if not landed:
+            out.append(('every drone disarmed after LANDED', True, 'no LANDED (not asserted)'))
+        else:
+            late = [r for r, tk in zip(rows, t) if tk > landed[0] + float(c.disarmed_after_landed_s)]
+            armed = [i + 1 for i in range(cfg.n_total) if any(r.get(f'd{i}_armed', 0) for r in late)]
+            out.append(('every drone disarmed after LANDED', not armed,
+                        f'still armed {c.disarmed_after_landed_s:g} s after LANDED: drone(s) {armed}' if armed
+                        else 'all disarmed' if late else 'the run ended first (not asserted)'))
+    return out
+
+
+def _evaluate(cfg, c, rows, t_weld, aborts):
+    if not rows:
+        return False, [('no data recorded', False, 'the run produced no rows')]
+    t = np.array([r['t'] for r in rows], float)
+    t0 = 0.0
+    if c.window_from == 'weld':
+        if t_weld is None:
+            return False, [('weld never happened', False,
+                            'criteria are measured from the weld')]
+        t0 = float(t_weld)
+    t1 = t0 + float(c.window_s) if c.window_s else t[-1]
+    m = (t >= t0) & (t <= t1)
+    if not np.any(m):
+        return False, [(f'no samples in [{t0:.1f}, {t1:.1f}]s', False,
+                        f'run ends at {t[-1]:.1f}s')]
+
+    def col(name):
+        return np.array([r.get(name, math.nan) for r in rows], float)[m]
+
+    out = []
+    if c.forbid_abort:
+        out.append(('no fleet abort', not aborts,
+                    aborts[0][1] if aborts else 'none'))
+    if c.require_weld:
+        out.append(('weld occurred', t_weld is not None,
+                    f'at t={t_weld:.2f}s' if t_weld is not None else 'never'))
+    if c.max_payload_tilt_deg is not None:
+        v = float(np.nanmax(col('payload_tilt_deg')))
+        out.append(('payload tilt bounded', v < c.max_payload_tilt_deg,
+                    f'peak {v:.1f} deg (<{c.max_payload_tilt_deg:.1f})'))
+    if c.max_drone_tilt_deg is not None:
+        v = max(float(np.nanmax(col(f'd{i}_tilt_deg'))) for i in range(cfg.n_total))
+        out.append(('drone tilt bounded', v < c.max_drone_tilt_deg,
+                    f'peak {v:.1f} deg (<{c.max_drone_tilt_deg:.1f})'))
+    if c.max_track_err_m is not None:
+        v = max(float(np.nanmax(col(f'd{i}_track_err'))) for i in range(cfg.n_total))
+        out.append(('tracking error bounded', v < c.max_track_err_m,
+                    f'peak {v:.2f} m (<{c.max_track_err_m:.2f})'))
+    if c.min_peak_payload_z is not None:
+        v = float(np.nanmax(col('payload_z')))
+        out.append(('payload actually lifted', v > c.min_peak_payload_z,
+                    f'peak {v:.3f} m (>{c.min_peak_payload_z:.3f})'))
+    if c.min_payload_z is not None:
+        v = float(np.nanmin(col('payload_z')))
+        out.append(('payload stayed up', v > c.min_payload_z,
+                    f'min {v:.3f} m (>{c.min_payload_z:.3f})'))
+    if c.max_payload_z is not None:
+        v = float(np.nanmax(col('payload_z')))
+        out.append(('payload stayed down', v < c.max_payload_z,
+                    f'max {v:.3f} m (<{c.max_payload_z:.3f})'))
+    return all(o[1] for o in out), out
+
+
+# ── output ───────────────────────────────────────────────────────────────────
+
+def write_logs(run_dir, rows, events, aborts, t_weld):
+    logs = os.path.join(run_dir, 'logs')
+    os.makedirs(logs, exist_ok=True)
+    csv_path = os.path.join(logs, 'run.csv')
+    if rows:
+        with open(csv_path, 'w', newline='') as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+    # One time origin with run.csv -- both are already relative to t_ready. Getting
+    # this wrong is not hypothetical: the SIL bench shipped a 33.7 s offset between
+    # these two files, which would have put every event-keyed metric in the wrong
+    # phase of the run.
+    with open(os.path.join(logs, 'events.csv'), 'w', newline='') as fh:
+        w = csv.writer(fh)
+        w.writerow(['sim_time', 'event', 'arg'])
+        for t, ev, arg in events:
+            w.writerow([f'{t:.3f}', ev, arg])
+        for t, reason in aborts:
+            w.writerow([f'{t:.3f}', 'FLEET_ABORT', reason])
+    return csv_path
+
+
+def write_metrics_and_plots(run_dir):
+    """metrics.json + the six figures, read back off the logs just written (§9.1/§9.4).
+
+    Read back rather than computed here, and computed by tools/metrics.py rather than
+    inline: §9.2 is that every number in the thesis comes from that one file, and a
+    second implementation living in the runner is exactly how two numbers for the same
+    quantity end up in the same document. Best-effort -- see plot_run.finish_run."""
+    try:
+        from plot_run import finish_run
+    except Exception as e:                           # noqa: BLE001
+        return {'error': f'analysis unavailable: {type(e).__name__}: {e}'}
+    return finish_run(run_dir)
+
+
+# ── video (experiment/record.py) ─────────────────────────────────────────────
+
+def write_record_spec(run_dir, spec, **run_times):
+    """<run>/record.json: what tools/render_video.py needs (cameras, fps; t_ready_sim is run t = 0)."""
+    import json
+    from experiment.record import TOPIC_PREFIX
+    with open(os.path.join(run_dir, 'record.json'), 'w') as fh:
+        json.dump(dict(spec, topic_prefix=TOPIC_PREFIX, **run_times), fh, indent=1)
+
+
+def render_video(run_dir):
+    """Render the run's cameras now (the stack is down). A failed render never fails the run:
+    `tools/render_video.py <run_dir>` repeats it."""
+    import json
+    print('\n    rendering the video (tools/render_video.py)...', flush=True)
+    os.makedirs(os.path.join(run_dir, 'video'), exist_ok=True)
+    with open(os.path.join(run_dir, 'video', 'render.log'), 'w') as fh:
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'render_video.py'), run_dir],
+                           stdout=fh, stderr=subprocess.STDOUT)
+    try:
+        with open(os.path.join(run_dir, 'video', 'render.json')) as fh:
+            out = json.load(fh)
+    except (OSError, ValueError):
+        out = {'cameras': {}}
+    out['exit'] = r.returncode
+    for name, c in out['cameras'].items():
+        print(f'    [{"OK" if c["ok"] else "FAIL"}] video {name}: {c["file"]} ({c["frames"]}/'
+              f'{c["expected"]} frames, {c["repeated"]} repeated)')
+    if r.returncode:
+        print(f'    !! render failed (exit {r.returncode}); see {run_dir}/video/render.log')
+    return out
+
+
+# ── one run ──────────────────────────────────────────────────────────────────
+
+def preallocated(run_dir):
+    """(path, run id) of a run directory reserved in advance (tools/remote/lab_batch.py
+    allocates ids on the laptop, because next_run_id is a directory scan and parallel
+    slots would race on it)."""
+    run_dir = os.path.abspath(run_dir)
+    m = re.match(r'(R\d{4})_', os.path.basename(run_dir))
+    if not m:
+        raise SystemExit(f'--run-dir {run_dir}: the name must start with R####_')
+    for sub in ('logs', 'plots', 'params'):
+        os.makedirs(os.path.join(run_dir, sub), exist_ok=True)
+    return run_dir, m.group(1)
+
+
+@contextlib.contextmanager
+def config_env(env):
+    """The config's lab_env in os.environ for the run (every launched process copies it), then the shell's back.
+    The config wins over a stray export: a run must fly what its config says."""
+    old = {k: os.environ.get(k) for k in env}
+    for k, v in env.items():
+        if old[k] is not None and old[k] != v:
+            print(f'    lab_env {k}={v} (the shell had {old[k]})')
+        os.environ[k] = v
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def run_once(cfg, cfg_path, gui=False, repeat=0, gz_nice=10, run_dir=None, git_state=None):
+    import rclpy
+    from experiment.runner_node import ExperimentRunner
+
+    if getattr(cfg, 'dds_udp_only', False):
+        # inherited by every launch and by this process's own rclpy participant
+        os.environ['FASTRTPS_DEFAULT_PROFILES_FILE'] = os.path.join(
+            REPO, 'configs', 'dds', 'fastdds_udp_only.xml')
+        print('    Fast DDS: UDP-only profile (no shared memory)')
+    run_dir, rid = preallocated(run_dir) if run_dir else allocate(f'gz_{cfg.name}', kind='sim')
+    readback = None            # the manifest is written on the startup-failure path too
+    print(f'\n=== Gazebo experiment: {cfg.name}  ({rid}, repeat {repeat}) ===')
+    print('   ' + cfg.summary().replace('\n', '\n   '))
+    print(f'    out:    {run_dir}')
+
+    write_manifest(run_dir, run_id=rid, kind='sim', harness='run_experiment.py',
+                   scenario=os.path.abspath(cfg_path),
+                   scenario_sha256=file_sha256(cfg_path),
+                   world=cfg.world, launch_file=cfg.launch_file,
+                   launch_args=cfg.control_args(), repeat=repeat,
+                   rate_source=rate_source(cfg), lab_env=dict(getattr(cfg, 'env', {}) or {}),
+                   headless=not gui, status='starting')
+    if git_state:
+        # the tree was synced from the laptop without .git: its SHA and diff are the provenance
+        gs = dict(git_state)
+        diff = gs.pop('diff', None)
+        if diff:
+            with open(os.path.join(run_dir, 'git_diff.patch'), 'w') as fh:
+                fh.write(diff)
+            gs['git_diff_file'] = 'git_diff.patch'
+        write_manifest(run_dir, **gs)
+
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record)
+        write_manifest(run_dir, record=cfg.record)
+    clean_out = clean_slate()
+    with open(os.path.join(run_dir, 'logs', 'clean_slate.log'), 'w') as fh:
+        fh.write(clean_out)
+
+    gz_proc = gz_fh = stack = stack_fh = io = io_fh = None
+    node = None
+    extra = []                   # LAUNCH-event processes
+    bg, bg_thread = {}, None
+    reason, failures = 'unknown', []
+    try:
+        gz_proc, gz_fh = start_gazebo(
+            cfg, os.path.join(run_dir, 'logs', 'gazebo.log'), gui=gui, nice=gz_nice)
+        # ORDER MATTERS (sim_control_launch.py's docstring):
+        # the sim-interface launch owns the /clock bridge, the pose bridges and the
+        # mocap emulators, and it must be publishing BEFORE any controller starts.
+        io, io_fh = start_launch(
+            cfg, cfg.io_launch_file, cfg.io_launch_argv(),
+            os.path.join(run_dir, 'logs', 'io_launch.log'), run_dir)
+        # Wait for the CLOCK BRIDGE specifically, rather than sleeping a fixed guess.
+        # That bridge is the thing the control launch cannot start without, and it is up
+        # in ~1-2 s -- a flat 5 s sleep was both slower than necessary and no guarantee.
+        wait_for_clock(timeout=30.0)
+        stack, stack_fh = start_launch(
+            cfg, cfg.launch_file, cfg.launch_argv(os.path.join(run_dir, 'params_file.yaml')),
+            os.path.join(run_dir, 'logs', 'launch.log'), run_dir)
+
+        rclpy.init()
+        node = ExperimentRunner(cfg, run_dir)
+
+        # ── wait for the stack (WALL clock: /clock may not exist yet) ────────
+        t0 = time.time()
+        while not node.stack_ready():
+            rclpy.spin_once(node, timeout_sec=0.1)
+            if time.time() - t0 > cfg.ready_timeout_s:
+                raise TimeoutError(
+                    f'stack not ready after {cfg.ready_timeout_s:.0f}s wall. '
+                    f'sim_t={node.sim_t} poses='
+                    f'{sum(p is not None for p in node.pose)}/{node.n} cmds='
+                    f'{sum(c is not None for c in node.cmd)}/{node.n} '
+                    f'payload={"yes" if node.payload else "no"}. '
+                    f'See logs/gazebo.log and logs/launch.log.')
+            if gz_proc.poll() is not None:
+                raise RuntimeError('Gazebo exited during startup; see logs/gazebo.log')
+            if stack.poll() is not None:
+                raise RuntimeError('the launch exited during startup; '
+                                   'see logs/launch.log')
+            if io.poll() is not None:
+                raise RuntimeError('the sim-interface launch exited during startup; '
+                                   'see logs/io_launch.log')
+        # PARAMETER DUMP BEFORE THE RUN CLOCK STARTS. `ros2 param dump` shells out once
+        # per node and blocks this thread for tens of seconds, while Gazebo -- started
+        # with -r, i.e. free-running -- keeps advancing /clock. Doing it after
+        # start_clock() latched t_ready at 5.45 s and returned at 83 s, so the schedule
+        # fired ARM, TAKEOFF, MAGNET and LAND in the same instant and the run was
+        # garbage. Here the fleet is still disarmed on its stands, so the lost sim time
+        # costs nothing.
+        # The nodes whose parameters ARE the evidence -- the trackers, the planner, the
+        # fleet manager -- are captured now, before anything flies, and their absence is
+        # fatal to the run's credibility. That is ~8 nodes and takes seconds.
+        readback = dump_params(run_dir, only=REQUIRED_NODE_RE)
+        # Everything else (bridges, mocap emulators, visualisation) is useful context
+        # but not evidence, and there are ~37 of them at ~5-25 s each. They are read back
+        # AFTER the flight, while the stack is still up: parameters do not change mid-run,
+        # and the read-back running alongside ARM/TAKEOFF stalled the whole stack for
+        # 0.3-0.4 s wall (12 of 12 pose-timeout voids on 7 Oct, R1119-R1148).
+        bg = {}
+        bg_thread = None
+        # Drain the mocap that arrived during the dump, so the watchdog starts from
+        # fresh stamps rather than pre-dump ones.
+        for _ in range(50):
+            rclpy.spin_once(node, timeout_sec=0.02)
+        node.start_clock()
+        write_manifest(run_dir, t_ready_sim=node.t_ready)
+        if not getattr(cfg, 'bg_param_dump', True):
+            print('    param read-back of the other nodes: skipped (timing.bg_param_dump false)')
+
+        # ── the run itself (SIM clock) ──────────────────────────────────────
+        last_report = time.time()
+        wall_cap = 20.0 * cfg.duration_s + 300.0     # only a hang guard, not a deadline
+        wall0 = time.time()
+        # a frozen /clock after LAND left R0256 spinning for 17 min inside the cap above:
+        # if sim time stops advancing for this long (wall), the run is over.
+        STALL_S = 60.0
+        last_sim_t, last_sim_wall = node._rel(), time.time()
+        while not node.finished():
+            rclpy.spin_once(node, timeout_sec=0.05)
+            node.fire_due_events()
+            if (cfg.stop_launch_on_handoff and extra and getattr(node, 'partner_handoff_seen', False)
+                    and not getattr(node, '_extra_stopped', False)):
+                node._extra_stopped = True           # non-blocking: the loop must keep spinning
+                for proc, _ in extra:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+                    except Exception:
+                        pass
+                print('    partner handoff: SIGINT to the LAUNCH-event launches')
+            while node.launch_requests:
+                pkg, lf, *largs = node.launch_requests.pop(0).split()
+                k = len(extra) + 1
+                # the world is PAUSED while the second launch starts: its start-up burst
+                # starved our mocap/trackers for 2-8 s of sim (R0604, R0605, R0608)
+                world = gz_world_name(cfg)
+                gz_pause(world, True)
+                proc, pfh = start_launch_pkg(
+                    pkg, lf, largs, os.path.join(run_dir, 'logs', f'extra_launch_{k}.log'),
+                    run_dir)
+                extra.append((proc, pfh))
+                wait_launch_settled(node, proc, timeout=240.0)
+                gz_pause(world, False)
+                # checked once every LAUNCH of the config is up (two of his instances: each lists its own topics)
+                silent = ([tp for tp in cfg.launch_expect_topics if not topic_flowing(tp)]
+                          if launches_up(cfg, len(extra)) else [])
+                if silent:
+                    # R0612: his planner and the ring bridge never published (their sim
+                    # clock never arrived); fail in a minute, not after the whole run
+                    failures.append(f'second launch silent on {silent}')
+                    reason = 'second launch silent'
+                    raise RuntimeError(f'second launch silent on {silent}')
+                last_sim_t, last_sim_wall = node._rel(), time.time()
+            node.resend_pending()
+            node.log_row()
+            if node.check_health():
+                reason = 'health check failed'
+                break
+            if gz_proc.poll() is not None:
+                failures.append('Gazebo exited mid-run')
+                reason = 'gazebo died'
+                break
+            if stack.poll() is not None:
+                failures.append('the controller stack exited mid-run')
+                reason = 'stack exited'
+                break
+            if node._rel() != last_sim_t:
+                last_sim_t, last_sim_wall = node._rel(), time.time()
+            elif time.time() - last_sim_wall > STALL_S:
+                failures.append(f'sim time frozen at t={node._rel():.2f} for {STALL_S:.0f} s wall')
+                reason = 'sim time stalled'
+                break
+            if time.time() - wall0 > wall_cap:
+                failures.append(
+                    f'wall-clock hang guard tripped ({wall_cap:.0f}s) at sim '
+                    f't={node._rel():.1f}/{cfg.duration_s:.1f}: sim time is not '
+                    f'advancing')
+                reason = 'sim time stalled'
+                break
+            if time.time() - last_report > 5.0:
+                last_report = time.time()
+                print(f'    t={node._rel():7.2f}s sim  '
+                      f'payload_z={node.payload[2]:.3f}  '
+                      f'tilt={node.rows[-1]["payload_tilt_deg"]:5.1f}deg'
+                      if node.rows else '    (no rows yet)')
+        else:
+            reason = node.stop_reason or 'completed'
+        failures += node.failures
+    except Exception as e:
+        failures.append(f'{type(e).__name__}: {e}')
+        reason = 'exception'
+    finally:
+        if getattr(cfg, 'bg_param_dump', True) and stack is not None and stack.poll() is None:
+            print('    param read-back of the other nodes (after the run)...')
+            try:
+                bg.update(other=dump_params(run_dir, skip=REQUIRED_NODE_RE))
+            except Exception as e:
+                print(f'    !! param read-back failed: {e}')
+        rows = list(node.rows) if node else []
+        events = list(node.event_log) if node else []
+        aborts = list(node.aborts) if node else []
+        t_weld = node.t_weld if node else None
+        if node is not None:
+            node.destroy_node()
+        try:
+            import rclpy as _r
+            if _r.ok():
+                _r.shutdown()
+        except Exception:
+            pass
+        for proc, pfh in reversed(extra):
+            stop(proc, pfh, 'extra_launch')
+        stop(stack, stack_fh, 'launch')
+        stop(io, io_fh, 'io_launch')
+        stop(gz_proc, gz_fh, 'gazebo')
+
+    # The background read-back must finish before the manifest claims what was captured.
+    try:
+        if bg_thread is not None:
+            bg_thread.join(timeout=90)
+        if bg_thread is not None and bg_thread.is_alive():
+            print('    !! background param read-back did not finish; params/ is partial')
+    except Exception:
+        pass
+
+    write_logs(run_dir, rows, events, aborts, t_weld)
+    mtr = write_metrics_and_plots(run_dir)
+    teth = (mtr or {}).get('tethered') if isinstance(mtr, dict) else None
+    c = cfg.criteria
+    try:
+        import metrics as M
+        if c is not None and c.hold_window_s != M.HOLD_WINDOW_S:
+            teth = M.tethered_run_metrics(run_dir, hold_window_s=c.hold_window_s)
+    except Exception as e:                              # noqa: BLE001
+        teth = {'error': f'{type(e).__name__}: {e}'}
+    ok, checks = evaluate(cfg, rows, t_weld, aborts, teth, events=events)
+    grounded = (mtr or {}).get('fleet_grounded') if isinstance(mtr, dict) else None
+    if grounded:
+        # a refused TAKEOFF looks like "never lifted" in the numbers (R0749): VOID, re-fly
+        failures.append(f'VOID: the fleet manager grounded the fleet before it flew ({", ".join(grounded)})')
+    ok = ok and not failures
+
+    dur = rows[-1]['t'] - rows[0]['t'] if rows else 0.0
+    wall_s = rows[-1]['wall'] - rows[0]['wall'] if rows else 0.0
+    print(f'\n    recorded {len(rows)} rows over {dur:.1f}s sim / {wall_s:.0f}s wall; exit: {reason}')
+    if t_weld is not None:
+        print(f'    weld at t={t_weld:.2f}s')
+    for name, good, detail in checks:
+        print(f'    [{"PASS" if good else "FAIL"}] {name:38s} {detail}')
+    for f in failures:
+        print(f'    !! {f}')
+
+    write_manifest(run_dir, status='finished', exit_reason=reason,
+                   param_readback=readback, param_readback_other=bg.get('other'),
+                   stopped_early=bool(node is not None and node.stop_reason),
+                   sim_duration_s=dur, n_rows=len(rows), weld_time_s=t_weld,
+                   wall_s=wall_s, mean_rtf=dur / wall_s if wall_s > 0 else None,
+                   passed=bool(ok), failures=failures,
+                   checks=[{'check': n, 'passed': bool(g), 'detail': d}
+                           for n, g, d in checks],
+                   metrics=mtr)
+    if cfg.record:
+        write_record_spec(run_dir, cfg.record, t_ready_sim=getattr(node, 't_ready', None),
+                          t_last_row=rows[-1]['t'] if rows else None)
+        if cfg.record['render']:
+            write_manifest(run_dir, video=render_video(run_dir))
+    return {'run_dir': run_dir, 'run_id': rid, 'ok': bool(ok),
+            'duration_s': dur, 'failures': failures,
+            'stopped_early': bool(node is not None and node.stop_reason)}
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+
+def checked_config(path):
+    """Load a config and refuse it before anything starts: world present, masses agree with
+    the world (unless mis_seed), IMU world for rate_source imu, every launch arg declared, a typed
+    params_file present."""
+    cfg = ExperimentConfig.from_yaml(path)
+    wpath = cfg.world if os.path.isabs(cfg.world) else os.path.join(REPO, 'simulation_assets', cfg.world)
+    if not os.path.exists(wpath):
+        raise SystemExit(f'{path}: world not found: {wpath}')
+    for sec, args in (('launch', cfg.launch_args), ('io_launch', cfg.io_launch_args)):
+        typed = args.get('params_file')
+        if typed not in (None, '') and params_file_path(typed) is None:
+            raise SystemExit(f'{path}: {sec} params_file not found: {typed}')
+    # A launch told a different mass than the world flies mis-sized tension on every
+    # drone (35 configs silently did after the 0.86 kg ring landed, 2026-09-23).
+    # Robustness arms declare `mis_seed: true`; everything else must agree.
+    told = cfg.launch_args.get('load_mass')
+    if told is not None and not cfg.mis_seed:
+        sys.path.insert(0, os.path.join(REPO, 'tools'))
+        from check_geometry import world_geometry
+        wmass = world_geometry(wpath).get('load_mass')
+        if wmass is not None and abs(float(told) - wmass) > 1e-3:
+            raise SystemExit(f'{path}: launch load_mass {told} but {cfg.world} has {wmass:.3f} kg; '
+                             f'fix the config or declare mis_seed: true')
+    if rate_source(cfg) == 'imu':
+        require_imu_world(cfg, path)
+    bad = undeclared_launch_args(cfg)
+    if bad:
+        raise SystemExit(f'{path}: launch args no launch declares (they would be ignored):\n  '
+                         + '\n  '.join(bad))
+    check_thrust_map(cfg, wpath, path)
+    check_wrench_world(cfg, wpath, path)
+    if not cfg.mis_seed:
+        check_world_geometry(cfg, wpath, path)
+        check_tether_len(cfg, wpath, path)
+    return cfg
+
+
+def check_wrench_world(cfg, wpath, path):
+    """A WRENCH event needs the world's ApplyLinkWrench plugin (the _push worlds): without it Gazebo drops the push
+    and the run flies unpushed."""
+    if not any(e.do == 'WRENCH' for e in cfg.events):
+        return
+    with open(wpath) as f:
+        if 'gz::sim::systems::ApplyLinkWrench' not in f.read():
+            raise SystemExit(f'{path}: a WRENCH event but {cfg.world} has no ApplyLinkWrench plugin (the push would do '
+                             f'nothing); fly a _push world')
+
+
+def check_tether_len(cfg, wpath, path):
+    """The twin's magnet markers (io tether_tips) sit tether_len along each rod from its middle: a length that is not
+    the world's rods puts every marker that much off its magnet (card 2026-10-21_tip_detect)."""
+    io = cfg.io_launch_args
+    if str(io.get('tether_tips', '')).strip().lower() not in ('1', 'true', 'yes'):
+        return
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    from check_geometry import launch_defaults, world_geometry
+    told = io.get('tether_len')
+    if told is None:
+        lp = os.path.join(REPO, 'src', 'bringup', 'launch', cfg.io_launch_file)
+        told = launch_defaults(lp).get('tether_len') if os.path.exists(lp) else None
+    rods = world_geometry(wpath).get('cable_len')
+    if told is not None and rods is not None and abs(float(told) - rods) > 1e-3:
+        raise SystemExit(f'{path}: io tether_len {float(told):g} but the rods of {cfg.world} are {rods:g} m: every '
+                         f'magnet marker would sit {abs(float(told) - rods) / 2:.3f} m off; type tether_len: {rods:g} '
+                         f'or declare mis_seed: true')
+
+
+def sim_thrust_maps(cfg):
+    """The sim plant map each launch section flies: what it sets, else the profile's (rig;
+    linear for a legacy world, i.e. one under old_worlds/ or tejen/)."""
+    default = 'linear' if cfg.legacy else 'rig'
+    return tuple(str(a.get('sim_thrust_map', default)).strip().lower()
+                 for a in (cfg.launch_args, cfg.io_launch_args))
+
+
+def check_thrust_map(cfg, wpath, path):
+    """A rig-twin world (x3_rig_drone models) flies the rig thrust map in both launches, every
+    other world the linear one. One section alone on rig pairs the rig bridge with no pack."""
+    ctrl, io = sim_thrust_maps(cfg)
+    if ctrl != io:
+        raise SystemExit(f'{path}: sim_thrust_map {ctrl} on {cfg.launch_file} but {io} on '
+                         f'{cfg.io_launch_file}; set it in both launch sections')
+    rig_world = 'x3_rig_drone' in open(wpath).read()
+    if rig_world != (ctrl == 'rig') and not cfg.mis_seed:
+        raise SystemExit(f'{path}: {cfg.world} is a {"rig" if rig_world else "legacy"} world but the '
+                         f'config flies sim_thrust_map {ctrl}; set sim_thrust_map: '
+                         f'{"rig" if rig_world else "linear"} or declare mis_seed: true')
+
+
+# Values params.py sets unless a config types them (load_ixx / load_izz, card 2026-10-23_scalability): reported, not
+# refused, while params.py supplies them; a typed one that disagrees with the world is refused like any other.
+PARAMS_ONLY_GEOMETRY = ('load_ixx', 'load_izz')
+
+
+def check_world_geometry(cfg, wpath, path):
+    """check_geometry.config_mismatches: every geometry value the controller would fly
+    differently from the world. `geometry_exempt: {key: reason}` names a deliberate one."""
+    sys.path.insert(0, os.path.join(REPO, 'tools'))
+    from check_geometry import config_mismatches, inertia_untyped
+    lp = os.path.join(REPO, 'src', cfg.launch_package, 'launch', cfg.launch_file)
+    bad = []
+    args = cfg.control_args()
+    for k, wv, cv in config_mismatches(wpath, lp if os.path.exists(lp) else None, args):
+        line = f'{k}: world {wv:.4g}, controller {cv:.4g}'
+        if k in cfg.geometry_exempt:
+            continue
+        if k in PARAMS_ONLY_GEOMETRY and inertia_untyped(args.get(k)):
+            print(f'warn  {path}: {line} (params.py)', file=sys.stderr)
+            continue
+        bad.append(line)
+    if bad:
+        raise SystemExit(f'{path}: controller geometry differs from {cfg.world}:\n  ' + '\n  '.join(bad)
+                         + '\n  fix the config, name the key under geometry_exempt, or declare mis_seed: true')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('config', nargs='+', help='experiment YAML (configs/experiments/)')
+    ap.add_argument('--repeats', type=int, default=1)
+    ap.add_argument('--gz-nice', type=int, default=10,
+                    help='nice level for the headless Gazebo process (0 = none)')
+    ap.add_argument('--gui', action='store_true',
+                    help='run Gazebo with its GUI (debugging; not for batches)')
+    ap.add_argument('--run-dir', help='use this pre-allocated R####_* directory (one config, '
+                                      'one repeat; tools/remote/lab_batch.py)')
+    ap.add_argument('--git-state-file', help='JSON with the source tree\'s git_sha, git_branch, '
+                                             'dirty_files, diff_sha256 (+ diff): recorded in the '
+                                             'manifest instead of this checkout\'s')
+    ap.add_argument('--check', action='store_true',
+                    help='validate the configs (world, masses, launch args) and exit')
+    ap.add_argument('--record', action='store_true',
+                    help='record a video: the config\'s `record:` block, else the default cameras '
+                         '(experiment/record.py); mp4s in <run>/video/')
+    args = ap.parse_args()
+    if args.run_dir and (len(args.config) != 1 or args.repeats != 1):
+        ap.error('--run-dir takes exactly one config and one repeat')
+    git_state = None
+    if args.git_state_file:
+        import json
+        with open(args.git_state_file) as fh:
+            git_state = json.load(fh)
+
+    results = []
+    if args.check:
+        n_bad = 0
+        for path in args.config:
+            try:
+                cfg = checked_config(path)
+                print(f'ok    {path}')
+                if getattr(cfg, 'relay', None) is not None:
+                    print(cfg.relay.table())
+            except (SystemExit, ValueError) as e:
+                n_bad += 1
+                print(f'FAIL  {e}')
+        return 1 if n_bad else 0
+    for path in args.config:
+        cfg = checked_config(path)
+        if args.record and not cfg.record:
+            from experiment.record import parse
+            cfg.record = parse(True)
+        for rep in range(args.repeats):
+            with config_env(cfg.env):
+                results.append((cfg, rep, run_once(cfg, path, gui=args.gui, repeat=rep,
+                                                   gz_nice=args.gz_nice, run_dir=args.run_dir,
+                                                   git_state=git_state)))
+
+    print('\n=== experiment summary ===')
+    ok_all = True
+    for cfg, rep, r in results:
+        print(f'  [{"PASS" if r["ok"] else "FAIL"}] {cfg.name} repeat {rep}  '
+              f'-> {r["run_dir"]}')
+        ok_all = ok_all and r['ok']
+
+    # Duration consistency across repeats (§9.1). Unequal durations make a repeat set
+    # incomparable, and the difference is easy to miss in a directory listing.
+    #
+    # Runs that stopped EARLY are excluded: they end a fixed grace after the fleet
+    # aborted, so their length varies with when the abort happened, which is a RESULT
+    # rather than a defect. Flagging those would train everyone to ignore this warning,
+    # which is the one thing a check like this must not do.
+    by_cfg = {}
+    for cfg, rep, r in results:
+        if r.get('stopped_early'):
+            continue
+        by_cfg.setdefault(cfg.name, []).append(r['duration_s'])
+    for name, ds in by_cfg.items():
+        if len(ds) > 1 and max(ds) > 0:
+            spread = (max(ds) - min(ds)) / max(ds)
+            if spread > 0.10:
+                print(f'  !! {name}: repeat durations differ by {100 * spread:.0f}% '
+                      f'({min(ds):.1f}..{max(ds):.1f}s) — these repeats are NOT '
+                      f'comparable')
+                ok_all = False
+
+    print(f'\n  RESULT: {"ALL PASSED" if ok_all else "FAILURES ABOVE"}')
+    return 0 if ok_all else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

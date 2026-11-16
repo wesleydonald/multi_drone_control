@@ -1,0 +1,23 @@
+online_join_planner:
+  ros__parameters:
+    # R6.3C.1F.2a sustained C++ authority commissioning.
+    # Python remains the sole /join_planner/reference publisher.
+    c1f1_shadow_transfer_enabled: true
+    c1f2_cpp_authority_enabled: true
+
+    c1f1_shadow_target_topic: /dynamic_planner/transfer_target
+    c1f1_shadow_enable_topic: /dynamic_planner/transfer_enable
+    c1f1_shadow_reference_topic: /dynamic_planner/transfer_reference
+    c1f1_shadow_status_topic: /dynamic_planner/transfer_status
+    c1f1_shadow_reference_timeout_s: 0.20
+    c1f2_target_velocity_topic: /dynamic_planner/transfer_target_velocity
+
+    # Commissioned C1F.2 entry/recovery gate.
+    c1f2_handoff_position_tolerance_m: 0.05
+    c1f2_handoff_velocity_tolerance_mps: 0.20
+    c1f2_handoff_acceleration_tolerance_mps2: 0.50
+
+    # Do not dump this run directly into logs/join_planner.
+    # online_join_planner creates logs/join_planner/c1f2a_authority_<timestamp>/.
+    log_directory: logs/join_planner
+    log_run_label: c1f2a_authority

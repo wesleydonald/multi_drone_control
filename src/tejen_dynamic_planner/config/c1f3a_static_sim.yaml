@@ -1,0 +1,81 @@
+dynamic_planner_transfer_backend:
+  ros__parameters:
+    use_sim_time: false
+
+    # Existing C1F.2b authority/reference interface.
+    state_topic: /motion_capture_state
+    target_topic: /dynamic_planner/transfer_target
+    target_velocity_topic: /dynamic_planner/transfer_target_velocity
+    object_attached_topic: /magnet/object_attached
+    enable_topic: /dynamic_planner/transfer_enable
+    authority_topic: /dynamic_planner/transfer_authority
+    authority_ack_topic: /dynamic_planner/transfer_authority_ack
+    shadow_reference_topic: /dynamic_planner/transfer_reference
+    diagnostics_topic: /dynamic_planner/transfer_status
+    marker_topic: /dynamic_planner/markers
+    frame_id: map
+    vehicle_id: drone_0
+
+    state_timeout_s: 0.25
+    object_attached_timeout_s: 0.25
+    acceleration_filter_tau_s: 0.15
+    planner_rate_hz: 5.0
+    marker_rate_hz: 5.0
+    minimum_search_z_m: 0.20
+    initial_splice_timing_s: 0.16
+
+    # Passed C1E/C1F.2 planner timing and useful-deadline settings.
+    spline_time_factor: 3.0
+    enable_octopus_useful_deadline: true
+    octopus_post_search_reserve_s: 0.03333333333333333
+
+    # Preserve the passed C1F.2b stationary measured-state prepare/grant/ACK handoff.
+    require_stationary_activation: true
+    activation_speed_tolerance_mps: 0.10
+    activation_accel_tolerance_mps2: 0.50
+    seed_stationary_on_activation: false
+
+    # Preserve moving-target retarget + solve-latency-aware lead from C1F.2b.
+    fixed_target_change_tolerance_m: 0.0001
+    allow_live_target_updates: true
+    live_target_replan_threshold_m: 0.01
+    require_target_velocity: true
+    target_lead_enabled: true
+    target_lead_nominal_speed_mps: 0.35
+    target_lead_min_s: 0.0
+    target_lead_max_s: 2.0
+    target_lead_initial_solve_runtime_s: 0.50
+    target_lead_solve_runtime_scale: 1.0
+    target_lead_solve_runtime_ema_alpha: 0.35
+
+    # C1F.3a: the live transfer backend now represents the attached spanner as
+    # part of the conservative suspended assembly. The handoff is refused unless
+    # /magnet/object_attached is fresh and true.
+    max_swing_angle_rad: 0.2617993877991494       # 15 deg
+    payload_collision_enabled: true
+    require_payload_attached_for_enable: true
+    payload_half_x_m: 0.050
+    payload_half_y_m: 0.010
+    payload_half_z_m: 0.003
+    payload_center_from_magnet_x_m: 0.0
+    payload_center_from_magnet_y_m: 0.0
+    payload_center_from_magnet_z_m: -0.028
+
+    # First live static-obstacle scene. This low, broad yawed cuboid is selected
+    # so the direct quad-body sweep remains clear while the conservative suspended
+    # cable/magnet/payload assembly blocks the same straight route for the full
+    # moving-target phase range used by fake_cooperative_transport_world.
+    static_scene_enabled: true
+    require_scene_witness: true
+    obstacle_name: c1f3a_midpath_cuboid
+    obstacle_center_x_m: 0.60
+    obstacle_center_y_m: 0.60
+    obstacle_center_z_m: 0.80
+    obstacle_half_x_m: 0.18
+    obstacle_half_y_m: 0.30
+    obstacle_half_z_m: 0.08
+    obstacle_yaw_rad: 0.3490658503988659         # 20 deg
+
+    # Launch file overrides these into logs/tejen_dynamic_planner/c1f3a_static_<timestamp>/.
+    csv_path: ''
+    replan_csv_path: ''
